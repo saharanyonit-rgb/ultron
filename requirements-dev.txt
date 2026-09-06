@@ -1,0 +1,4 @@
+# Dev dependencies — kept in sync with [project.optional-dependencies].dev in pyproject.toml.
+-r requirements.txt
+
+pytest>=8.0.0

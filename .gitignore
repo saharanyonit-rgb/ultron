@@ -1,0 +1,20 @@
+# secrets
+.env
+SECURITY_AUDIT_REPORT.md
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# runtime data
+data/
+*.log
