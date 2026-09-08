@@ -68,7 +68,11 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", API_CACHE_CONTROL)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            # Client disconnected - this is normal, just log and continue
+            logger.debug("Client disconnected while sending response")
 
     def _send_error(self, status: int, message: str) -> None:
         self._send_json({"error": message}, status)
@@ -329,6 +333,10 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                     self.wfile.flush()
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+                    # Client disconnected
+                    logger.debug("Client disconnected from SSE")
+                    break
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:

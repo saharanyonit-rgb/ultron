@@ -63,6 +63,8 @@ from ultron.orchestrator_types import (
     OrchestratorState,
 )
 
+from ultron.tools.shutdown import ShutdownTool
+
 logger = logging.getLogger("ultron.orchestrator")
 
 
@@ -199,6 +201,179 @@ class Orchestrator:
 
         return False
 
+    def _is_shutdown_request(self, user_request: str) -> bool:
+        """Check if the user request is a Windows shutdown intent."""
+        text = user_request.lower().strip()
+        shutdown_indicators = [
+            "shut down",
+            "shutdown",
+            "turn off",
+            "power off",
+            "turn off the pc",
+            "shut down the pc",
+            "shut down my computer",
+            "turn off my computer",
+        ]
+        for indicator in shutdown_indicators:
+            if indicator in text:
+                return True
+        return False
+
+    def _handle_shutdown_request(self) -> OrchestratorResult:
+        """Handle a Windows shutdown request through the proper channels.
+
+        This method:
+        1. Uses the existing permission/policy system
+        2. If confirmation is required (ULTRON_REQUIRE_PERMISSION=true),
+           shows the permission modal
+        3. If allowed, transitions to SHUTTING_DOWN state
+        4. Initiates Windows shutdown via the shutdown tool
+        5. Closes the JARVIS UI
+        """
+        from ultron.tools.shutdown import ShutdownTool
+        from ultron.risk import RiskLevel
+
+        # Check if permission is required via configuration
+        # ULTRON_REQUIRE_PERMISSION defaults to False (pass-through mode)
+        require_permission = False
+        try:
+            from ultron.config import load_config
+            config = load_config()
+            require_permission = getattr(config, 'require_permission', False)
+        except Exception:
+            pass
+
+        # If permission is not required (pass-through mode), proceed directly
+        if not require_permission:
+            return self._execute_shutdown()
+
+        # If permission is required, use the policy engine and permission manager
+        # Check policy engine first
+        if self._policy_engine:
+            # When user configuration requires confirmation for system-control actions,
+            # add a tool-specific override so that windows_shutdown maps to CONFIRM
+            # instead of the default DENY (CRITICAL), enabling the confirmation flow.
+            if require_permission:
+                self._policy_engine.set_tool_override(
+                    "windows_shutdown", PolicyAction.CONFIRM
+                )
+            decision = self._policy_engine.evaluate(
+                "windows_shutdown", RiskLevel.CRITICAL, {}
+            )
+            if decision.action == PolicyAction.ALLOW:
+                # Policy allows without confirmation
+                return self._execute_shutdown()
+            elif decision.action == PolicyAction.DENY:
+                # Policy denies - this should not happen when permission is required
+                # because the override maps CRITICAL → CONFIRM, but handle gracefully
+                if require_permission:
+                    # Fall through to permission manager instead of blocking
+                    pass
+                else:
+                    from ultron.goal import Goal, GoalStatus
+                    from ultron.task import TaskGraph
+
+                    goal_result = self._response_engine.generate(
+                        Goal(
+                            description="Windows shutdown",
+                            original_request="Shut down the PC.",
+                            status=GoalStatus.FAILED,
+                        ),
+                        TaskGraph(),
+                    )
+                    return OrchestratorResult(
+                        goal_result=goal_result,
+                        state=OrchestratorState.FAILED,
+                        events=self._events,
+                    )
+            # CONFIRM action - request permission through permission manager
+
+        # Request permission through the permission system
+        # This will trigger the CONFIRM flow (modal dialog for CRITICAL risk)
+        if self._permission_manager:
+            allowed = self._permission_manager.request_permission(
+                "windows_shutdown",
+                RiskLevel.CRITICAL,
+                {},
+            )
+            if allowed:
+                return self._execute_shutdown()
+            else:
+                # User denied
+                from ultron.goal import Goal, GoalStatus
+                from ultron.task import TaskGraph
+
+                goal_result = self._response_engine.generate(
+                    Goal(
+                        description="Windows shutdown",
+                        original_request="Shut down the PC.",
+                        status=GoalStatus.FAILED,
+                    ),
+                    TaskGraph(),
+                )
+                return OrchestratorResult(
+                    goal_result=goal_result,
+                    state=OrchestratorState.FAILED,
+                    events=self._events,
+                )
+
+        # Fallback: no permission system - deny by default
+        from ultron.goal import Goal, GoalStatus
+        from ultron.task import TaskGraph
+
+        goal_result = self._response_engine.generate(
+            Goal(
+                description="Windows shutdown",
+                original_request="Shut down the PC.",
+                status=GoalStatus.FAILED,
+            ),
+            TaskGraph(),
+        )
+        return OrchestratorResult(
+            goal_result=goal_result,
+            state=OrchestratorState.FAILED,
+            events=self._events,
+        )
+
+    def _execute_shutdown(self) -> OrchestratorResult:
+        """Execute the Windows shutdown command.
+
+        Uses the shutdown tool to initiate Windows shutdown.
+        This should only be called after permission is granted.
+        """
+        from ultron.tools.shutdown import ShutdownTool
+
+        shutdown_tool = ShutdownTool()
+        result = shutdown_tool.run(confirm=True)
+
+        success = result.get("success", False)
+        message = result.get("message", "Windows shutdown initiated")
+
+        if success:
+            # Transition to SHUTTING_DOWN state
+            self._state = OrchestratorState.SHUTTING_DOWN
+            self._emit("STATE_CHANGE", {"state": "SHUTTING_DOWN"})
+            self._emit("shutting_down", {})
+
+        # Generate response goal result
+        from ultron.goal import Goal, GoalStatus
+        from ultron.task import TaskGraph
+
+        goal_result = self._response_engine.generate(
+            Goal(
+                description="Windows shutdown",
+                original_request="Shut down the PC.",
+                status=GoalStatus.COMPLETED if success else GoalStatus.FAILED,
+            ),
+            TaskGraph(),
+        )
+
+        return OrchestratorResult(
+            goal_result=goal_result,
+            state=OrchestratorState.SHUTTING_DOWN if success else OrchestratorState.FAILED,
+            events=self._events,
+        )
+
     def execute_goal(self, user_request: str) -> OrchestratorResult:
         """Execute a user request as an autonomous goal.
 
@@ -207,6 +382,10 @@ class Orchestrator:
         """
         self._events = []
         self._emit("EXECUTION_START", {"request": user_request[:100]})
+
+        # Check for Windows shutdown intent
+        if self._is_shutdown_request(user_request):
+            return self._handle_shutdown_request()
 
         try:
             # Check if we should use brain orchestration for this request

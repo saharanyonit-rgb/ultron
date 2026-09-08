@@ -47,6 +47,7 @@ DEFAULT_RISK_MAP: dict[str, RiskLevel] = {
     # Critical operations
     "execute_command": RiskLevel.CRITICAL,
     "execute_shell": RiskLevel.CRITICAL,
+    "windows_shutdown": RiskLevel.CRITICAL,
 }
 
 

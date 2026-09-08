@@ -71,6 +71,7 @@ class OpenApp(Tool):
             "app": {"type": "string"},
             "target": {"type": "string"},
             "pid": {"type": "integer"},
+            "launched": {"type": "boolean"},
         },
     }
     mutates = True
@@ -78,22 +79,23 @@ class OpenApp(Tool):
     def run(self, app_name: str = "", **kwargs: Any) -> Dict[str, Any]:
         target_name = app_name or kwargs.get("name") or kwargs.get("app") or kwargs.get("target") or ""
         if not target_name:
-            return {"error": "Missing 'app_name' parameter"}
+            return {"error": "Missing 'app_name' parameter", "launched": False}
         target, error = _resolve_app(target_name)
         if error:
-            return {"error": error}
+            return {"error": error, "launched": False}
         script = (
             f"$p = Start-Process -FilePath {ps_quote(target)} -PassThru; "
             f"Write-Output $p.Id"
         )
         proc = run_powershell(script, timeout=30)
         if not ps_ok(proc):
-            return {"error": f"failed to start {target!r}: {ps_error(proc)}"}
+            return {"error": f"failed to start {target!r}: {ps_error(proc)}", "launched": False}
         try:
             pid = int(ps_stdout(proc))
         except ValueError:
             pid = None
-        return {"app": target_name, "target": target, "pid": pid}
+        launched = pid is not None
+        return {"app": target_name, "target": target, "pid": pid, "launched": launched}
 
 
 class CloseApp(Tool):

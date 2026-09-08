@@ -34,6 +34,7 @@ from ultron.tools.clipboard import GetClipboard, SetClipboard
 from ultron.tools.execution import ToolExecutionResult, ToolExecutionStatus, ToolExecutor
 from ultron.tools.file_ops import CreateFile, ReadFile, SearchFiles
 from ultron.tools.screenshot import TakeScreenshot
+from ultron.tools.shutdown import ShutdownTool
 from ultron.tools.sysinfo import GetSystemInfo
 from ultron.tools.urls import OpenUrl
 from ultron.tools.database import QueryDatabase, ListTables, CreateTable
@@ -108,6 +109,8 @@ ALL_TOOLS: List[Tool] = [
     # ── Unrestricted Command Execution ─────────────────────────
     ExecuteCommand(),
     ExecutePowerShell(),
+    # ── Windows Shutdown ───────────────────────────────────────
+    ShutdownTool(),
     # ── Unrestricted Filesystem ────────────────────────────────
     ReadFileUnrestricted(),
     WriteFileUnrestricted(),

@@ -125,7 +125,8 @@
     executing: 'PROCESSING', verifying: 'VERIFYING',
     completed: 'COMPLETE', error: 'ERROR',
     offline: 'OFFLINE', waiting: 'PAUSED', listening: 'LISTENING',
-    recovering: 'RECOVERING', replaning: 'REPLANNING'
+    recovering: 'RECOVERING', replaning: 'REPLANNING',
+    shutting_down: 'SHUTTING DOWN'
   };
 
   const STATE_SUB = {
@@ -133,7 +134,8 @@
     executing: 'NEURAL EXECUTION', verifying: 'VALIDATION',
     completed: 'ALL SYSTEMS GO', error: 'SYSTEM FAULT',
     offline: 'NO CONNECTION', waiting: 'ON STANDBY', listening: 'AWAITING INPUT',
-    recovering: 'ANALYZING FAILURE', replaning: 'GENERATING ALTERNATIVE'
+    recovering: 'ANALYZING FAILURE', replaning: 'GENERATING ALTERNATIVE',
+    shutting_down: 'SYSTEM SHUTDOWN'
   };
 
   function setState(s) {
@@ -480,6 +482,23 @@
     currentPermission = null;
   }
 
+  function closeJarvisUI() {
+    const appShell = document.getElementById('app-shell');
+    const workspace = document.getElementById('workspace');
+    if (appShell) {
+      appShell.remove();
+    }
+    if (workspace) {
+      workspace.hidden = true;
+    }
+    // Clear all event listeners and state
+    appState = 'idle';
+    connected = false;
+    document.body.className = 'state-idle';
+    dom.dockTitle.textContent = 'ULTRON ONLINE';
+    dom.dockSub.textContent = '';
+  }
+
   function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -571,7 +590,8 @@
   JarvisAPI.on('error', d => {
     setState('error');
     hideTyping();
-    addMsg('assistant', 'Error: ' + (d.error || d.message || 'Unknown error'));
+    const msg = d && (d.error || d.message) ? (d.error + ': ' + d.message) : 'Unknown error';
+    addMsg('assistant', 'Error: ' + (msg || 'Unknown error'));
   });
 
   JarvisAPI.on('execution_paused', () => {
@@ -588,6 +608,22 @@
     setState('idle');
     hideTyping();
     addMsg('assistant', 'Execution stopped.');
+  });
+
+  JarvisAPI.on('shutting_down', () => {
+    setState('shutting_down');
+    hideTyping();
+    // Stop voice recognition
+    if (window.JarvisAPI && window.JarvisAPI.disconnectSSE) {
+      window.JarvisAPI.disconnectSSE();
+    }
+    // Clean up voice-related UI
+    document.body.classList.remove('listening');
+    dom.btnMic.style.boxShadow = '';
+    dom.dockTitle.textContent = 'ULTRON OFFLINE';
+    dom.dockSub.textContent = '';
+    // Schedule UI cleanup and shutdown
+    setTimeout(closeJarvisUI, 1000);
   });
 
   // ═══ Polling ═════════════════════════════════════════════════

@@ -6,7 +6,10 @@ Text in / text out. This is the temporary frontend; the orchestration brain
 
 from __future__ import annotations
 
+import ctypes
+import os
 import sys
+import time
 from typing import Optional
 
 from ultron.actions import PermissionGate
@@ -193,6 +196,38 @@ def main(argv: Optional[list[str]] = None) -> int:
     configure_logging("WARNING" if args.quiet else getattr(config, "log_level", "INFO"))
     logger.info("Ultron startup [provider=%s, model=%s]", config.provider, config.model)
 
+    # Duplicate instance prevention: create a Windows named mutex.
+    # If the mutex already exists, another JARVIS instance is running.
+    mutex_name = "JarvisMutex_{}".format("ultron".encode().hex())
+
+    _jarvis_mutex = None
+    try:
+        # Try to create the mutex; if it already exists, another instance is running
+        mutex = ctypes.windll.kernel32.CreateMutexW(None, True, mutex_name)
+        last_error = ctypes.get_last_error()
+        if last_error == 183:  # ERROR_ALREADY_EXISTS
+            # Another instance is already running
+            logger.error("Another JARVIS instance is already running (mutex: %s)", mutex_name)
+            print("Another JARVIS instance is already running. Only one instance may run at a time.")
+            return 1
+        _jarvis_mutex = mutex
+    except Exception:
+        # If mutex creation fails, continue anyway (best-effort)
+        logger.warning("Could not create mutex for instance prevention")
+
+    # Ensure mutex is cleaned up on exit
+    def cleanup_mutex() -> None:
+        if _jarvis_mutex is not None:
+            try:
+                ctypes.windll.kernel32.CloseHandle(_jarvis_mutex)
+            except Exception:
+                pass
+
+    import atexit
+    atexit.register(cleanup_mutex)
+
+    # ... rest of main() continues
+
     try:
         provider = build_provider(config)
     except Exception as exc:
@@ -296,13 +331,39 @@ def main(argv: Optional[list[str]] = None) -> int:
         web_server.start(daemon=True)
         url = f"http://{args.host}:{args.port}"
         print(f"Dashboard: {url}")
-        def _open_browser():
+
+        # Wait for server to be ready before opening UI
+        print("Waiting for JARVIS server to be ready...")
+        ready = False
+        for i in range(30):  # wait up to 30 seconds
+            try:
+                import httpx
+
+                resp = httpx.get(f"http://{args.host}:{args.port}/api/status", timeout=2)
+                if resp.status_code == 200:
+                    ready = True
+                    break
+            except Exception:
+                pass
             _time.sleep(1.0)
+        if ready:
+            print("JARVIS server is ready.")
+        else:
+            print("Warning: JARVIS server did not respond within 30 seconds. Proceeding anyway.")
+
+        # Get screen resolution for kiosk mode
+        import pyautogui
+        screen_width, screen_height = pyautogui.size()
+        print(f"Screen resolution: {screen_width}x{screen_height}")
+
+        def _open_browser():
+            _time.sleep(0.5)
             try:
                 import sys
                 if sys.platform == "win32":
                     chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-                    browser = webbrowser.get(f'"{chrome_path}" --app=%s')
+                    # Use --kiosk mode for full-screen without address bars/tabs
+                    browser = webbrowser.get(f'"{chrome_path}" --kiosk %s')
                     browser.open_new(url)
                 else:
                     webbrowser.open(url)
