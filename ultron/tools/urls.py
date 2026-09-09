@@ -39,6 +39,12 @@ class OpenUrl(Tool):
             return {"error": "Missing 'url' parameter"}
 
         target_url = target_url.strip()
+
+        # Reject non-http/https schemes (file://, ftp://, javascript:, etc.)
+        if "://" in target_url and not target_url.startswith(("http://", "https://")):
+            scheme = target_url.split("://")[0]
+            return {"error": f"Unsupported URL scheme '{scheme}': only http/https is allowed"}
+
         if not target_url.startswith(("http://", "https://")):
             target_url = "https://" + target_url
 

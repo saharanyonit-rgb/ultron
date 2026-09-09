@@ -76,8 +76,8 @@ class TestBrainModelConfig:
 
     def test_brain_model_config_defaults(self):
         config = BrainModelConfig()
-        assert config.provider == "gemini"
-        assert config.model == "gemini-3.5-flash"
+        assert config.provider == "openrouter"
+        assert config.model == "nvidia/nemotron-3-ultra-550b-a55b:free"
         assert config.temperature == 0.3
         assert config.max_tokens == 8192
 
@@ -99,12 +99,12 @@ class TestBrainConfig:
 
     def test_brain_config_defaults(self):
         config = BrainConfig()
-        assert config.planning.provider == "gemini"
-        assert config.research.provider == "gemini"
-        assert config.coding.provider == "gemini"
-        assert config.computer.provider == "gemini"
-        assert config.verification.provider == "gemini"
-        assert config.fast.provider == "gemini"
+        assert config.planning.provider == "openrouter"
+        assert config.research.provider == "openrouter"
+        assert config.coding.provider == "openrouter"
+        assert config.computer.provider == "openrouter"
+        assert config.verification.provider == "openrouter"
+        assert config.fast.provider == "openrouter"
 
     def test_brain_config_independent(self):
         config = BrainConfig(
@@ -342,7 +342,7 @@ class TestBrainOrchestrator:
 
     def test_orchestrator_initialization(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         orchestrator = BrainOrchestrator(config, [])
@@ -353,7 +353,7 @@ class TestBrainOrchestrator:
 
     def test_orchestrator_get_brain_config(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig(
             planning=BrainModelConfig(provider="openrouter", model="planning-model"),
             research=BrainModelConfig(provider="gemini", model="research-model"),

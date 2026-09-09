@@ -8,6 +8,7 @@ handles errors safely, and returns structured responses.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -19,6 +20,19 @@ from ultron.memory import Memory
 from ultron.pipeline import Pipeline, PipelineResult
 
 logger = logging.getLogger("ultron.brain")
+
+_SECRET_PATTERNS = [
+    re.compile(r"(API_KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL)[=:]\s*\S+", re.IGNORECASE),
+    re.compile(r"(sk-or-v1-|nvapi-|gsk_|sk-|pk-)\S+", re.IGNORECASE),
+]
+
+
+def _sanitize_error(msg: str) -> str:
+    """Remove potential secrets from error messages before user exposure."""
+    sanitized = msg
+    for pattern in _SECRET_PATTERNS:
+        sanitized = pattern.sub(r"\1=[REDACTED]", sanitized)
+    return sanitized
 
 
 class ResponseStatus(str, Enum):
@@ -161,10 +175,10 @@ class Brain:
             err_msg = str(exc)
             logger.error("Agent execution failed [request_id=%s, error_type=%s]: %s", request_id, err_type, err_msg)
 
-            safe_error = f"{err_type}: {err_msg}"
+            safe_error = f"{err_type}: {_sanitize_error(err_msg)}"
             response = BrainResponse(
                 request_id=request_id,
-                response=f"I encountered an error while processing your request ({err_type}: {err_msg}).",
+                response=f"I encountered an error while processing your request ({err_type}: {_sanitize_error(err_msg)}).",
                 status=ResponseStatus.FAILURE,
                 error=safe_error,
                 metadata={"route": decision.route_type.value},

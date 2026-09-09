@@ -28,6 +28,12 @@ from ultron.tools.browser_tools import (
     NavigateUrl,
     ReadPage,
     TakeBrowserScreenshot,
+    ScrollPage,
+    PressKey as BrowserPressKey,
+    TypeText as BrowserTypeText,
+    HoverElement,
+    WaitForElement,
+    GetPageLinks,
     get_browser_tools,
 )
 from ultron.tools.clipboard import GetClipboard, SetClipboard
@@ -67,6 +73,7 @@ from ultron.tools.file_ops_unrestricted import (
 # Voice tools
 from ultron.tools.voice import Speak, Listen, GetVoiceState
 from ultron.tools.vision import VisionTool
+from ultron.tools.time_tool import GetCurrentTime
 
 # Calendar, Notes, Reminder tools
 from ultron.tools.calendar_tool import CalendarTool, ListCalendarEventsTool
@@ -98,6 +105,12 @@ ALL_TOOLS: List[Tool] = [
     ClickElement(),
     FillFormField(),
     TakeBrowserScreenshot(),
+    ScrollPage(),
+    BrowserPressKey(),
+    BrowserTypeText(),
+    HoverElement(),
+    WaitForElement(),
+    GetPageLinks(),
     # ── Mouse/Keyboard Control ─────────────────────────────────
     MouseMove(),
     MouseClick(),
@@ -125,6 +138,8 @@ ALL_TOOLS: List[Tool] = [
     GetVoiceState(),
     # ── Vision ────────────────────────────────────────────────
     VisionTool(),
+    # ── Time & Date ──────────────────────────────────────────
+    GetCurrentTime(),
     # ── Calendar ─────────────────────────────────────────────
     CalendarTool(),
     ListCalendarEventsTool(),

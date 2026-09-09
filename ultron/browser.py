@@ -216,14 +216,132 @@ class MockBrowserSession(BrowserSession):
         return self._running
 
 
+class PlaywrightBrowserPage(BrowserPage):
+    """Real browser page using Playwright."""
+
+    def __init__(self, page: Any) -> None:
+        self._page = page
+
+    def get_url(self) -> str:
+        return self._page.url
+
+    def get_title(self) -> str:
+        return self._page.title()
+
+    def get_text(self) -> str:
+        try:
+            return self._page.inner_text("body")
+        except Exception:
+            return ""
+
+    def get_html(self) -> str:
+        try:
+            return self._page.content()
+        except Exception:
+            return ""
+
+    def click(self, selector: str) -> BrowserResult:
+        try:
+            self._page.click(selector, timeout=10000)
+            return BrowserResult(action=BrowserAction.CLICK, success=True, url=self.get_url())
+        except Exception as exc:
+            return BrowserResult(action=BrowserAction.CLICK, success=False, error=str(exc), url=self.get_url())
+
+    def fill(self, selector: str, value: str) -> BrowserResult:
+        try:
+            self._page.fill(selector, value, timeout=10000)
+            return BrowserResult(action=BrowserAction.FILL, success=True, url=self.get_url())
+        except Exception as exc:
+            return BrowserResult(action=BrowserAction.FILL, success=False, error=str(exc), url=self.get_url())
+
+    def screenshot(self) -> BrowserResult:
+        try:
+            import tempfile, os
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            tmp.close()
+            self._page.screenshot(path=tmp.name)
+            return BrowserResult(
+                action=BrowserAction.SCREENSHOT,
+                success=True,
+                data={"path": tmp.name},
+                url=self.get_url(),
+            )
+        except Exception as exc:
+            return BrowserResult(action=BrowserAction.SCREENSHOT, success=False, error=str(exc), url=self.get_url())
+
+
+class PlaywrightBrowserSession(BrowserSession):
+    """Real browser session using Playwright (Chromium)."""
+
+    def __init__(self, headless: bool = False) -> None:
+        self._headless = headless
+        self._pw = None
+        self._browser = None
+        self._page: PlaywrightBrowserPage | None = None
+        self._running = False
+
+    def start(self) -> None:
+        if self._running:
+            return
+        from playwright.sync_api import sync_playwright
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(headless=self._headless)
+        context = self._browser.new_context(
+            viewport={"width": 1280, "height": 720},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        )
+        raw_page = context.new_page()
+        self._page = PlaywrightBrowserPage(raw_page)
+        self._running = True
+        logger.info("Playwright browser started (headless=%s)", self._headless)
+
+    def stop(self) -> None:
+        if not self._running:
+            return
+        try:
+            if self._browser:
+                self._browser.close()
+            if self._pw:
+                self._pw.stop()
+        except Exception:
+            pass
+        self._page = None
+        self._browser = None
+        self._pw = None
+        self._running = False
+        logger.info("Playwright browser stopped")
+
+    def navigate(self, url: str) -> BrowserResult:
+        if not self._running:
+            return BrowserResult(action=BrowserAction.NAVIGATE, success=False, error="Browser not started")
+        try:
+            self._page._page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            return BrowserResult(action=BrowserAction.NAVIGATE, success=True, url=url)
+        except Exception as exc:
+            return BrowserResult(action=BrowserAction.NAVIGATE, success=False, error=str(exc), url=url)
+
+    def get_page(self) -> BrowserPage | None:
+        return self._page
+
+    def is_running(self) -> bool:
+        return self._running
+
+
 def create_default_session() -> BrowserSession:
-    """Create appropriate browser session depending on installed libraries."""
+    """Create a real Playwright browser session, fall back to mock."""
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        logger.info("Async event loop detected, using mock browser for compatibility")
+        return MockBrowserSession()
+    except RuntimeError:
+        pass
     try:
         from playwright.sync_api import sync_playwright
-        # Playwright available, can be extended for headless execution
+        return PlaywrightBrowserSession(headless=False)
     except ImportError:
-        pass
-    return MockBrowserSession()
+        logger.warning("Playwright not installed, using mock browser")
+        return MockBrowserSession()
 
 
 class BrowserTool:
@@ -354,5 +472,7 @@ __all__ = [
     "BrowserTool",
     "MockBrowserPage",
     "MockBrowserSession",
+    "PlaywrightBrowserPage",
+    "PlaywrightBrowserSession",
     "BROWSER_RISK_MAP",
 ]

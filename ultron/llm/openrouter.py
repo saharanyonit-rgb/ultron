@@ -7,6 +7,7 @@ https://openrouter.ai/docs
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import httpx
@@ -15,6 +16,8 @@ from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
 
 if TYPE_CHECKING:
     from ultron.tools.base import ToolSpec
+
+logger = logging.getLogger("ultron.llm.openrouter")
 
 
 class OpenRouterProvider(LLMProvider):
@@ -81,7 +84,7 @@ class OpenRouterProvider(LLMProvider):
         response = self._client.post(
             "/chat/completions",
             json=payload,
-            timeout=60.0,
+            timeout=120.0,
         )
         response.raise_for_status()
         return self._parse_response(response.json())
@@ -100,6 +103,7 @@ class OpenRouterProvider(LLMProvider):
     def _parse_response(self, data: Dict[str, Any]) -> ProviderResult:
         choices = data.get("choices", [])
         if not choices:
+            logger.warning("OpenRouter response had no choices")
             return ProviderResult(text=None, tool_calls=[])
 
         choice = choices[0]
@@ -107,6 +111,14 @@ class OpenRouterProvider(LLMProvider):
 
         text: Optional[str] = message.get("content")
         raw_tools = message.get("tool_calls", [])
+
+        # Some reasoning models return content in the reasoning field
+        # when content is null/empty
+        if not text and not raw_tools:
+            reasoning = message.get("reasoning", "")
+            if reasoning:
+                logger.debug("Using reasoning field as content fallback")
+                text = reasoning
 
         assistant_turn: Dict[str, Any] = {"role": "assistant", "content": text}
         if raw_tools:

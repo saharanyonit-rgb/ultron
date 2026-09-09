@@ -33,7 +33,19 @@ Personality: calm, intelligent, confident, professional, proactive, honest, cont
 
 Priorities: coding and development (~40%), desktop automation / computer operations (~30%), general assistance (~20%), research / web (~10%).
 
-Capabilities via tools: open and close known apps, open URLs, read/create/search files, clipboard operations, screenshots, and basic system info. Only use a tool when it genuinely serves the user's request; otherwise answer directly. When you use a tool, report the result accurately and honestly. If the user asks for something outside your current scope (for example, arbitrary shell execution or mouse/keyboard automation — not yet available), say so plainly and offer the closest thing you can actually do. Never claim an action succeeded if it did not."""
+Capabilities via tools:
+- Time: get_current_time (supports any timezone, e.g. 'Asia/Kolkata' for IST)
+- Browser: navigate_url, click_element, fill_form, scroll_page, press_key, browser_type, hover_element, wait_element, read_page, get_page_links, browser_screenshot
+- Files: read_file, create_file, search_files
+- Apps: open_app, close_app
+- System: get_system_info, take_screenshot, clipboard
+- Voice: speak, listen
+- Web: open_url, http_request
+- Calendar/Notes/Reminders: create_calendar_event, create_note, create_reminder
+
+When the user asks for the time, ALWAYS use the get_current_time tool. Never say you don't have access to time.
+When the user asks to open a website, use navigate_url to open it in the browser, then use click_element, fill_form, browser_type, press_key to interact with the page.
+Only use a tool when it genuinely serves the user's request; otherwise answer directly. When you use a tool, report the result accurately and honestly. Never claim an action succeeded if it did not."""
 
 
 class ConfigError(RuntimeError):
@@ -87,7 +99,7 @@ class LLMConfig:
     bedrock_region: str = "us-east-1"
     bedrock_access_key: str = ""
     bedrock_secret_key: str = ""
-    model: str = "gemini-3.5-flash"
+    model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     temperature: float = 0.3
     api_base_url: str = ""
@@ -130,8 +142,8 @@ class ExecutionConfig:
 
 @dataclass(frozen=True)
 class BrainModelConfig:
-    provider: str = "gemini"
-    model: str = "gemini-3.5-flash"
+    provider: str = "openrouter"
+    model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
     temperature: float = 0.3
     max_tokens: int = 8192
 
@@ -511,38 +523,38 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
 
     brain = BrainConfig(
         planning=BrainModelConfig(
-            provider=get("JARVIS_PLANNER_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_PLANNER_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_PLANNER_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_PLANNER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free").strip() or "nvidia/nemotron-3-ultra-550b-a55b:free",
             temperature=_as_float("JARVIS_PLANNER_TEMPERATURE", get("JARVIS_PLANNER_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_PLANNER_MAX_TOKENS", get("JARVIS_PLANNER_MAX_TOKENS", "8192"), 8192),
+            max_tokens=_as_int("JARVIS_PLANNER_MAX_TOKENS", get("JARVIS_PLANNER_MAX_TOKENS", "16384"), 16384),
         ),
         research=BrainModelConfig(
-            provider=get("JARVIS_RESEARCH_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_RESEARCH_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_RESEARCH_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_RESEARCH_MODEL", "nvidia/nemotron-3-super-120b-a12b:free").strip() or "nvidia/nemotron-3-super-120b-a12b:free",
             temperature=_as_float("JARVIS_RESEARCH_TEMPERATURE", get("JARVIS_RESEARCH_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_RESEARCH_MAX_TOKENS", get("JARVIS_RESEARCH_MAX_TOKENS", "8192"), 8192),
+            max_tokens=_as_int("JARVIS_RESEARCH_MAX_TOKENS", get("JARVIS_RESEARCH_MAX_TOKENS", "16384"), 16384),
         ),
         coding=BrainModelConfig(
-            provider=get("JARVIS_CODING_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_CODING_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_CODING_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_CODING_MODEL", "poolside/laguna-s-2.1:free").strip() or "poolside/laguna-s-2.1:free",
             temperature=_as_float("JARVIS_CODING_TEMPERATURE", get("JARVIS_CODING_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_CODING_MAX_TOKENS", get("JARVIS_CODING_MAX_TOKENS", "8192"), 8192),
+            max_tokens=_as_int("JARVIS_CODING_MAX_TOKENS", get("JARVIS_CODING_MAX_TOKENS", "16384"), 16384),
         ),
         computer=BrainModelConfig(
-            provider=get("JARVIS_COMPUTER_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_COMPUTER_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_COMPUTER_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_COMPUTER_MODEL", "thinkingmachines/inkling:free").strip() or "thinkingmachines/inkling:free",
             temperature=_as_float("JARVIS_COMPUTER_TEMPERATURE", get("JARVIS_COMPUTER_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_COMPUTER_MAX_TOKENS", get("JARVIS_COMPUTER_MAX_TOKENS", "8192"), 8192),
+            max_tokens=_as_int("JARVIS_COMPUTER_MAX_TOKENS", get("JARVIS_COMPUTER_MAX_TOKENS", "16384"), 16384),
         ),
         verification=BrainModelConfig(
-            provider=get("JARVIS_VERIFICATION_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_VERIFICATION_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_VERIFICATION_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_VERIFICATION_MODEL", "nvidia/nemotron-3.5-lightning:free").strip() or "nvidia/nemotron-3.5-lightning:free",
             temperature=_as_float("JARVIS_VERIFICATION_TEMPERATURE", get("JARVIS_VERIFICATION_TEMPERATURE", "0.3"), 0.3),
             max_tokens=_as_int("JARVIS_VERIFICATION_MAX_TOKENS", get("JARVIS_VERIFICATION_MAX_TOKENS", "8192"), 8192),
         ),
         fast=BrainModelConfig(
-            provider=get("JARVIS_FAST_PROVIDER", "gemini").strip().lower() or "gemini",
-            model=get("JARVIS_FAST_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+            provider=get("JARVIS_FAST_PROVIDER", "openrouter").strip().lower() or "openrouter",
+            model=get("JARVIS_FAST_MODEL", "cohere/north-mini-code:free").strip() or "cohere/north-mini-code:free",
             temperature=_as_float("JARVIS_FAST_TEMPERATURE", get("JARVIS_FAST_TEMPERATURE", "0.3"), 0.3),
             max_tokens=_as_int("JARVIS_FAST_MAX_TOKENS", get("JARVIS_FAST_MAX_TOKENS", "4096"), 4096),
         ),

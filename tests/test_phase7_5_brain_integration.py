@@ -130,7 +130,7 @@ class TestBrainOrchestratorWithToolExecutor:
 
     def test_orchestrator_initialization_with_tool_executor(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -151,7 +151,7 @@ class TestBrainOrchestratorWithToolExecutor:
 
     def test_orchestrator_creates_brains_with_tool_executor(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -177,7 +177,7 @@ class TestOrchestratorBrainIntegration:
 
     def test_orchestrator_accepts_brain_orchestrator(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -201,7 +201,7 @@ class TestOrchestratorBrainIntegration:
 
     def test_should_use_brain_for_research_request(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -226,7 +226,7 @@ class TestOrchestratorBrainIntegration:
 
     def test_should_use_brain_for_coding_request(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -251,7 +251,7 @@ class TestOrchestratorBrainIntegration:
 
     def test_should_use_brain_for_computer_request(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -276,7 +276,7 @@ class TestOrchestratorBrainIntegration:
 
     def test_should_not_use_brain_for_simple_request(self):
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
@@ -322,7 +322,7 @@ class TestBrainEventHandling:
         from ultron.brains.orchestrator import BrainOrchestrationEvent
 
         config = MagicMock(spec=Config)
-        config.llm = LLMConfig(gemini_api_key="test-key")
+        config.llm = LLMConfig(gemini_api_key="test-key", openrouter_api_key="test-key")
         config.brain = BrainConfig()
 
         registry = ToolRegistry([
