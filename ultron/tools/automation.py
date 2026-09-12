@@ -236,8 +236,11 @@ class PressKey(Tool):
     def run(self, keys: str, presses: int = 1, **_: Any) -> Dict[str, Any]:
         try:
             ag = _get_pyautogui()
+            presses = max(1, int(presses))
             if "+" in keys:
-                ag.hotkey(*keys.split("+"), presses=presses)
+                # pyautogui.hotkey() has no `presses` argument; repeat the combo.
+                for _ in range(presses):
+                    ag.hotkey(*keys.split("+"))
             else:
                 ag.press(keys, presses=presses)
             return {"pressed": keys, "presses": presses}

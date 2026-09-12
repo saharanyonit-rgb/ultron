@@ -112,6 +112,42 @@ class Brain:
     def pipeline(self) -> Pipeline:
         return self._pipeline
 
+    def _build_memory_context(self, user_input: str, max_recent: int = 6, max_search: int = 3) -> str:
+        """Assemble a compact memory preamble from past conversations.
+
+        Uses the last few turns plus keyword-based semantic recall (when the
+        memory implementation supports it) so JARVIS actually remembers across
+        sessions and restarts.
+        """
+        if self._memory is None or len(self._memory) == 0:
+            return ""
+
+        parts: List[str] = []
+        try:
+            recent = [t for t in self._memory.all()[-max_recent:] if t.content]
+            if recent:
+                lines = [f"- {t.role}: {t.content.strip()}" for t in recent]
+                parts.append("Recent conversation:\n" + "\n".join(lines))
+        except Exception:
+            pass
+
+        if hasattr(self._memory, "search"):
+            try:
+                found = self._memory.search(user_input, limit=max_search, min_relevance=0.05) or []
+                if found:
+                    lines = [f"- {r.role}: {r.content.strip()}" for r in found]
+                    parts.append("Earlier remembered:\n" + "\n".join(lines))
+            except Exception:
+                pass
+
+        if not parts:
+            return ""
+        return (
+            "[Memory of our past conversations — use it to stay consistent and refer to it]\n"
+            + "\n\n".join(parts)
+            + "\n[End of memory]\n\n"
+        )
+
     def process(self, request: UserRequest | str) -> BrainResponse:
         """Process a user request through the orchestration lifecycle."""
         if isinstance(request, str):
@@ -134,11 +170,14 @@ class Brain:
 
         sanitized_input = req.user_input.strip()
 
-        # 2. Add to conversation memory if available
+        # 2. Build memory context from past conversations (before this turn is recorded)
+        memory_context = self._build_memory_context(sanitized_input)
+
+        # 3. Add to conversation memory if available
         if self._memory is not None:
             self._memory.add("user", sanitized_input)
 
-        # 3. Intent Routing
+        # 4. Intent Routing
         decision: RouteDecision = self._router.route(sanitized_input)
         logger.info(
             "Routing decision [request_id=%s, route=%s, target=%s, confidence=%.2f]",
@@ -148,7 +187,7 @@ class Brain:
             decision.confidence,
         )
 
-        # 4. Handle Unsupported capability route
+        # 5. Handle Unsupported capability route
         if decision.route_type == RouteType.UNSUPPORTED:
             unsupported_msg = f"I cannot perform this action: {decision.reasoning}"
             logger.info("Controlled unsupported path taken [request_id=%s]", request_id)
@@ -166,10 +205,11 @@ class Brain:
                 },
             )
 
-        # 5. Route & Execute via Agent loop
+        # 6. Route & Execute via Agent loop
         logger.info("Executing via agent pipeline [request_id=%s]", request_id)
+        prompt = f"{memory_context}{sanitized_input}" if memory_context else sanitized_input
         try:
-            run_result: RunResult = self._agent.run(sanitized_input)
+            run_result: RunResult = self._agent.run(prompt)
         except Exception as exc:
             err_type = type(exc).__name__
             err_msg = str(exc)

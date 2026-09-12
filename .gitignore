@@ -18,3 +18,8 @@ dist/
 # runtime data
 data/
 *.log
+
+# desktop build
+release/
+*.spec.bak
+*.ico.tmp

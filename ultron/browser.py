@@ -149,6 +149,44 @@ class BrowserSession(ABC):
         ...
 
 
+class _MockPageProxy:
+    """Emulates the small subset of Playwright's page API that
+    browser_tools reach into via `page._page`. Keeps the mock fallback
+    (no Playwright installed / async loop) from crashing every tool."""
+
+    def __init__(self) -> None:
+        self.mouse = _MockMouse()
+        self.keyboard = _MockKeyboard()
+
+    def press(self, key: str, timeout: int = 10000) -> None:
+        pass
+
+    def hover(self, selector: str, timeout: int = 10000) -> None:
+        pass
+
+    def wait_for_selector(self, selector: str, timeout: int = 10000) -> None:
+        pass
+
+    def wait_for_url(self, url: str, timeout: int = 20000) -> None:
+        pass
+
+    def eval_on_selector_all(self, selector: str, expression: str) -> list[Any]:
+        return []
+
+
+class _MockMouse:
+    def wheel(self, delta_x: int, delta_y: int) -> None:
+        pass
+
+
+class _MockKeyboard:
+    def press(self, key: str) -> None:
+        pass
+
+    def type(self, text: str, delay: int = 0) -> None:
+        pass
+
+
 class MockBrowserPage(BrowserPage):
     """Mock browser page for testing."""
 
@@ -156,6 +194,7 @@ class MockBrowserPage(BrowserPage):
         self._url = url
         self._title = title
         self._text = text
+        self._page = _MockPageProxy()
 
     def get_url(self) -> str:
         return self._url

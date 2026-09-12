@@ -138,11 +138,59 @@
     shutting_down: 'SYSTEM SHUTDOWN'
   };
 
+  // ═══ Voice State Machine ══════════════════════════════════════
+  let voiceState = 'idle';
+  let voiceSessionActive = false;
+
+  const VOICE_LABELS = {
+    idle: 'ULTRON ONLINE',
+    listening: 'LISTENING',
+    thinking: 'THINKING',
+    speaking: 'SPEAKING',
+    error: 'ERROR'
+  };
+
+  const VOICE_SUB = {
+    idle: 'NEURAL NETWORK',
+    listening: 'AWAITING INPUT',
+    thinking: 'PROCESSING REQUEST',
+    speaking: 'AUDIO OUTPUT',
+    error: 'VOICE FAULT'
+  };
+
   function setState(s) {
     appState = s;
     document.body.className = 'state-' + s;
-    dom.dockTitle.textContent = STATE_LABELS[s] || s.toUpperCase();
-    dom.dockSub.textContent = STATE_SUB[s] || '';
+    updateDock();
+  }
+
+  function setVoiceState(s) {
+    voiceState = s;
+    // Keep the app state class; voice is displayed through the dock + mic.
+    document.body.className = 'state-' + appState;
+    document.body.classList.remove('listening', 'voice-thinking', 'voice-speaking');
+    if (s === 'listening') document.body.classList.add('listening');
+    if (s === 'thinking') document.body.classList.add('voice-thinking');
+    if (s === 'speaking') document.body.classList.add('voice-speaking');
+
+    // Mic button styling
+    dom.btnMic.classList.remove('listening', 'thinking', 'speaking', 'error');
+    if (s === 'listening') dom.btnMic.classList.add('listening');
+    if (s === 'thinking') dom.btnMic.classList.add('thinking');
+    if (s === 'speaking') dom.btnMic.classList.add('speaking');
+    if (s === 'error') dom.btnMic.classList.add('error');
+
+    updateDock();
+  }
+
+  function updateDock() {
+    if (voiceState !== 'idle') {
+      dom.dockTitle.textContent = VOICE_LABELS[voiceState] || voiceState.toUpperCase();
+      dom.dockSub.textContent = VOICE_SUB[voiceState] || '';
+    } else {
+      dom.dockTitle.textContent = STATE_LABELS[appState] || appState.toUpperCase();
+      dom.dockSub.textContent = STATE_SUB[appState] || '';
+    }
   }
 
   function setConnected(c) {
@@ -157,17 +205,6 @@
   let currentPlan = null;
   let planSteps = [];
   let planDisplayElement = null;
-
-  function showPlanStep(stepNum, totalSteps, description, status) {
-    hideTyping();
-    const symbols = { pending: '○', running: '→', completed: '✓', failed: '✗', skipped: '⊘' };
-    const sym = symbols[status] || '○';
-    const div = document.createElement('div');
-    div.className = 'msg plan-step msg-' + status;
-    div.innerHTML = '<span class="plan-symbol">' + sym + '</span> Step ' + stepNum + '/' + totalSteps + ': ' + description;
-    dom.convScroll.appendChild(div);
-    dom.convScroll.scrollTop = dom.convScroll.scrollTop + 100;
-  }
 
   function updatePlanDisplay() {
     if (!currentPlan || !planDisplayElement) return;
@@ -184,7 +221,7 @@
       const symbols = { pending: '○', running: '→', completed: '✓', failed: '✗', skipped: '⊘' };
       const sym = symbols[step.status] || '○';
 
-      item.innerHTML = '<span class="plan-step-symbol">' + sym + '</span><span class="plan-step-text">' + step.description + '</span>';
+      item.innerHTML = '<span class="plan-step-symbol">' + sym + '</span><span class="plan-step-text">' + escapeHtml(step.description) + '</span>';
       container.appendChild(item);
     });
   }
@@ -214,15 +251,142 @@
     hideTyping();
     const symbols = { started: '⚡', completed: '✓', failed: '✗' };
     const sym = symbols[status] || '⚡';
+    const text = String(details || '');
+    const isError = status === 'failed' || /error|failed|traceback|exception|denied|timed out/i.test(text);
     const div = document.createElement('div');
-    div.className = 'msg tool-exec msg-' + status;
-    let html = '<span class="tool-symbol">' + sym + '</span><span class="tool-name">' + toolName + '</span>';
-    if (details) {
-      html += '<span class="tool-details">' + details + '</span>';
+    if (isError && text) {
+      div.className = 'msg terminal msg-' + status;
+      div.innerHTML = '<div class="term-head">● ● ● TERMINAL — ' + escapeHtml(toolName).toUpperCase() + '</div><pre>' +
+        escapeHtml(text) + '</pre>';
+    } else {
+      div.className = 'msg tool-exec msg-' + status;
+      let html = '<span class="tool-symbol">' + sym + '</span><span class="tool-name">' + escapeHtml(toolName) + '</span>';
+      if (text) {
+        html += '<span class="tool-details term-line">' + escapeHtml(text) + '</span>';
+      }
+      div.innerHTML = html;
     }
-    div.innerHTML = html;
     dom.convScroll.appendChild(div);
     dom.convScroll.scrollTop = dom.convScroll.scrollHeight;
+  }
+
+  // ═══ Code / message rendering ═════════════════════════════════
+  const KEYWORDS = {
+    python: /\b(def|class|return|import|from|if|elif|else|for|while|in|not|and|or|try|except|finally|with|as|lambda|pass|None|True|False|self|break|continue|yield|async|await|global|nonlocal)\b/g,
+    javascript: /\b(const|let|var|function|return|if|else|for|while|async|await|await|new|class|extends|import|export|from|try|catch|finally|throw|typeof|null|undefined|this|break|continue|switch|case|default)\b/g,
+    html: /<\/?[a-zA-Z][\w-]*|\/?>/g,
+    css: /\b(@media|@keyframes|from|to|import|root)([^{}]*)/g,
+    json: /\b(true|false|null)\b/g,
+    shell: /\b(echo|cd|ls|dir|mkdir|rm|mv|cp|cat|sudo|git|npm|pip|python|node|powershell|if|then|else|fi)\b/g,
+    sql: /\b(SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|TABLE|JOIN|GROUP|ORDER|BY|AND|OR|NOT|NULL|VALUES|INTO|DROP|ALTER|SET)\b/g,
+  };
+  const LANG_RULES = {
+    py: 'python', python: 'python',
+    js: 'javascript', javascript: 'javascript', jsx: 'javascript', ts: 'javascript', tsx: 'javascript',
+    html: 'html', htm: 'html', xml: 'html', svg: 'html',
+    css: 'css', scss: 'css', less: 'css',
+    json: 'json',
+    sh: 'shell', shell: 'shell', bash: 'shell', 'sh.ps1': 'shell', ps1: 'shell',
+    powershell: 'shell', cmd: 'shell', bat: 'shell',
+    sql: 'sql',
+  };
+  const TOK_CLASS = { comment: 'tok-c', string: 'tok-s', keyword: 'tok-k', number: 'tok-n', plain: 'tok-p' };
+
+  function highlightCode(code, lang) {
+    const rule = LANG_RULES[(lang || '').toLowerCase()] || '';
+    let html = escapeHtml(code);
+    if (rule) {
+      const kw = KEYWORDS[rule];
+      const kwTagged = '<span class="' + TOK_CLASS.keyword + '">$&</span>';
+      if (rule === 'html') {
+        const tag = new RegExp('(&lt;\\/?[a-zA-Z][\\w-]*|\\/?&gt;)', 'g');
+        html = html.replace(tag, '<span class="' + TOK_CLASS.keyword + '">$1</span>');
+      } else if (rule === 'css') {
+        const prop = /([a-z-]+)(\s*:)/g;
+        html = html.replace(prop, '<span class="' + TOK_CLASS.keyword + '">$1</span>$2');
+      }
+      if (kw) html = html.replace(kw, kwTagged);
+      if (rule === 'python' || rule === 'javascript' || rule === 'json' || rule === 'shell' || rule === 'sql' || rule === 'css') {
+        html = html.replace(/(&quot;[^&]*?&quot;|&#39;[^&]*?&#39;)/g, '<span class="' + TOK_CLASS.string + '">$1</span>');
+      }
+      if (rule === 'python' || rule === 'javascript' || rule === 'json' || rule === 'css') {
+        html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="' + TOK_CLASS.number + '">$1</span>');
+      }
+    }
+    return html;
+  }
+
+  function copyText(text) {
+    const done = () => {
+      const nodes = document.querySelectorAll('.code-copy');
+      nodes.forEach(n => { if (n.dataset.copied) { n.textContent = n.dataset.copied; delete n.dataset.copied; } });
+    };
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function renderMessageContent(text) {
+    // Returns { html, plain, hasCode }. Text is escaped and fenced code blocks
+    // are turned into syntax-highlighted, copyable <pre> blocks.
+    const safe = escapeHtml(String(text || ''));
+    const parts = safe.split(/```(?:\s*([\w.+-]*)\s*)?\n?([\s\S]*?)\n?```/g);
+    let html = '';
+    let plain = '';
+    let hasCode = false;
+
+    parts.forEach((part, i) => {
+      if (i % 3 === 0) {
+        // Plain segment — normalise newlines into <br>.
+        const lines = part.split('\n');
+        const rendered = lines.map(line =>
+          line.replace(/&lt;([^&>]+)&gt;/g, '<code class="tok-plain">$1</code>')   // inline $var or <thing>
+               .replace(/`([^`]+)`/g, '<span class="inline-code">$1</span>')       // inline code
+        ).join('<br>');
+        html += rendered;
+        plain += lines.join('\n') + '\n';
+      } else if (i % 3 === 1) {
+        // Language marker.
+      } else {
+        // Code block content.
+        hasCode = true;
+        const lang = (parts[i - 1] || 'text').trim();
+        const codeHtml = highlightCode(part, lang);
+        const label = (lang || 'code').toUpperCase();
+        html += '<div class="code-block"><div class="code-head"><span class="code-lang">' + escapeHtml(label) +
+                '</span><button class="code-copy" data-code="' + escapeHtml(encodeURIComponent(part)) + '">COPY</button></div>' +
+                '<pre class="code-pre" data-lang="' + escapeHtml(escapeHtml(lang)) + '"><code>' + codeHtml + '</code></pre></div>';
+      }
+    });
+
+    return { html: html.trim(), plain: plain.trim(), hasCode };
+  }
+
+  function typeMessage(div, plain) {
+    // Gentle typewriter reveal for plain assistant replies.
+    let i = 0;
+    const speed = Math.min(14, Math.max(4, Math.round(360 / Math.max(1, plain.length))));
+    div.classList.add('msg-typing-effect');
+    const timer = setInterval(() => {
+      i += 1;
+      div.textContent = plain.slice(0, i);
+      dom.convScroll.scrollTop = dom.convScroll.scrollHeight;
+      if (i >= plain.length) {
+        clearInterval(timer);
+        div.classList.remove('msg-typing-effect');
+      }
+    }, speed);
+    div.__typewriter = timer;
   }
 
   // ═══ Conversation ═══════════════════════════════════════════
@@ -232,11 +396,31 @@
 
   function addMsg(type, text) {
     hideTyping();
+    const rendered = renderMessageContent(text);
     const div = document.createElement('div');
     div.className = 'msg ' + type;
-    div.textContent = text;
+    if (rendered.hasCode) {
+      div.innerHTML = rendered.html;
+    } else if (type === 'assistant' && rendered.plain.length >= 80) {
+      // Typewriter effect for longer plain-text assistant replies.
+      div.appendChild(document.createElement('span'));
+      dom.convScroll.appendChild(div);
+      dom.convScroll.scrollTop = dom.convScroll.scrollHeight;
+      typeMessage(div.querySelector('span'), rendered.plain);
+      return;
+    } else {
+      div.innerHTML = rendered.html.replace(/\n/g, ' ');
+    }
     dom.convScroll.appendChild(div);
     dom.convScroll.scrollTop = dom.convScroll.scrollHeight;
+    div.querySelectorAll('.code-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        copyText(decodeURIComponent(btn.dataset.code));
+        btn.textContent = 'COPIED';
+        btn.dataset.copied = 'COPIED';
+        setTimeout(() => { btn.textContent = 'COPY'; }, 1600);
+      });
+    });
   }
 
   function showTyping() {
@@ -245,8 +429,35 @@
     dom.convScroll.scrollTop = dom.convScroll.scrollHeight;
   }
 
+  // ═══ Auto Welcome (greeting + auto-listen) ═══════════════════
+  let autoWelcomeDone = false;
+  let userInterruptedAuto = false;
+
+  function autoWelcome() {
+    if (autoWelcomeDone || !connected) return;
+    autoWelcomeDone = true;
+
+    const greeting = 'Good day, Boss. JARVIS online. Systems operational. What would you like me to do?';
+    addMsg('assistant', greeting);
+    voiceSessionActive = true;
+    setVoiceState('speaking');
+    JarvisAPI.speak(greeting)
+      .catch(() => {})
+      .finally(() => {
+        voiceSessionActive = false;
+        setVoiceState('idle');
+        // Auto-listen for the first command, unless the user already took over
+        if (!userInterruptedAuto) {
+          handleMicClick();
+        }
+      });
+  }
+
   // ═══ SSE Events ══════════════════════════════════════════════
-  JarvisAPI.on('connection', d => setConnected(d.status === 'connected'));
+  JarvisAPI.on('connection', d => {
+    setConnected(d.status === 'connected');
+    if (d.status === 'connected') autoWelcome();
+  });
 
   JarvisAPI.on('orchestrator_state', d => {
     if (!d) return;
@@ -413,7 +624,7 @@
 
     let argsDisplay = '';
     if (data.arguments && Object.keys(data.arguments).length > 0) {
-      argsDisplay = '<div class="perm-args">Arguments: ' + JSON.stringify(data.arguments, null, 0) + '</div>';
+      argsDisplay = '<div class="perm-args">Arguments: ' + escapeHtml(JSON.stringify(data.arguments, null, 0)) + '</div>';
     }
 
     modal.innerHTML = `
@@ -421,7 +632,7 @@
         <div class="perm-header">⚠️ PERMISSION REQUIRED</div>
         <div class="perm-body">
           <div class="perm-tool">Tool: <strong>${escapeHtml(data.tool)}</strong></div>
-          <div class="perm-risk" style="color: ${riskColor}">Risk: ${data.risk}</div>
+          <div class="perm-risk" style="color: ${riskColor}">Risk: ${escapeHtml(data.risk)}</div>
           <div class="perm-reason">${escapeHtml(data.reason)}</div>
           ${argsDisplay}
         </div>
@@ -550,6 +761,10 @@
     hideTyping();
     const text = d && d.response ? d.response : 'Task completed successfully.';
     addMsg('assistant', text);
+    // Speak the response aloud when it was requested by voice
+    if (voiceSessionActive) {
+      speakResponse(text);
+    }
     // Mark any remaining running step as completed
     if (currentStepIndex >= 0 && currentStepIndex < planSteps.length) {
       planSteps[currentStepIndex].status = 'completed';
@@ -571,6 +786,10 @@
     hideTyping();
     const text = d && (d.message || d.error) ? (d.message || d.error) : 'Task failed.';
     addMsg('assistant', text);
+    if (voiceSessionActive) {
+      setVoiceState('error');
+      setTimeout(() => { voiceSessionActive = false; setVoiceState('idle'); }, 2500);
+    }
     // Mark any remaining running step as failed
     if (currentStepIndex >= 0 && currentStepIndex < planSteps.length) {
       planSteps[currentStepIndex].status = 'failed';
@@ -590,8 +809,13 @@
   JarvisAPI.on('error', d => {
     setState('error');
     hideTyping();
-    const msg = d && (d.error || d.message) ? (d.error + ': ' + d.message) : 'Unknown error';
-    addMsg('assistant', 'Error: ' + (msg || 'Unknown error'));
+    const raw = d && (d.error || d.message || d.raw);
+    const msg = (raw && String(raw).trim()) || 'Something went wrong while processing your request.';
+    addMsg('assistant', 'Error: ' + msg);
+    if (voiceSessionActive) {
+      setVoiceState('error');
+      setTimeout(() => { voiceSessionActive = false; setVoiceState('idle'); }, 2500);
+    }
   });
 
   JarvisAPI.on('execution_paused', () => {
@@ -618,8 +842,9 @@
       window.JarvisAPI.disconnectSSE();
     }
     // Clean up voice-related UI
-    document.body.classList.remove('listening');
-    dom.btnMic.style.boxShadow = '';
+    voiceSessionActive = false;
+    browserRecognition && browserRecognition.abort && browserRecognition.abort();
+    setVoiceState('idle');
     dom.dockTitle.textContent = 'ULTRON OFFLINE';
     dom.dockSub.textContent = '';
     // Schedule UI cleanup and shutdown
@@ -717,32 +942,53 @@
     }
   });
 
-  // ═══ Voice — Browser Web Speech API ══════════════════════════
-  function initVoice() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-    const rec = new SpeechRecognition();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-    return rec;
+  // ═══ Voice — Backend STT + TTS ══════════════════════════════
+  let browserRecognition = null;
+
+  function speakResponse(text) {
+    voiceSessionActive = true;
+    setVoiceState('speaking');
+    JarvisAPI.speak(text).then(() => {
+      voiceSessionActive = false;
+      setVoiceState('idle');
+    });
   }
 
-  dom.btnMic.addEventListener('click', async () => {
-    const recognition = initVoice();
-    if (!recognition) {
-      addMsg('assistant', 'Voice recognition not supported in this browser.');
-      return;
-    }
+  const SPEECH_ERROR_MESSAGES = {
+    'not-allowed': 'Microphone access denied. Please allow microphone permissions and try again.',
+    'service-not-allowed': 'Speech services are blocked by your browser. Check site permissions and try again.',
+    'no-speech': null,  // handled by auto-retry
+    'audio-capture': 'No microphone detected. Connect a microphone and try again.',
+    'network': 'Speech recognition service is unreachable. Check your internet connection and try again.',
+    'aborted': 'Listening was interrupted.',
+  };
 
-    document.body.classList.add('listening');
-    dom.dockTitle.textContent = 'LISTENING';
-    dom.dockSub.textContent = 'AWAITING INPUT';
-    dom.btnMic.style.boxShadow = '0 0 0 0 rgba(61,255,176,0.4)';
+  function browserSpeechFallback() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return false;
+    browserRecognition = new SpeechRecognition();
+    browserRecognition.continuous = false;
+    browserRecognition.interimResults = true;
+    browserRecognition.lang = 'en-US';
 
     let finalTranscript = '';
+    let noSpeechRetries = 0;
+    const MAX_NO_SPEECH_RETRIES = 2;
 
-    recognition.onresult = event => {
+    const startRecognition = () => {
+      if (!voiceSessionActive) return;
+      try {
+        browserRecognition.start();
+        setVoiceState('listening');
+      } catch (e) {
+        voiceSessionActive = false;
+        setVoiceState('error');
+        addMsg('assistant', 'Failed to start voice recognition. Check your microphone permissions.');
+        setTimeout(() => setVoiceState('idle'), 2500);
+      }
+    };
+
+    browserRecognition.onresult = event => {
       let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
@@ -755,33 +1001,126 @@
       dom.cmdInput.value = finalTranscript || interimTranscript;
     };
 
-    recognition.onerror = event => {
+    browserRecognition.onerror = event => {
       console.warn('Speech recognition error:', event.error);
-      if (event.error === 'no-speech') {
-        addMsg('assistant', 'No speech detected. Please try again.');
-      } else if (event.error === 'not-allowed') {
-        addMsg('assistant', 'Microphone access denied. Please allow microphone permissions.');
-      } else {
-        addMsg('assistant', 'Voice error: ' + event.error);
+      const message = SPEECH_ERROR_MESSAGES[event.error];
+
+      if (event.error === 'no-speech' && noSpeechRetries < MAX_NO_SPEECH_RETRIES) {
+        // Retry listening once or twice before giving up — mic may have opened cold.
+        noSpeechRetries += 1;
+        startRecognition();
+        return;
       }
+
+      if (event.error === 'aborted') {
+        // User or page interrupted — reset quietly.
+        voiceSessionActive = false;
+        setVoiceState('idle');
+        return;
+      }
+
+      voiceSessionActive = false;
+      addMsg('assistant', message || 'No speech detected. Tap the mic and try speaking a little louder.');
+      setVoiceState('error');
+      setTimeout(() => setVoiceState('idle'), 2500);
     };
 
-    recognition.onend = () => {
-      document.body.classList.remove('listening');
-      dom.btnMic.style.boxShadow = '';
+    browserRecognition.onend = () => {
       if (finalTranscript) {
-        submitCommand(finalTranscript);
-      } else {
-        setState('idle');
+        setVoiceState('thinking');
+        submitCommand(finalTranscript.trim());
+      } else if (voiceSessionActive && noSpeechRetries >= MAX_NO_SPEECH_RETRIES) {
+        addMsg('assistant', 'No speech detected. Tap the mic and try speaking a little louder.');
+        setVoiceState('error');
+        setTimeout(() => setVoiceState('idle'), 2500);
       }
     };
 
+    startRecognition();
+    return true;
+  }
+
+  async function handleMicClick() {
+    // Interrupt JARVIS while it is speaking
+    if (voiceState === 'speaking') {
+      userInterruptedAuto = true;
+      try {
+        await JarvisAPI.post('/api/voice/interrupt', {});
+      } catch (e) {
+        console.warn('Interrupt failed:', e);
+      }
+      voiceSessionActive = false;
+      setVoiceState('idle');
+      return;
+    }
+
+    // Ignore clicks while already listening or thinking
+    if (voiceState === 'listening' || voiceState === 'thinking') return;
+
+    voiceSessionActive = true;
+    setVoiceState('listening');
+    dom.cmdInput.value = '';
+
+    let result;
     try {
-      recognition.start();
+      result = await JarvisAPI.listen(10);
     } catch (e) {
-      document.body.classList.remove('listening');
-      addMsg('assistant', 'Failed to start voice recognition.');
-      setState('idle');
+      result = null;
+    }
+
+    if (!result) {
+      // Backend unreachable — fall back to the browser Speech API if available
+      if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+        browserRecognition && browserRecognition.abort && browserRecognition.abort();
+        if (!browserSpeechFallback()) {
+          voiceSessionActive = false;
+          setVoiceState('error');
+          addMsg('assistant', 'Could not reach the JARVIS backend for voice input.');
+          setTimeout(() => setVoiceState('idle'), 2500);
+        }
+        return;
+      }
+      voiceSessionActive = false;
+      setVoiceState('error');
+      addMsg('assistant', 'Could not reach the JARVIS backend for voice input.');
+      setTimeout(() => setVoiceState('idle'), 2500);
+      return;
+    }
+
+    if (!result.success || !result.text) {
+      const micError = result.error || 'Could not understand audio.';
+      // Backend has no working microphone — fall back to browser Speech API
+      if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+        if (!browserSpeechFallback()) {
+          voiceSessionActive = false;
+          setVoiceState('error');
+          addMsg('assistant', micError);
+          setTimeout(() => setVoiceState('idle'), 2500);
+        }
+        return;
+      }
+      voiceSessionActive = false;
+      setVoiceState('error');
+      addMsg('assistant', micError);
+      setTimeout(() => setVoiceState('idle'), 2500);
+      return;
+    }
+
+    // Listen succeeded: LISTENING → THINKING → submit to backend
+    dom.cmdInput.value = result.text;
+    setVoiceState('thinking');
+    submitCommand(result.text);
+  }
+
+  dom.btnMic.addEventListener('click', handleMicClick);
+
+  // Backend voice engine state via SSE
+  JarvisAPI.on('voice_state', d => {
+    if (!d || !d.state) return;
+    const s = d.state === 'processing' ? 'thinking' : d.state;
+    if (s === 'idle' && (voiceSessionActive || voiceState === 'thinking')) return;
+    if (s === 'idle' || s === 'speaking' || s === 'listening' || s === 'thinking' || s === 'error') {
+      setVoiceState(s);
     }
   });
 
@@ -895,7 +1234,13 @@
   JarvisAPI.startPolling();
   setConnected(false);
   setState('idle');
-  addMsg('assistant', 'JARVIS online. Systems operational. What would you like me to do, Boss?');
+
+  // If the backend never connects, show a graceful fallback
+  setTimeout(() => {
+    if (!autoWelcomeDone && !connected) {
+      addMsg('assistant', 'JARVIS offline. Could not reach the backend. Make sure the server is running, then refresh.');
+    }
+  }, 8000);
 
   // Load current provider from server
   async function loadProvider() {

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from ultron.memory import Memory, Turn
 from ultron.memory.persistent import PersistentMemory
 from ultron.models import MemoryRecord, MemoryType
 
@@ -37,6 +38,13 @@ def _extract_keywords(text: str) -> List[str]:
     }
     words = re.findall(r"[a-z0-9]+", text.lower())
     return [w for w in words if w not in stop_words and len(w) > 2]
+
+
+def _stable_id(role: str, content: str) -> str:
+    """Deterministic record ID so deletions survive restarts."""
+    import hashlib
+
+    return hashlib.sha1(f"{role}|{content}".encode("utf-8")).hexdigest()[:12]
 
 
 def _compute_relevance(keywords: List[str], record_keywords: List[str]) -> float:
@@ -73,6 +81,8 @@ class SemanticMemory(PersistentMemory):
             record = MemoryRecord(
                 content=content,
                 role=role,
+                record_id=_stable_id(role, content),
+                timestamp=datetime.now(timezone.utc).isoformat(),
                 keywords=_extract_keywords(content),
             )
             self._records.append(record)
@@ -84,7 +94,24 @@ class SemanticMemory(PersistentMemory):
             record.timestamp = datetime.now(timezone.utc).isoformat()
         self._records.append(record)
         self._index_record(record)
-        super().add(record.role, record.content)
+        if record.content:
+            self._turns.append(Turn(role=record.role, content=record.content))
+        self._append_record_file(record)
+
+    def _append_record_file(self, record: MemoryRecord) -> None:
+        """Append a record to the JSON-lines file, including its record_id."""
+        entry = {
+            "ts": record.timestamp or datetime.now(timezone.utc).isoformat(),
+            "role": record.role,
+            "content": record.content,
+            "record_id": record.record_id,
+        }
+        line = json.dumps(entry, ensure_ascii=False, default=str)
+        try:
+            with self.path.open("a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+        except OSError:
+            pass
 
     def add_with_metadata(
         self,
@@ -179,16 +206,65 @@ class SemanticMemory(PersistentMemory):
                         continue
                     try:
                         entry = json.loads(line)
+                        content = entry.get("content", "")
+                        role = entry.get("role", "user")
                         record = MemoryRecord(
-                            content=entry.get("content", ""),
-                            role=entry.get("role", "user"),
+                            content=content,
+                            role=role,
+                            record_id=entry.get("record_id") or _stable_id(role, content),
                             timestamp=entry.get("ts", ""),
-                            keywords=_extract_keywords(entry.get("content", "")),
+                            keywords=_extract_keywords(content),
                         )
                         self._records.append(record)
                         self._index_record(record)
                     except Exception:
                         continue
+        except OSError:
+            pass
+
+    def delete(self, record_id: str) -> bool:
+        """Remove a memory record by ID (persisted to disk)."""
+        for i, record in enumerate(self._records):
+            if record.record_id == record_id:
+                self._records.pop(i)
+                self._rebuild_index()
+                self._rewrite()
+                return True
+        return False
+
+    def delete_matching(self, query: str, limit: int = 20) -> int:
+        """Delete records matching a keyword query (forget semantics)."""
+        found = self.search(query, limit=limit, min_relevance=0.02)
+        removed = 0
+        for record in found:
+            if self.delete(record.record_id):
+                removed += 1
+        return removed
+
+    def _rebuild_index(self) -> None:
+        """Rebuild the inverted keyword index from scratch."""
+        self._keyword_index = {}
+        for idx, record in enumerate(self._records):
+            for keyword in record.keywords:
+                self._keyword_index.setdefault(keyword, []).append(idx)
+
+    def _rewrite(self) -> None:
+        """Rewrite the persistent file to match the current records."""
+        lines = []
+        for record in self._records:
+            entry = {
+                "ts": record.timestamp or datetime.now(timezone.utc).isoformat(),
+                "role": record.role,
+                "content": record.content,
+                "record_id": record.record_id,
+            }
+            lines.append(json.dumps(entry, ensure_ascii=False, default=str))
+        try:
+            with self.path.open("w", encoding="utf-8") as fh:
+                if lines:
+                    fh.write("\n".join(lines) + "\n")
+                else:
+                    fh.write("")
         except OSError:
             pass
 

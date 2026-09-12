@@ -44,6 +44,7 @@ class CreateNoteTool(Tool):
             "error": {"type": "string"},
         },
     }
+    mutates = True
 
     def run(self, title: str, content: str = "", tags: list[str] | None = None, **_: Any) -> Dict[str, Any]:
         try:

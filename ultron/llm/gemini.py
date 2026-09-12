@@ -7,20 +7,25 @@ permission gate). Tool schemas are passed straight through as JSON Schema.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from google.api_core.exceptions import GoogleAPIError
 
-import base64
 import json
 import uuid
 import logging
-import re
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from google import genai
 from google.genai import types as gt
 
 from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
-from ultron.errors import QuotaError, ProviderError, RateLimitError
+from ultron.errors import (
+    AuthenticationError,
+    QuotaError,
+    ProviderError,
+    RateLimitError,
+)
 
 if TYPE_CHECKING:  # type-only import — avoids any circular import with tools
     from ultron.tools.base import ToolSpec
@@ -75,8 +80,10 @@ class GeminiProvider(LLMProvider):
         status_code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
         error_message = str(exc).lower()
 
-        # Check for quota exhaustion (429 RESOURCE_EXHAUSTED)
-        if status_code == 429 or "quota" in error_message or "resource_exhausted" in error_message:
+        # Check for quota exhaustion (message-specific) — must run before
+        # the general 429 handler below so that RESOURCE_EXHAUSTED errors
+        # are correctly classified as non-retryable quota exhaustion.
+        if "quota" in error_message or "resource_exhausted" in error_message:
             raise QuotaError(
                 provider="gemini",
                 model=self._model,
@@ -84,7 +91,7 @@ class GeminiProvider(LLMProvider):
                 retryable=False,
             ) from exc
 
-        # Check for rate limit (429 with retry info)
+        # All other 429s and "rate limit" messages are transient rate limits.
         if status_code == 429 or "rate limit" in error_message:
             raise RateLimitError(
                 provider="gemini",
@@ -172,20 +179,22 @@ class GeminiProvider(LLMProvider):
     def analyze_image(self, image_path: str, prompt: str) -> str:
         """Analyze an image using Gemini's vision capability."""
         gt = self._gt
-        from google.genai.types import Image as GenImage
 
         img_path = Path(image_path)
         if not img_path.is_file():
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         image_bytes = img_path.read_bytes()
-        encoded = base64.b64encode(image_bytes).decode("utf-8")
-        img_obj = GenImage(inline_bytes=encoded)
+        # Determine MIME type from extension
+        ext = img_path.suffix.lower()
+        mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                    ".gif": "image/gif", ".webp": "image/webp"}
+        mime_type = mime_map.get(ext, "image/png")
 
         user_content = gt.Content(
             role="user",
             parts=[
-                gt.Part.from_image(image=img_obj),
+                gt.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 gt.Part.from_text(text=prompt),
             ]
         )

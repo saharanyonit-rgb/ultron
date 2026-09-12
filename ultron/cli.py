@@ -10,6 +10,7 @@ import ctypes
 import os
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 
 from ultron.actions import PermissionGate
@@ -31,6 +32,7 @@ BANNER = r"""\033[32m
 \033[0m JARVIS - Personal AI System v0.1.0
  Commands: /help  /tools  /history  /clear  /permissions  /memory  /exit
  Web UI: http://127.0.0.1:8080 (auto-opened)
+ Android: run with --lan to access from your phone on the same WiFi
 """
 
 HELP = """Commands:
@@ -167,8 +169,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Ultron — JARVIS-style desktop assistant")
     parser.add_argument("--web", action="store_true", default=True, help="Start the web dashboard (default: on)")
     parser.add_argument("--no-web", action="store_true", help="Disable web dashboard")
+    parser.add_argument("--headless", action="store_true", help="Run without REPL (background/autostart mode)")
     parser.add_argument("--port", type=int, default=8080, help="Web dashboard port (default: 8080)")
     parser.add_argument("--host", default="127.0.0.1", help="Web dashboard host (default: 127.0.0.1)")
+    parser.add_argument("--lan", action="store_true", help="Bind to 0.0.0.0 for LAN/mobile access (e.g. from Android)")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress log output")
     parser.add_argument(
         "--provider",
@@ -180,6 +184,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.no_web:
         args.web = False
+
+    if args.lan:
+        args.host = "0.0.0.0"
 
     if args.provider:
         import os
@@ -196,30 +203,49 @@ def main(argv: Optional[list[str]] = None) -> int:
     configure_logging("WARNING" if args.quiet else getattr(config, "log_level", "INFO"))
     logger.info("Ultron startup [provider=%s, model=%s]", config.provider, config.model)
 
-    # Duplicate instance prevention: create a Windows named mutex.
-    # If the mutex already exists, another JARVIS instance is running.
-    mutex_name = "JarvisMutex_{}".format("ultron".encode().hex())
-
+    # Duplicate instance prevention: create a platform-specific lock.
+    # Windows: named mutex; POSIX: file lock.
     _jarvis_mutex = None
+    _lock_file = None
     try:
-        # Try to create the mutex; if it already exists, another instance is running
-        mutex = ctypes.windll.kernel32.CreateMutexW(None, True, mutex_name)
-        last_error = ctypes.get_last_error()
-        if last_error == 183:  # ERROR_ALREADY_EXISTS
-            # Another instance is already running
-            logger.error("Another JARVIS instance is already running (mutex: %s)", mutex_name)
-            print("Another JARVIS instance is already running. Only one instance may run at a time.")
-            return 1
-        _jarvis_mutex = mutex
+        if sys.platform == "win32":
+            mutex_name = "JarvisMutex_{}".format("ultron".encode().hex())
+            # use_last_error=True is required for ctypes.get_last_error() to
+            # capture the CreateMutexW WIN32 error (ERROR_ALREADY_EXISTS=183).
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            mutex = kernel32.CreateMutexW(None, True, mutex_name)
+            last_error = ctypes.get_last_error()
+            if last_error == 183:  # ERROR_ALREADY_EXISTS
+                logger.error("Another JARVIS instance is already running (mutex: %s)", mutex_name)
+                print("Another JARVIS instance is already running. Only one instance may run at a time.")
+                return 1
+            _jarvis_mutex = mutex
+        else:
+            # POSIX: use a lock file
+            import fcntl
+            lock_path = Path.home() / ".ultron" / ".lock"
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            _lock_file = open(lock_path, "w")
+            try:
+                fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                print("Another JARVIS instance is already running. Only one instance may run at a time.")
+                return 1
     except Exception:
-        # If mutex creation fails, continue anyway (best-effort)
-        logger.warning("Could not create mutex for instance prevention")
+        logger.warning("Could not create lock for instance prevention")
 
-    # Ensure mutex is cleaned up on exit
+    # Ensure lock is cleaned up on exit
     def cleanup_mutex() -> None:
         if _jarvis_mutex is not None:
             try:
                 ctypes.windll.kernel32.CloseHandle(_jarvis_mutex)
+            except Exception:
+                pass
+        if _lock_file is not None:
+            try:
+                import fcntl
+                fcntl.flock(_lock_file, fcntl.LOCK_UN)
+                _lock_file.close()
             except Exception:
                 pass
 
@@ -253,11 +279,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_iterations=config.max_tool_iterations,
     )
 
-    from ultron.memory.persistent import PersistentMemory
+    from ultron.memory.semantic import SemanticMemory
+    from ultron.services import get_memory_service
     if str(config.memory_file):
-        memory: Memory = PersistentMemory(config.memory_file)
+        memory: Memory = SemanticMemory(config.memory_file)
     else:
         memory = Memory()
+    get_memory_service().set_engine(memory if isinstance(memory, SemanticMemory) else None)
 
     brain = Brain(agent=agent, memory=memory)
 
@@ -271,7 +299,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         from ultron.tools import ToolExecutor
         from ultron.agent_manager import AgentManager
         from ultron.status import StatusReporter
-        from ultron.audit import AuditLogger as UltrAuditLogger
         from ultron.brains import BrainOrchestrator
 
         execution_controller = BrainExecutionController(brain)
@@ -332,6 +359,33 @@ def main(argv: Optional[list[str]] = None) -> int:
         url = f"http://{args.host}:{args.port}"
         print(f"Dashboard: {url}")
 
+        if args.lan:
+            import socket as _socket
+            lan_ips = []
+            try:
+                for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
+                    ip = info[4][0]
+                    if not ip.startswith("127."):
+                        lan_ips.append(ip)
+            except Exception:
+                pass
+            # Fallback: connect to a public IP to discover local interface
+            if not lan_ips:
+                try:
+                    with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
+                        s.connect(("8.8.8.8", 80))
+                        lan_ips.append(s.getsockname()[0])
+                except Exception:
+                    pass
+            if lan_ips:
+                print(f"\n  LAN access (Android / other devices on same WiFi):")
+                for ip in set(lan_ips):
+                    print(f"    http://{ip}:{args.port}")
+                print(f"\n  Open this URL in your Android browser to use ULTRON.")
+            else:
+                print(f"\n  LAN mode enabled but could not detect local IP.")
+                print(f"  Check your WiFi IP manually and use: http://<your-ip>:{args.port}")
+
         # Wait for server to be ready before opening UI
         print("Waiting for JARVIS server to be ready...")
         ready = False
@@ -351,10 +405,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         else:
             print("Warning: JARVIS server did not respond within 30 seconds. Proceeding anyway.")
 
-        # Get screen resolution for kiosk mode
-        import pyautogui
-        screen_width, screen_height = pyautogui.size()
-        print(f"Screen resolution: {screen_width}x{screen_height}")
+        # Get screen resolution for kiosk mode (Windows only)
+        try:
+            import pyautogui
+            screen_width, screen_height = pyautogui.size()
+            print(f"Screen resolution: {screen_width}x{screen_height}")
+        except (ImportError, Exception):
+            screen_width, screen_height = 1920, 1080  # fallback
 
         def _open_browser():
             _time.sleep(0.5)
@@ -373,6 +430,21 @@ def main(argv: Optional[list[str]] = None) -> int:
         threading.Thread(target=_open_browser, daemon=True).start()
 
     cli = Cli(agent=agent, memory=memory, registry=registry, brain=brain)
+    if args.headless:
+        # Autostart/background mode: keep the web server alive, no REPL.
+        # This prevents input() from getting EOF (no console) and shutdown.
+        logger.info("Ultron running in headless mode [dashboard=%s]",
+                    f"http://{args.host}:{args.port}" if args.web else "disabled")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if web_server:
+                web_server.shutdown()
+        return 0
+
     try:
         return cli.repl()
     finally:

@@ -1,7 +1,8 @@
 """Phase 1 conversation-memory contract.
 
 Drives the Brain through a three-turn conversation and asserts:
-  * the model is asked the same user message that was sent
+  * the model is asked the same user message that was sent (wrapped with a
+    memory preamble from turn 2 onward, so recall works across sessions)
   * both user and assistant turns are recorded in `Memory`
   * sessions are isolated (a fresh Memory starts empty)
   * the structured BrainResponse contains the request_id we set
@@ -71,8 +72,13 @@ def test_multi_turn_conversation_grows_memory(tmp_path):
     assert r1.status == ResponseStatus.SUCCESS
     assert r2.status == ResponseStatus.SUCCESS
     assert r2.response == "Your name is Alex."
-    # provider received both user turns in order
-    assert provider.received == ["My name is Alex.", "What is my name?"]
+    # The model is still asked the same user message each turn, but from turn 2
+    # onward it also receives an explicit memory preamble of past turns so it
+    # remembers across sessions/restarts.
+    assert provider.received[0] == "My name is Alex."
+    assert provider.received[1].endswith("What is my name?")
+    assert "[Memory of our past conversations" in provider.received[1]
+    assert "My name is Alex." in provider.received[1]
     # memory contains 2 user turns + 2 assistant turns
     assert len(memory) == 4
     assert [t.role for t in memory.all()] == ["user", "assistant", "user", "assistant"]

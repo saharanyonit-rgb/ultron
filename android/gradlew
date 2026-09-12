@@ -1,0 +1,23 @@
+#!/bin/sh
+# Gradle wrapper script
+
+# Determine the Java command to use to start the JVM.
+JAVACMD="java"
+if [ -n "$JAVA_HOME" ] ; then
+    JAVACMD="$JAVA_HOME/bin/java"
+fi
+
+# Find project directory
+APP_HOME="`pwd -P`"
+
+# Add default JVM options here.
+DEFAULT_JVM_OPTS='"-Xmx2048m" "-Xms256m"'
+
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+
+exec "$JAVACMD" \
+    $DEFAULT_JVM_OPTS \
+    $JAVA_OPTS \
+    -classpath "$CLASSPATH" \
+    org.gradle.wrapper.GradleWrapperMain \
+    "$@"

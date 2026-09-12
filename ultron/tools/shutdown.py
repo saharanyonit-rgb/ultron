@@ -1,16 +1,12 @@
-"""Windows shutdown tool for JARVIS.
-
-Provides a dedicated, safe Windows shutdown mechanism using the standard
-Windows shutdown API. This tool is specifically for system shutdown and
-is registered with CRITICAL risk level requiring explicit user confirmation.
-"""
+"""System shutdown tool — cross-platform (Windows shutdown, Linux/Android reboot/poweroff)."""
 
 from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from ultron.tools.base import Tool
 
@@ -19,42 +15,32 @@ logger = logging.getLogger("ultron.tools.shutdown")
 
 @dataclass
 class ShutdownResult:
-    """Result of Windows shutdown operation."""
+    """Result of shutdown operation."""
     success: bool
     message: str
     exit_code: int = 0
 
 
 class ShutdownTool(Tool):
-    """Initiate Windows system shutdown using the standard shutdown mechanism.
+    """Initiate system shutdown using the platform-appropriate mechanism."""
 
-    Uses `shutdown /s /t 0` to request an immediate system shutdown.
-    This tool has CRITICAL risk level and always requires user confirmation
-    through the existing permission/policy system.
-
-    The shutdown command is:
-        shutdown /s /t 0
-
-    This:
-    - Shuts down the local computer immediately
-    - Warns all logged-on users
-    - Closes running applications with unsaved changes (prompting to save)
-    - Transitions to power-off state when safe
-    """
-
-    name = "windows_shutdown"
+    name = "system_shutdown"
     description = (
-        "Initiate Windows system shutdown using the standard mechanism. "
+        "Initiate system shutdown or reboot. "
         "This is a CRITICAL-risk action that requires user confirmation. "
-        "Uses shutdown /s /t 0 for immediate shutdown request."
+        "On Windows uses shutdown command; on Linux/Android uses shutdown/reboot."
     )
     parameters = {
         "type": "object",
         "properties": {
             "confirm": {
                 "type": "boolean",
-                "description": "If True, skip confirmation (for trusted paths). "
-                               "Default False always requires confirmation.",
+                "description": "If True, skip confirmation. Default False always requires confirmation.",
+                "default": False,
+            },
+            "reboot": {
+                "type": "boolean",
+                "description": "If True, reboot instead of shutdown. Default False.",
                 "default": False,
             },
         },
@@ -69,51 +55,33 @@ class ShutdownTool(Tool):
     }
     mutates = True
 
-    def run(self, confirm: bool = False, **_: Any) -> Dict[str, Any]:
-        """Execute Windows shutdown.
-
-        Args:
-            confirm: If True, skip the confirmation step. Default False always
-                     requires confirmation through the permission system.
-
-        Returns:
-            Dict with success and message keys.
-        """
+    def run(self, confirm: bool = False, reboot: bool = False, **_: Any) -> Dict[str, Any]:
         if not confirm:
-            # Confirmation is always required through the permission system
-            # When called directly, we return needing confirmation
             return {
                 "success": False,
                 "message": "Shutdown confirmation required through permission system",
             }
 
         try:
+            if sys.platform == "win32":
+                cmd = ["shutdown", "/r" if reboot else "/s", "/t", "0"]
+            else:
+                cmd = ["reboot"] if reboot else ["shutdown", "-h", "now"]
+
             result = subprocess.run(
-                ["shutdown", "/s", "/t", "0"],
-                capture_output=True,
-                text=True,
-                timeout=30,
+                cmd, capture_output=True, text=True, timeout=30,
             )
             success = result.returncode == 0
+            action = "reboot" if reboot else "shutdown"
             message = (
-                "Windows shutdown initiated successfully."
+                f"System {action} initiated successfully."
                 if success
-                else f"Windows shutdown failed: {result.stderr.strip() or result.stdout.strip()}"
+                else f"System {action} failed: {result.stderr.strip() or result.stdout.strip()}"
             )
-            logger.info("Windows shutdown %s", "initiated" if success else "failed")
-            return {
-                "success": success,
-                "message": message,
-            }
+            return {"success": success, "message": message}
         except Exception as e:
-            logger.error("Windows shutdown error: %s", e)
-            return {
-                "success": False,
-                "message": f"Windows shutdown error: {str(e)}",
-            }
+            logger.error("Shutdown error: %s", e)
+            return {"success": False, "message": f"Shutdown error: {str(e)}"}
 
 
-__all__ = [
-    "ShutdownTool",
-    "ShutdownResult",
-]
+__all__ = ["ShutdownTool", "ShutdownResult"]

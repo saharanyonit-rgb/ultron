@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 
@@ -52,8 +52,8 @@ class Tool(ABC):
 
     name: str = ""
     description: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    output_schema: Dict[str, Any] = field(default_factory=dict)
+    parameters: Dict[str, Any] = {}
+    output_schema: Dict[str, Any] = {}
     mutates: bool = False
 
     @property

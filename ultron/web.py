@@ -40,6 +40,19 @@ from ultron.policy import PolicyEngine
 logger = logging.getLogger("ultron.web")
 
 
+def _check_termux_api() -> bool:
+    """Check if termux-api is available."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["which", "termux-battery-status"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     """Multi-threaded HTTP server."""
     daemon_threads = True
@@ -184,6 +197,8 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             self._handle_reminders_get(reminder_id)
         elif path == "/api/permissions" or path.startswith("/api/permissions/"):
             self._handle_permission_request()
+        elif path == "/api/android":
+            self._handle_android_status()
         else:
             # ── Static File Serving ─────────────────────────────
             self._serve_static(path)
@@ -204,6 +219,8 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             self._handle_voice_speak()
         elif path == "/api/voice/listen":
             self._handle_voice_listen()
+        elif path == "/api/voice/interrupt":
+            self._handle_voice_interrupt()
         elif path == "/api/execute":
             self._handle_execute_command()
         elif path == "/api/calendar/events":
@@ -427,9 +444,42 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         else:
             self._send_json(self.server.get_current_state())
 
+    # ── Voice ─────────────────────────────────────────────────────
+
     def _handle_voice_state(self) -> None:
+        self.server._wire_voice_broadcast()
         from ultron.web_api import get_voice_state
         self._send_json(get_voice_state())
+
+    # ── Android Status ─────────────────────────────────────────
+
+    def _handle_android_status(self) -> None:
+        try:
+            from ultron.platform import is_android
+            from ultron.tools import ToolRegistry
+            registry = ToolRegistry()
+            android_tools = [t.name for t in registry.all()
+                           if any(kw in t.name for kw in [
+                               'call', 'sms', 'contact', 'alarm', 'notification',
+                               'battery', 'toggle', 'brightness', 'volume', 'wifi',
+                               'bluetooth', 'airplane', 'data', 'dnd', 'screen_on',
+                               'screen_off', 'unlock', 'device_info', 'network_info',
+                               'location', 'scan_wifi', 'running_apps', 'installed',
+                               'storage', 'memory', 'media', 'vibrate', 'toast',
+                               'tap', 'swipe', 'long_press', 'double_tap',
+                               'input_text', 'press_back', 'press_home', 'press_recent',
+                               'press_key', 'drag', 'ui_dump', 'click_ui', 'read_screen',
+                               'screen_resolution', 'screen_density',
+                           ])]
+            self._send_json({
+                "is_android": is_android(),
+                "android_tools": android_tools,
+                "android_tool_count": len(android_tools),
+                "total_tools": len(registry.all()),
+                "termux_api_available": _check_termux_api(),
+            })
+        except Exception as e:
+            self._send_json({"is_android": False, "error": str(e)})
 
     # ── Calendar ────────────────────────────────────────────────
 
@@ -592,6 +642,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             self._send_error(400, "Missing 'text' field")
             return
         try:
+            self.server._wire_voice_broadcast()
             from ultron.tools.voice import get_voice_engine
             engine = get_voice_engine()
             result = engine.speak(body["text"])
@@ -601,14 +652,29 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_voice_listen(self) -> None:
         try:
+            self.server._wire_voice_broadcast()
             from ultron.tools.voice import get_voice_engine
             engine = get_voice_engine()
             timeout = 10
             body = self._read_body()
             if body and "timeout" in body:
-                timeout = body["timeout"]
+                try:
+                    timeout = int(body["timeout"])
+                except (TypeError, ValueError):
+                    timeout = 10
             result = engine.listen(timeout=timeout)
             self._send_json(result)
+        except Exception as e:
+            self._send_json({"error": str(e)}, 500)
+
+    def _handle_voice_interrupt(self) -> None:
+        """Stop any in-progress TTS/STT and return the engine to idle."""
+        try:
+            self.server._wire_voice_broadcast()
+            from ultron.tools.voice import get_voice_engine, VoiceState
+            engine = get_voice_engine()
+            engine.interrupt()
+            self._send_json({"interrupted": True, "state": engine.state.value})
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
 
@@ -698,7 +764,10 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         try:
             from ultron.tools.execute import ExecuteCommand
             tool = ExecuteCommand()
-            timeout = body.get("timeout", 60)
+            try:
+                timeout = int(body.get("timeout", 60))
+            except (TypeError, ValueError):
+                timeout = 60
             working_dir = body.get("working_directory")
             result = tool.run(
                 command=body["command"],
@@ -907,6 +976,22 @@ class JarvisAPI(ThreadedHTTPServer):
             }
         return {"state": "no_controller", "rate_limit": {}}
 
+    def _wire_voice_broadcast(self) -> None:
+        """Connect voice engine state changes to the SSE broadcaster."""
+        try:
+            from ultron.tools.voice import get_voice_engine, VoiceState
+
+            def _on_voice_state(state: VoiceState) -> None:
+                self._event_broadcaster.broadcast("voice_state", {"state": state.value, "available": True})
+
+            engine = get_voice_engine()
+            # Only set if not already wired to a broadcaster
+            if getattr(engine, "_on_state_change", None) is None or getattr(engine, "_broadcast_wired", False) is False:
+                engine.set_state_callback(_on_voice_state)
+                engine._broadcast_wired = True
+        except Exception as e:
+            logger.debug("Could not wire voice broadcast: %s", e)
+
     # ── Actions ────────────────────────────────────────────────────
 
     def submit_goal(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -973,14 +1058,15 @@ class JarvisAPI(ThreadedHTTPServer):
                 self._current_state = "idle"
 
             except Exception as e:
-                logger.error("Orchestrator execution failed for goal %s: %s", goal_id, e)
+                err = str(e) or f"Unhandled {type(e).__name__}"
+                logger.error("Orchestrator execution failed for goal %s: %s", goal_id, err)
                 self._current_state = "error"
                 goal = self._goals.get(goal_id)
                 if goal:
                     goal["status"] = "failed"
-                    goal["error"] = str(e)
-                self._event_broadcaster.broadcast("error", {"error": str(e)})
-                self._event_broadcaster.broadcast("failed", {"error": str(e), "id": goal_id})
+                    goal["error"] = err
+                self._event_broadcaster.broadcast("error", {"error": err})
+                self._event_broadcaster.broadcast("failed", {"error": err, "id": goal_id})
                 time.sleep(1)
                 self._current_state = "idle"
 
@@ -1052,14 +1138,15 @@ class JarvisAPI(ThreadedHTTPServer):
                 self._current_state = "idle"
 
             except Exception as e:
-                logger.error("Goal execution failed: %s", e)
+                err = str(e) or f"Unhandled {type(e).__name__}"
+                logger.error("Goal execution failed: %s", err)
                 self._current_state = "error"
                 goal = self._goals.get(goal_id)
                 if goal:
                     goal["status"] = "failed"
-                    goal["error"] = str(e)
-                self._event_broadcaster.broadcast("error", {"error": str(e)})
-                self._event_broadcaster.broadcast("failed", {"error": str(e)})
+                    goal["error"] = err
+                self._event_broadcaster.broadcast("error", {"error": err})
+                self._event_broadcaster.broadcast("failed", {"error": err})
                 time.sleep(1)
                 self._current_state = "idle"
 

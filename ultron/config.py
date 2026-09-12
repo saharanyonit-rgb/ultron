@@ -27,6 +27,21 @@ SUPPORTED_PROVIDERS = (
     "bedrock",
 )
 
+# Provider-specific default models used when ULTRON_MODEL is not set.
+_DEFAULT_MODELS: dict[str, str] = {
+    "gemini": "gemini-3.5-flash",
+    "nvidia": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "grok": "grok-3",
+    "openai": "gpt-4o",
+    "anthropic": "claude-sonnet-4-20250514",
+    "cohere": "command-r",
+    "mistral": "mistral-large-latest",
+    "perplexity": "llama-3.1-sonar-large-128k-online",
+    "bedrock": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "azure_openai": "gpt-4o",
+}
+
 DEFAULT_SYSTEM_PROMPT = """You are Ultron, a JARVIS-style personal desktop assistant running locally on Windows.
 
 Personality: calm, intelligent, confident, professional, proactive, honest, context-aware, and slightly witty. Never arrogant, never verbose. Be concise by default; give detail only when the task warrants it. Distinguish facts from assumptions. Push back on bad plans instead of blindly agreeing.
@@ -42,6 +57,10 @@ Capabilities via tools:
 - Voice: speak, listen
 - Web: open_url, http_request
 - Calendar/Notes/Reminders: create_calendar_event, create_note, create_reminder
+- Memory: remember, recall, list_memories, forget
+- Music: play_song (searches YouTube and starts playing the first match)
+- Git/GitHub: git_status, git_log, git_diff, git_branch, git_commit, github_search, github_clone, github_create_repo, github_push, github_pull
+- UI/UX: generate_ui (writes a complete animated HTML/CSS design to your generated_ui folder)
 
 When the user asks for the time, ALWAYS use the get_current_time tool. Never say you don't have access to time.
 When the user asks to open a website, use navigate_url to open it in the browser, then use click_element, fill_form, browser_type, press_key to interact with the page.
@@ -63,15 +82,65 @@ def _parse_env_text(text: str) -> Dict[str, str]:
             continue
         key, _, value = line.partition("=")
         key = key.strip()
+        # Support `export KEY=VALUE` syntax (common in .env files).
+        if key.startswith("export ") or key.startswith("export\t"):
+            key = key.split(None, 1)[1] if len(key.split(None, 1)) > 1 else key
+        value = value.strip()
+        # Strip inline comments that are not inside quotes.
+        in_quote: str | None = None
+        for i, ch in enumerate(value):
+            if ch in ('"', "'") and in_quote is None:
+                in_quote = ch
+            elif ch == in_quote:
+                in_quote = None
+            elif ch == "#" and in_quote is None and i > 0 and value[i - 1] in (" ", "\t"):
+                value = value[:i]
+                break
         value = value.strip().strip("'").strip('"')
         if key:
             result[key] = value
     return result
 
 
+def _find_env_file() -> Path:
+    """Search for .env file in multiple locations (supports bundled mode)."""
+    import sys as _sys
+
+    candidates = []
+
+    # 1. Explicit env_file argument (handled by caller)
+    # 2. Current working directory
+    candidates.append(Path.cwd() / ".env")
+
+    # 3. PyInstaller bundle directory
+    if getattr(_sys, "frozen", False):
+        bundle_dir = Path(_sys._MEIPASS)  # type: ignore[attr-defined]
+        candidates.append(bundle_dir / ".env")
+        exe_dir = Path(_sys.executable).parent
+        candidates.append(exe_dir / ".env")
+
+    # 4. Project root (relative to this file)
+    candidates.append(Path(__file__).parent.parent / ".env")
+
+    # 5. User home directory
+    candidates.append(Path.home() / ".env")
+
+    # 6. JARVIS app data directory
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "JARVIS" / ".env")
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    # Return default (will result in empty dict)
+    return Path.cwd() / ".env"
+
+
 def load_dotenv(env_file: str | Path | None = None) -> Dict[str, str]:
     """Load KEY=VALUE pairs from an .env file (does not touch os.environ)."""
-    path = Path(env_file) if env_file else (Path.cwd() / ".env")
+    path = Path(env_file) if env_file else _find_env_file()
     if not path.is_file():
         return {}
     try:
@@ -346,14 +415,14 @@ def _as_int(name: str, value: str, default: int) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise ConfigError(f"{name} must be an integer, got: {value!r}") from None
+        raise ConfigError(f"Environmental variable {name} must be an integer, got: {value!r}") from None
 
 
 def _as_float(name: str, value: str, default: float) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
-        raise ConfigError(f"{name} must be a number, got: {value!r}") from None
+        raise ConfigError(f"Environmental variable {name} must be a number, got: {value!r}") from None
 
 
 def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | None = None) -> Config:
@@ -477,7 +546,8 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
         bedrock_region=bedrock_region,
         bedrock_access_key=bedrock_access_key,
         bedrock_secret_key=bedrock_secret_key,
-        model=get("ULTRON_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash",
+        model=get("ULTRON_MODEL", _DEFAULT_MODELS.get(provider, "gemini-2.5-flash")).strip()
+        or _DEFAULT_MODELS.get(provider, "gemini-2.5-flash"),
         system_prompt=get("ULTRON_SYSTEM_PROMPT", "").strip() or DEFAULT_SYSTEM_PROMPT,
         temperature=_as_float("ULTRON_TEMPERATURE", get("ULTRON_TEMPERATURE", "0.3"), 0.3),
         api_base_url=get("ULTRON_API_BASE_URL", "").strip(),

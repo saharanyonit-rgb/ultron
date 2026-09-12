@@ -60,6 +60,7 @@ class HttpRequest(Tool):
             "duration_ms": {"type": "number"},
         },
     }
+    mutates = True
 
     def run(
         self,

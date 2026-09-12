@@ -48,6 +48,14 @@ DEFAULT_RISK_MAP: dict[str, RiskLevel] = {
     "execute_command": RiskLevel.CRITICAL,
     "execute_shell": RiskLevel.CRITICAL,
     "windows_shutdown": RiskLevel.CRITICAL,
+    # GitHub integration
+    "github_search": RiskLevel.READ,
+    "github_clone": RiskLevel.LOW,
+    "github_pull": RiskLevel.LOW,
+    "github_push": RiskLevel.MEDIUM,
+    "github_create_repo": RiskLevel.MEDIUM,
+    # UI/UX design generator
+    "generate_ui": RiskLevel.LOW,
 }
 
 

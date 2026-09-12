@@ -52,6 +52,7 @@ class CalendarTool(Tool):
             "error": {"type": "string"},
         },
     }
+    mutates = True
 
     def run(
         self,

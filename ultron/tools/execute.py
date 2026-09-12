@@ -180,15 +180,25 @@ class ExecutePowerShell(Tool):
     def run(self, command: str, timeout: int = 60, **_: Any) -> Dict[str, Any]:
         start = time.time()
         try:
-            process = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding="utf-8",
-                errors="replace",
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
+            if sys.platform == "win32":
+                process = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding="utf-8",
+                    errors="replace",
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+            else:
+                process = subprocess.run(
+                    ["bash", "-c", command],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             duration = (time.time() - start) * 1000
             max_len = 50000
             stdout = process.stdout[:max_len] if len(process.stdout) > max_len else process.stdout

@@ -20,13 +20,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
+desktop = [
+    "pystray>=0.19.0",     # System tray icon
+    "Pillow>=10.0.0",      # Icon generation for pystray
+    "pyinstaller>=6.0.0",  # Bundling for distribution
+]
 
 [project.scripts]
 ultron = "ultron.cli:main"
+jarvis = "desktop.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ultron*"]
+include = ["ultron*", "desktop*"]
 
 [tool.pytest.ini_options]
 # Real E2E tests call third-party model APIs and can incur costs.  Keep the

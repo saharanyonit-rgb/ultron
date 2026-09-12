@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from ultron.tools.base import Tool
 
 
-def _run_git(cwd: str, *args: str) -> Dict[str, Any]:
+def _run_git(cwd: str, *args: str, timeout: int = 120) -> Dict[str, Any]:
     try:
         result = subprocess.run(
             ["git"] + list(args),
@@ -19,6 +19,7 @@ def _run_git(cwd: str, *args: str) -> Dict[str, Any]:
             encoding="utf-8",
             errors="replace",
             shell=False,
+            timeout=timeout,
         )
         return {
             "success": result.returncode == 0,
@@ -28,6 +29,8 @@ def _run_git(cwd: str, *args: str) -> Dict[str, Any]:
         }
     except FileNotFoundError:
         return {"error": "Git is not installed or not in PATH"}
+    except subprocess.TimeoutExpired:
+        return {"error": f"Git command timed out after {timeout}s"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -260,6 +263,7 @@ class GitBranch(Tool):
             "current": {"type": "string"},
         },
     }
+    mutates = True
 
     def run(
         self,

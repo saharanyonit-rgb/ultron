@@ -1,14 +1,16 @@
-"""Vision tool — captures screen and analyzes it with vision-capable LLM."""
+"""Vision tool — captures screen and analyzes it with vision-capable LLM — cross-platform."""
 
 from __future__ import annotations
 
 import base64
 import logging
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+from ultron.platform import is_windows
 from ultron.tools.base import Tool, ToolError
 
 logger = logging.getLogger("ultron.tools.vision")
@@ -79,11 +81,18 @@ class VisionTool(Tool):
                 target = target.with_suffix(".png")
         else:
             pictures = Path.home() / "Pictures"
-            target = pictures / f"ultron-vision-{datetime.now():%Y%m%d-%H%MS}.png"
+            target = pictures / f"ultron-vision-{datetime.now():%Y%m%d-%H%M%S}.png"
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             return {"error": f"cannot create screenshot directory: {exc}"}
+
+        if is_windows():
+            return self._capture_windows(target)
+        return self._capture_posix(target)
+
+    def _capture_windows(self, target: Path) -> Dict[str, Any]:
+        from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
 
         script = (
             "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
@@ -106,6 +115,28 @@ class VisionTool(Tool):
         except ValueError:
             width, height = 0, 0
         return {"path": str(target), "width": width, "height": height}
+
+    def _capture_posix(self, target: Path) -> Dict[str, Any]:
+        """Take screenshot on Linux/Android using available tools."""
+        tools = [
+            (["scrot", str(target)], None),
+            (["maim", str(target)], None),
+            (["gnome-screenshot", "-f", str(target)], None),
+            (["termux-screenshot", str(target)], None),
+            (["import", "-window", "root", str(target)], None),
+        ]
+
+        for cmd, _ in tools:
+            try:
+                proc = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15,
+                )
+                if proc.returncode == 0 and target.is_file():
+                    return {"path": str(target), "width": 0, "height": 0}
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+
+        return {"error": "No screenshot tool available. Install scrot, maim, or termux-api."}
 
     def _analyze_image(self, image_path: str, prompt: str) -> Dict[str, Any]:
         try:

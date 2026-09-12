@@ -8,11 +8,31 @@ from __future__ import annotations
 import gzip
 import hashlib
 import logging
+import sys
 from pathlib import Path
 
 logger = logging.getLogger("ultron.web_static")
 
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
+def _resolve_frontend_dir() -> Path:
+    """Resolve the frontend directory for both dev and bundled modes."""
+    # PyInstaller bundled mode
+    if getattr(sys, "frozen", False):
+        bundle_dir = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+        frontend = bundle_dir / "frontend"
+        if frontend.is_dir():
+            return frontend
+        # Fallback: look relative to executable
+        exe_dir = Path(sys.executable).parent
+        frontend = exe_dir / "frontend"
+        if frontend.is_dir():
+            return frontend
+
+    # Development mode
+    return Path(__file__).parent.parent / "frontend"
+
+
+FRONTEND_DIR = _resolve_frontend_dir()
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",

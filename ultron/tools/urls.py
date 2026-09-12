@@ -1,14 +1,16 @@
-"""V1 URL tool: open a URL in the default browser.
+"""V1 URL tool: open a URL in the default browser — cross-platform.
 
 Uses NetworkSecurityGuard for consistent URL validation across the system.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from typing import Any, Dict
 
 from ultron.network_security import NetworkSecurityGuard, NetworkPolicy
-from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+from ultron.platform import is_windows
 from ultron.tools.base import Tool
 
 # Module-level guard for URL validation (shared across instances)
@@ -53,7 +55,21 @@ class OpenUrl(Tool):
         if not verdict.allowed:
             return {"error": f"URL blocked: {verdict.reason}"}
 
-        proc = run_powershell(f"Start-Process {ps_quote(target_url)}", timeout=30)
-        if not ps_ok(proc):
-            return {"error": f"failed to open URL: {ps_error(proc)}"}
+        if is_windows():
+            from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+            proc = run_powershell(f"Start-Process {ps_quote(target_url)}", timeout=30)
+            if not ps_ok(proc):
+                return {"error": f"failed to open URL: {ps_error(proc)}"}
+        else:
+            # Linux/Android: use xdg-open or am
+            try:
+                if sys.platform == "linux" and "/data/data/com.termux" in __import__("os").environ.get("PREFIX", ""):
+                    subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", "-d", target_url],
+                                   timeout=10, capture_output=True)
+                else:
+                    subprocess.run(["xdg-open", target_url],
+                                   timeout=10, capture_output=True)
+            except Exception as e:
+                return {"error": f"failed to open URL: {e}"}
+
         return {"opened": target_url}

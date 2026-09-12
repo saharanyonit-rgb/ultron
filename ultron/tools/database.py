@@ -44,6 +44,7 @@ class QueryDatabase(Tool):
             "execution_time_ms": {"type": "number"},
         },
     }
+    mutates = True
 
     def run(
         self,
@@ -60,6 +61,7 @@ class QueryDatabase(Tool):
         if not db.exists():
             return {"error": f"Database not found: {db}"}
 
+        conn = None
         try:
             conn = sqlite3.connect(str(db))
             conn.row_factory = sqlite3.Row
@@ -95,13 +97,15 @@ class QueryDatabase(Tool):
                     "affected_rows": cursor.rowcount,
                 }
 
-            conn.close()
             return result
 
         except sqlite3.Error as e:
             return {"error": f"SQLite error: {e}"}
         except Exception as e:
             return {"error": str(e)}
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 class ListTables(Tool):
@@ -130,6 +134,7 @@ class ListTables(Tool):
         if not db.exists():
             return {"error": f"Database not found: {db}"}
 
+        conn = None
         try:
             conn = sqlite3.connect(str(db))
             cursor = conn.cursor()
@@ -145,13 +150,15 @@ class ListTables(Tool):
                     for col in cursor.fetchall()
                 ]
 
-            conn.close()
             return {"tables": tables, "schema": table_info}
 
         except sqlite3.Error as e:
             return {"error": f"SQLite error: {e}"}
         except Exception as e:
             return {"error": str(e)}
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 class CreateTable(Tool):
@@ -193,6 +200,13 @@ class CreateTable(Tool):
     ) -> Dict[str, Any]:
         db = Path(database_path).expanduser()
 
+        # table_name comes from the LLM — validate the identifier before
+        # interpolating it into the DDL to prevent SQL injection.
+        import re
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
+            return {"error": f"Invalid table name: {table_name!r}"}
+
+        conn = None
         try:
             conn = sqlite3.connect(str(db))
             cursor = conn.cursor()
@@ -200,7 +214,6 @@ class CreateTable(Tool):
             create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns})"
             cursor.execute(create_sql)
             conn.commit()
-            conn.close()
 
             return {"success": True, "table_name": table_name}
 
@@ -208,6 +221,9 @@ class CreateTable(Tool):
             return {"error": f"SQLite error: {e}"}
         except Exception as e:
             return {"error": str(e)}
+        finally:
+            if conn is not None:
+                conn.close()
 
 
 __all__ = [

@@ -124,8 +124,17 @@ class ToolExecutor:
             output = tool.run(**arguments)
             if not isinstance(output, dict):
                 output = {"result": output}
-            status = ToolExecutionStatus.FAILURE if "error" in output else ToolExecutionStatus.SUCCESS
-            error_str = str(output["error"]) if "error" in output else None
+            status = ToolExecutionStatus.SUCCESS
+            error_str = None
+            output_error = output.get("error")
+            if output_error is not None:
+                # An "error" key with a truthy value marks failure; Android
+                # tools commonly include `"error": None` on success.
+                if output_error:
+                    status = ToolExecutionStatus.FAILURE
+                    error_str = str(output_error)
+                else:
+                    output.pop("error", None)
         except Exception as exc:
             err_type = type(exc).__name__
             output = {"error": f"{err_type}: {exc}"}

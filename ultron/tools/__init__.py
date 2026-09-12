@@ -5,6 +5,7 @@ Includes:
   - Phase 4 tools (command execution, file ops)
   - Full PC control tools (mouse, keyboard, voice)
   - Unrestricted tools (command execution, filesystem)
+  - Android phone control tools (calls, SMS, contacts, touch, settings, etc.)
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from ultron.tools.browser_tools import (
     HoverElement,
     WaitForElement,
     GetPageLinks,
+    PlaySongTool,
     get_browser_tools,
 )
 from ultron.tools.clipboard import GetClipboard, SetClipboard
@@ -80,6 +82,69 @@ from ultron.tools.calendar_tool import CalendarTool, ListCalendarEventsTool
 from ultron.tools.notes_tool import CreateNoteTool, ListNotesTool, SearchNotesTool
 from ultron.tools.reminder_tool import CreateReminderTool, ListRemindersTool, CancelReminderTool
 
+# Long-term memory tools
+from ultron.tools.memory_tool import (
+    ForgetTool,
+    ListMemoriesTool,
+    RecallTool,
+    RememberTool,
+)
+
+# UI/UX design generator
+from ultron.tools.ui_tool import GenerateUI
+
+# UI/UX Pro Max design intelligence search (installed skill wrapper)
+from ultron.tools.uiux_pro_max_tool import SearchUIDesignTool
+
+# GitHub repository tools
+from ultron.tools.github_tool import (
+    GitHubCloneTool,
+    GitHubCreateRepoTool,
+    GitHubPullTool,
+    GitHubPushTool,
+    GitHubSearchTool,
+)
+
+# Android phone control tools (only loaded on Android/Termux)
+_ANDROID_TOOLS_AVAILABLE = False
+try:
+    from ultron.platform import is_android as _is_android
+    _ANDROID_TOOLS_AVAILABLE = _is_android()
+except Exception:
+    pass
+
+if _ANDROID_TOOLS_AVAILABLE:
+    from ultron.tools.phone_control import MakeCall, AnswerCall, HangUp, RejectCall, GetCallLog
+    from ultron.tools.sms_tools import SendSms, ReadSms, ListSms
+    from ultron.tools.contacts_tools import ListContacts, SearchContact, AddContact, DeleteContact
+    from ultron.tools.alarm_tools import SetAlarm, ListAlarms, CancelAlarm, SetTimer
+    from ultron.tools.notification_tools import (
+        SendNotification, ListNotifications, RemoveNotification,
+        RemoveAllNotifications, GetNotificationSettings,
+    )
+    from ultron.tools.battery_tools import (
+        GetBatteryInfo, ToggleWifi, ToggleBluetooth, ToggleAirplane,
+        ToggleData, ToggleDoNotDisturb, SetBrightness, SetVolume,
+        GetVolume, ScreenOn, ScreenOff, UnlockScreen,
+    )
+    from ultron.tools.device_info import (
+        GetDeviceInfo, GetNetworkInfo, GetLocation, ScanWifi,
+        GetRunningApps, GetInstalledApps, GetStorageInfo, GetMemoryInfo,
+    )
+    from ultron.tools.media_tools import (
+        PlayMedia, PauseMedia, StopMedia, SkipNext, SkipPrevious,
+        PlayPause, GetMediaInfo, VibrateDevice, ShowToast,
+    )
+    from ultron.tools.touch import (
+        TapScreen, SwipeScreen, LongPress, DoubleTap,
+        InputText, PressBack, PressHome, PressRecent,
+        PressKey as AndroidPressKey, DragAndDrop,
+    )
+    from ultron.tools.screen_reader import (
+        GetUiDump, ClickUiElement, ReadScreen,
+        GetScreenResolution, GetScreenDensity,
+    )
+
 # Re-export error hierarchy from central module
 from ultron.errors import (  # noqa: F401
     JarvisError,
@@ -111,6 +176,7 @@ ALL_TOOLS: List[Tool] = [
     HoverElement(),
     WaitForElement(),
     GetPageLinks(),
+    PlaySongTool(),
     # ── Mouse/Keyboard Control ─────────────────────────────────
     MouseMove(),
     MouseClick(),
@@ -151,6 +217,11 @@ ALL_TOOLS: List[Tool] = [
     CreateReminderTool(),
     ListRemindersTool(),
     CancelReminderTool(),
+    # ── Long-Term Memory ─────────────────────────────────────
+    RememberTool(),
+    RecallTool(),
+    ListMemoriesTool(),
+    ForgetTool(),
     # ── Database ────────────────────────────────────────────
     QueryDatabase(),
     ListTables(),
@@ -161,10 +232,100 @@ ALL_TOOLS: List[Tool] = [
     GitDiff(),
     GitBranch(),
     GitCommit(),
+    # ── GitHub Integration ─────────────────────────────────
+    GitHubSearchTool(),
+    GitHubCloneTool(),
+    GitHubCreateRepoTool(),
+    GitHubPushTool(),
+    GitHubPullTool(),
+    # ── UI/UX Design Generator ─────────────────────────────
+    GenerateUI(),
+    # ── UI/UX Design Intelligence Search ──────────────────
+    SearchUIDesignTool(),
     # ── Web API ─────────────────────────────────────────────
     HttpRequest(),
     FetchJson(),
 ]
+
+# ── Android Phone Control Tools (conditionally loaded) ───────────────
+if _ANDROID_TOOLS_AVAILABLE:
+    ALL_TOOLS.extend([
+        # Calls
+        MakeCall(),
+        AnswerCall(),
+        HangUp(),
+        RejectCall(),
+        GetCallLog(),
+        # SMS
+        SendSms(),
+        ReadSms(),
+        ListSms(),
+        # Contacts
+        ListContacts(),
+        SearchContact(),
+        AddContact(),
+        DeleteContact(),
+        # Alarms & Timers
+        SetAlarm(),
+        ListAlarms(),
+        CancelAlarm(),
+        SetTimer(),
+        # Notifications
+        SendNotification(),
+        ListNotifications(),
+        RemoveNotification(),
+        RemoveAllNotifications(),
+        GetNotificationSettings(),
+        # Battery & Settings
+        GetBatteryInfo(),
+        ToggleWifi(),
+        ToggleBluetooth(),
+        ToggleAirplane(),
+        ToggleData(),
+        ToggleDoNotDisturb(),
+        SetBrightness(),
+        SetVolume(),
+        GetVolume(),
+        ScreenOn(),
+        ScreenOff(),
+        UnlockScreen(),
+        # Device Info
+        GetDeviceInfo(),
+        GetNetworkInfo(),
+        GetLocation(),
+        ScanWifi(),
+        GetRunningApps(),
+        GetInstalledApps(),
+        GetStorageInfo(),
+        GetMemoryInfo(),
+        # Media Control
+        PlayMedia(),
+        PauseMedia(),
+        StopMedia(),
+        SkipNext(),
+        SkipPrevious(),
+        PlayPause(),
+        GetMediaInfo(),
+        VibrateDevice(),
+        ShowToast(),
+        # Touch Input
+        TapScreen(),
+        SwipeScreen(),
+        LongPress(),
+        DoubleTap(),
+        InputText(),
+        PressBack(),
+        PressHome(),
+        PressRecent(),
+        AndroidPressKey(),
+        DragAndDrop(),
+        # Screen Reader / Vision
+        GetUiDump(),
+        ClickUiElement(),
+        ReadScreen(),
+        GetScreenResolution(),
+        GetScreenDensity(),
+    ])
 
 
 class ToolRegistry:

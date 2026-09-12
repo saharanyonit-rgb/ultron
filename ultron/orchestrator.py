@@ -44,7 +44,7 @@ from ultron.llm_goal import LLMGoalEngine
 from ultron.llm_planner import LLMGoalPlanner
 from ultron.models import ExecutionResult, ExecutionStatus
 from ultron.planner_v5 import GoalPlanner, PlanningError
-from ultron.policy import PolicyEngine
+from ultron.policy import PolicyAction, PolicyEngine
 from ultron.recovery import RecoveryEngine, RecoveryAction
 from ultron.response import GoalResult, ResponseEngine, ResponseOutcome
 from ultron.risk import RiskClassifier
@@ -247,77 +247,44 @@ class Orchestrator:
         if not require_permission:
             return self._execute_shutdown()
 
-        # If permission is required, use the policy engine and permission manager
-        # Check policy engine first
+        # If permission is required, use the policy engine and permission manager.
+        # web.py wraps orchestrator._policy_engine in a WebPermissionEngine that
+        # delegates CONFIRM decisions to the web UI permission modal.
         if self._policy_engine:
             # When user configuration requires confirmation for system-control actions,
             # add a tool-specific override so that windows_shutdown maps to CONFIRM
             # instead of the default DENY (CRITICAL), enabling the confirmation flow.
-            if require_permission:
-                self._policy_engine.set_tool_override(
-                    "windows_shutdown", PolicyAction.CONFIRM
-                )
+            self._policy_engine.set_tool_override(
+                "windows_shutdown", PolicyAction.CONFIRM
+            )
             decision = self._policy_engine.evaluate(
                 "windows_shutdown", RiskLevel.CRITICAL, {}
             )
             if decision.action == PolicyAction.ALLOW:
                 # Policy allows without confirmation
                 return self._execute_shutdown()
-            elif decision.action == PolicyAction.DENY:
+            if decision.action == PolicyAction.DENY:
                 # Policy denies - this should not happen when permission is required
-                # because the override maps CRITICAL → CONFIRM, but handle gracefully
-                if require_permission:
-                    # Fall through to permission manager instead of blocking
-                    pass
-                else:
-                    from ultron.goal import Goal, GoalStatus
-                    from ultron.task import TaskGraph
+                # because the override maps CRITICAL → CONFIRM, but handle gracefully.
+                return self._denied_shutdown_result()
 
-                    goal_result = self._response_engine.generate(
-                        Goal(
-                            description="Windows shutdown",
-                            original_request="Shut down the PC.",
-                            status=GoalStatus.FAILED,
-                        ),
-                        TaskGraph(),
-                    )
-                    return OrchestratorResult(
-                        goal_result=goal_result,
-                        state=OrchestratorState.FAILED,
-                        events=self._events,
-                    )
-            # CONFIRM action - request permission through permission manager
-
-        # Request permission through the permission system
-        # This will trigger the CONFIRM flow (modal dialog for CRITICAL risk)
-        if self._permission_manager:
-            allowed = self._permission_manager.request_permission(
+            # CONFIRM action - request permission through the permission system.
+            # This triggers the CONFIRM flow (modal dialog for CRITICAL risk).
+            allowed = self._policy_engine.request_permission(
                 "windows_shutdown",
                 RiskLevel.CRITICAL,
                 {},
             )
-            if allowed:
-                return self._execute_shutdown()
-            else:
+            if not allowed:
                 # User denied
-                from ultron.goal import Goal, GoalStatus
-                from ultron.task import TaskGraph
+                return self._denied_shutdown_result()
+            return self._execute_shutdown()
 
-                goal_result = self._response_engine.generate(
-                    Goal(
-                        description="Windows shutdown",
-                        original_request="Shut down the PC.",
-                        status=GoalStatus.FAILED,
-                    ),
-                    TaskGraph(),
-                )
-                return OrchestratorResult(
-                    goal_result=goal_result,
-                    state=OrchestratorState.FAILED,
-                    events=self._events,
-                )
+        # No permission system configured - deny a CRITICAL shutdown by default.
+        return self._denied_shutdown_result()
 
-        # Fallback: no permission system - deny by default
+    def _denied_shutdown_result(self) -> OrchestratorResult:
+        """Build the 'shutdown denied' result reused by all deny paths."""
         from ultron.goal import Goal, GoalStatus
         from ultron.task import TaskGraph
 

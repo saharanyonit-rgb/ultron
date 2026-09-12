@@ -1,12 +1,13 @@
-"""V1 screenshot tool — captures the primary screen using System.Drawing."""
+"""V1 screenshot tool — cross-platform (Windows System.Drawing, Linux scrot/maim)."""
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
-from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+from ultron.platform import is_windows, is_posix
 from ultron.tools.base import Tool
 
 
@@ -50,6 +51,13 @@ class TakeScreenshot(Tool):
         except OSError as exc:
             return {"error": f"cannot create screenshot directory: {exc}"}
 
+        if is_windows():
+            return self._screenshot_windows(target)
+        return self._screenshot_posix(target)
+
+    def _screenshot_windows(self, target: Path) -> Dict[str, Any]:
+        from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+
         script = (
             "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
             "$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; "
@@ -76,3 +84,36 @@ class TakeScreenshot(Tool):
             "height": height,
             "bytes": target.stat().st_size,
         }
+
+    def _screenshot_posix(self, target: Path) -> Dict[str, Any]:
+        """Take screenshot on Linux/Android using available tools."""
+        # Try common screenshot tools in order
+        tools = [
+            # scrot (common on Linux)
+            (["scrot", str(target)], None),
+            # maim (alternative)
+            (["maim", str(target)], None),
+            # gnome-screenshot
+            (["gnome-screenshot", "-f", str(target)], None),
+            # Termux screenshot (requires termux-api)
+            (["termux-screenshot", str(target)], None),
+            # import (ImageMagick)
+            (["import", "-window", "root", str(target)], None),
+        ]
+
+        for cmd, _ in tools:
+            try:
+                proc = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=15,
+                )
+                if proc.returncode == 0 and target.is_file():
+                    return {
+                        "path": str(target),
+                        "width": 0,
+                        "height": 0,
+                        "bytes": target.stat().st_size,
+                    }
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+
+        return {"error": "No screenshot tool available. Install scrot, maim, or termux-api."}

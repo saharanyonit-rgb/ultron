@@ -32,10 +32,10 @@ const API = {
     }
   },
 
-  async post(path, body) {
+  async post(path, body, timeoutMs) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs || 10000);
       const r = await fetch(this._base + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -43,7 +43,9 @@ const API = {
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      return await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.warn(`API POST ${path} failed:`, e.message);
@@ -59,7 +61,9 @@ const API = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      return await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       console.warn(`API PUT ${path} failed:`, e);
       return null;
@@ -94,6 +98,7 @@ const API = {
       'agent_selected', 'step_started', 'step_completed', 'step_failed',
       'verifying', 'verified', 'completed', 'failed', 'error',
       'permission_required', 'permission_decided',
+      'voice_state',
     ];
 
     eventTypes.forEach(type => {
@@ -260,7 +265,11 @@ const API = {
   },
 
   async listen(timeout) {
-    return await this.post('/api/voice/listen', { timeout });
+    return await this.post('/api/voice/listen', { timeout }, 30000);
+  },
+
+  async getVoiceState() {
+    return await this.get('/api/voice');
   },
 
   // ── Calendar ───────────────────────────────────────────────
@@ -279,7 +288,9 @@ const API = {
   async deleteCalendarEvent(eventId) {
     try {
       const r = await fetch(this._base + '/api/calendar/events/' + eventId, { method: 'DELETE' });
-      return await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       console.warn('Delete calendar event failed:', e);
       return null;
@@ -307,7 +318,9 @@ const API = {
   async deleteNote(noteId) {
     try {
       const r = await fetch(this._base + '/api/notes/' + noteId, { method: 'DELETE' });
-      return await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       console.warn('Delete note failed:', e);
       return null;
@@ -327,7 +340,9 @@ const API = {
   async cancelReminder(reminderId) {
     try {
       const r = await fetch(this._base + '/api/reminders/' + reminderId, { method: 'DELETE' });
-      return await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const text = await r.text();
+      return text ? JSON.parse(text) : null;
     } catch (e) {
       console.warn('Cancel reminder failed:', e);
       return null;

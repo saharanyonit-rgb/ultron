@@ -61,6 +61,7 @@ class CreateReminderTool(Tool):
             "error": {"type": "string"},
         },
     }
+    mutates = True
 
     def run(
         self,
@@ -159,6 +160,7 @@ class CancelReminderTool(Tool):
             "error": {"type": "string"},
         },
     }
+    mutates = True
 
     def run(self, reminder_id: str, **_: Any) -> Dict[str, Any]:
         try:
