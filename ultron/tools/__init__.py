@@ -96,6 +96,10 @@ from ultron.tools.ui_tool import GenerateUI
 # UI/UX Pro Max design intelligence search (installed skill wrapper)
 from ultron.tools.uiux_pro_max_tool import SearchUIDesignTool
 
+# Vane Perplexity-style search engine + AgenticSeek autonomous agent backend
+from ultron.tools.vane_tool import VaneSearchTool
+from ultron.tools.agenticseek_tool import AgenticSeekTaskTool
+
 # GitHub repository tools
 from ultron.tools.github_tool import (
     GitHubCloneTool,
@@ -242,6 +246,10 @@ ALL_TOOLS: List[Tool] = [
     GenerateUI(),
     # ── UI/UX Design Intelligence Search ──────────────────
     SearchUIDesignTool(),
+    # ── Vane Cited-Source Search Engine ─────────────────────
+    VaneSearchTool(),
+    # ── AgenticSeek Autonomous Agent Backend ────────────────
+    AgenticSeekTaskTool(),
     # ── Web API ─────────────────────────────────────────────
     HttpRequest(),
     FetchJson(),

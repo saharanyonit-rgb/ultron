@@ -30,13 +30,14 @@ BANNER = r"""\033[32m
  / /__/ _ \ / __/ | / / /_/ / / /  / /   /    /
 /____/\___//____/|__/ \___\_/ /_/  /_/   /_/|_|
 \033[0m JARVIS - Personal AI System v0.1.0
- Commands: /help  /tools  /history  /clear  /permissions  /memory  /exit
+ Commands: /help  /tools  /engines  /history  /clear  /permissions  /memory  /exit
  Web UI: http://127.0.0.1:8080 (auto-opened)
  Android: run with --lan to access from your phone on the same WiFi
 """
 
 HELP = """Commands:
   /tools        list the V1 tools and their schemas
+  /engines      status + how to start Vane & AgenticSeek (external AI engines)
   /history      show this session's conversation
   /clear        forget the current conversation
   /permissions  show or toggle permission mode
@@ -47,6 +48,28 @@ Bare exit commands: exit | quit | shutdown
 
 Just type normally to talk to Ultron. Actions it takes are written to the
 audit log.
+"""
+
+ENGINES = """External engines available to JARVIS as tools:
+
+  vane_search  (tool: vane_search)      Perplexity-style cited-source answers
+    Run:  cd Vane && docker compose up -d
+    Then: open http://localhost:3000 and complete setup (add a chat model +
+          an embedding model: Ollama, OpenAI, Gemini, Groq, or Anthropic).
+    Port: 3000 (3600 = OLLAMA)
+
+  agenticseek_task  (tool: agenticseek_task)   Manus-style autonomous multi-agent
+    Run:  cd agenticSeek && copy .env.example .env  then set WORK_DIR in .env
+          docker compose up        (or: ./start_services.sh)
+    Needs: Ollama on :11434 OR one of OPENAI_API_KEY / OPENROUTER_API_KEY /
+          DEEPSEEK_API_KEY / GOOGLE_API_KEY (set in .env). First run downloads
+          the router model — be patient.
+    Port: 7777
+
+Tips:
+  - Override URLs with VANE_BASE_URL / AGENTICSEEK_BASE_URL env vars.
+  - Secure AgenticSeek with AGENTICSEEK_API_TOKEN (bearer) — it can run code.
+  - Both are optional: JARVIS works fully without them.
 """
 
 logger = get_logger("ultron.cli")
@@ -91,6 +114,9 @@ class Cli:
         if line == "/tools":
             self._print_tools()
             return
+        if line == "/engines":
+            self._print_engines()
+            return
         if line == "/history":
             self._print_history()
             return
@@ -127,6 +153,31 @@ class Cli:
             print(f"\n{spec.name} — {spec.description}")
             print(f"  in:  {spec.parameters.get('properties', {})}")
             print(f"  out: {spec.output_schema.get('properties', {})}")
+
+    def _print_engines(self) -> None:
+        print("Checking external AI engines...")
+        try:
+            import os
+            import httpx
+
+            checks = [
+                ("Vane (vane_search)", os.environ.get("VANE_BASE_URL", "http://127.0.0.1:3000").rstrip("/"), "/api/providers"),
+                ("AgenticSeek (agenticseek_task)", os.environ.get("AGENTICSEEK_BASE_URL", "http://127.0.0.1:7777").rstrip("/"), "/health"),
+            ]
+            for label, base, path in checks:
+                try:
+                    with httpx.Client(timeout=3.0) as client:
+                        resp = client.get(f"{base}{path}")
+                        if resp.status_code < 400:
+                            print(f"  [ONLINE]  {label}  {base}")
+                        else:
+                            print(f"  [ERROR]   {label}  {base} (HTTP {resp.status_code})")
+                except Exception:
+                    print(f"  [OFFLINE] {label}  {base}")
+        except Exception as exc:
+            print(f"  Could not check engine status: {exc}")
+        print()
+        print(ENGINES)
 
     def _print_history(self) -> None:
         if not self._memory.all():
@@ -416,14 +467,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         def _open_browser():
             _time.sleep(0.5)
             try:
-                import sys
-                if sys.platform == "win32":
-                    chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-                    # Use --kiosk mode for full-screen without address bars/tabs
-                    browser = webbrowser.get(f'"{chrome_path}" --kiosk %s')
-                    browser.open_new(url)
-                else:
-                    webbrowser.open(url)
+                webbrowser.open(url)
             except Exception:
                 webbrowser.open(url)
         import threading

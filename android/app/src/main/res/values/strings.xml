@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ULTRON AI</string>
+    <string name="app_name">JARVIS</string>
+
+    <!-- Connection service -->
+    <string name="notif_channel_name">JARVIS connection</string>
+    <string name="notif_channel_desc">Keeps the JARVIS backend connection alive in the background</string>
+    <string name="notif_title">JARVIS running</string>
+    <string name="notif_connecting">Connecting to backend…</string>
 </resources>
