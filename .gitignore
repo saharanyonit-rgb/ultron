@@ -1,28 +1,54 @@
-# secrets
+﻿# Secrets
 .env
+*.env
+.env.*
+!.env.example
 SECURITY_AUDIT_REPORT.md
-
-# python
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+*.egg
+.eggs/
 .venv/
+venv/
+env/
 build/
 dist/
-
-# tooling
+*.pyd
+*.so
+# Tooling caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# runtime data
+.hypothesis/
+htmlcov/
+.coverage
+coverage.xml
+# Runtime data
 data/
 *.log
-
-# desktop build
+logs/
+# Build outputs - distribute via GitHub Releases, never commit
 release/
 *.spec.bak
 *.ico.tmp
-
-# android
-android/local.properties
+*.exe
+*.apk
+*.zip
+*.msi
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+# Windows
+ehthumbs.db
+$RECYCLE.BIN/
+# Node (if frontend tooling added)
+node_modules/

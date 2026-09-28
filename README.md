@@ -1,445 +1,131 @@
-# ULTRON
-
-### JARVIS-Style Personal AI Desktop Assistant for Windows
-
-Ultron is a modular, terminal-callable AI desktop assistant designed for Windows. It combines LLM reasoning, structured task planning, tool execution, verification, memory, permissions, and multi-provider AI routing into one assistant architecture.
-
-> **Current Version:** Phase 5 Build (Phase 7 Brains)
-> **Platform:** Windows
-> **Python:** 3.12+
-
+﻿<div align="center">
+# ⚡ ULTRON - JARVIS-Style Personal AI Desktop Assistant
+[![CI](https://github.com/saharanyonit-rgb/ultron/actions/workflows/ci.yml/badge.svg)](https://github.com/saharanyonit-rgb/ultron/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/saharanyonit-rgb/ultron/actions/workflows/codeql.yml/badge.svg)](https://github.com/saharanyonit-rgb/ultron/actions/workflows/codeql.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-1000%20passing-brightgreen.svg)](tests/)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+**11 LLM providers · 60+ tools · 6 specialized brains · 3-tier memory · Desktop + Android**
+[Download Latest Release](https://github.com/saharanyonit-rgb/ultron/releases/latest) · [Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+</div>
 ---
-
-## Table of Contents
-
-* [What is Ultron?](#what-is-ultron)
-* [Features](#features)
-* [Architecture](#architecture)
-* [Requirements](#requirements)
-* [Installation](#installation)
-* [Configuration](#configuration)
-* [Running](#running)
-* [Tests](#tests)
-* [Project Structure](#project-structure)
-* [Desktop Application](#desktop-application)
-* [Troubleshooting](#troubleshooting)
-* [Security](#security)
-* [Development](#development)
-* [License](#license)
-
----
-
 ## What is Ultron?
-
-Ultron is a **JARVIS-style personal AI desktop assistant for Windows**.
-
-It is designed as a terminal-callable, text-in/text-out AI system capable of:
-
-* Understanding user requests
-* Routing requests to appropriate capabilities
-* Planning multi-step tasks
-* Selecting and executing tools
-* Asking for permission before protected actions
-* Verifying execution results
-* Maintaining persistent memory
-* Using semantic memory
-* Working with multiple AI providers
-* Using specialized agents
-* Recovering from certain execution failures
-* Interacting with Windows and desktop functionality
-
-The project is built as a modular Python application so that individual components can be developed, tested, and extended independently.
-
----
-
-## Features
-
-### AI and Reasoning
-
-* LLM provider abstraction
-* Multi-provider routing with automatic fallback
-* Intelligent request routing
-* Goal understanding
-* Multi-step planning
-* Task orchestration
-* Response generation
-* Semantic verification
-
-### Agent System
-
-Ultron contains specialized agents for different types of work, including:
-
-* Coding
-* Research
-* Vision
-* General task execution
-* LLM-based agent operations
-
-### Memory
-
-Ultron provides:
-
-* Persistent memory
-* Semantic memory
-* Memory management
-* Context management
-* Conversation history
-
-### Tool System
-
-The tool architecture supports different categories of desktop and system operations, including:
-
-* Applications
-* Browser operations
-* Clipboard
-* Calendar
-* Commands
-* Database operations
-* File operations
-* Filesystem operations
-* Screenshots
-* System information
-* URLs
-* Voice
-* Web APIs
-
-### Security and Control
-
-Ultron includes mechanisms for:
-
-* Permission management
-* Risk evaluation
-* Execution control
-* Sandboxing
-* Audit logging
-* Network security enforcement
-* Semantic verification
-
----
-
-## Architecture
-
-### High-Level Flow
-
+Ultron is a modular, **JARVIS-style AI desktop assistant** for Windows. Talk to it in plain text (or by voice), and it plans, routes, and executes - using the right tool, the right model, and the right brain for each task.
 ```
-User Input
-    |
-    v
-Router
-    |
-    v
-Brain / Intelligence Layer
-    |
-    v
-Goal Understanding
-    |
-    v
-Planner
-    |
-    v
-Agent / Tool Selection
-    |
-    v
-Permission & Risk Control
-    |
-    v
-Tool Execution
-    |
-    v
-Verification
-    |
-    v
-Memory / Context Update
-    |
-    v
-Response
+You → "Research quantum error correction, write a report, and email it to me"
+       ↓
+  Research Brain → Planning Brain → Coding Brain → Verification Brain
+       ↓                ↓                ↓
+   Web search     Task graph       Format report    → Email sent ✓
 ```
-
-### Orchestration Layers
-
-1. **Simple Path:** Brain -> Agent -> LLM + tools (conversational/quick requests)
-2. **Phase 5 Path:** Orchestrator -> Goal -> TaskGraph -> parallel execution (autonomous goals)
-3. **Phase 7 Path:** BrainOrchestrator -> specialized brains with dedicated models (complex tasks)
-
-### Supported AI Providers
-
-| Provider | Models |
-|----------|--------|
-| Google Gemini | gemini-3.5-flash, gemini-2.5-flash |
-| NVIDIA | nemotron-3-ultra, nemotron |
-| OpenRouter | 200+ models including free tier |
-| xAI (Grok) | grok-3, grok-3-mini |
-| OpenAI | gpt-4o, gpt-4o-mini |
-| Azure OpenAI | Configurable deployments |
-| Anthropic | claude-sonnet-4, claude-3.5-sonnet |
-| Cohere | command-a, command-r-plus |
-| Mistral | mistral-large-latest |
-| Perplexity | sonar, sonar-pro |
-| AWS Bedrock | Configurable models |
-
+**It runs entirely on your machine.** The server binds to `127.0.0.1` by default. No telemetry. No cloud sync. Your data stays local.
 ---
-
-## Requirements
-
-### Operating System
-
-* Windows
-
-### Python
-
-Ultron requires:
-
-```
-Python >= 3.12
-```
-
-### Git
-
-Git is required to clone and update the repository.
-
-### Internet Connection
-
-A network connection is required when using cloud-based AI providers.
-
+## Features at a Glance
+| Layer | What's there |
+|---|---|
+| **LLM Providers** | Google Gemini, OpenAI, Anthropic, NVIDIA, OpenRouter, Grok, Azure, Cohere, Mistral, Perplexity, AWS Bedrock |
+| **Specialized Brains** | Planning, Research, Coding, Computer-Vision, Verification, Fast |
+| **Tools** | 60+ - files, browser, clipboard, calendar, screenshots, voice, web APIs, system, database, and more |
+| **Memory** | 3-tier: in-session → persistent (JSONL) → semantic (vector) |
+| **Orchestration** | Simple, Phase-5 autonomous (TaskGraph), and Phase-7 multi-brain |
+| **Interfaces** | CLI, Web UI (SSE streaming), Windows Desktop (pystray), Android companion |
+| **Security** | Permission gates, risk classification, audit log, secret redaction, sandboxing |
+| **Tests** | 1001 tests · 1000 passing · 27 real_e2e excluded by default |
 ---
-
-## Installation
-
-### 1. Clone the Repository
-
+## Quick Start
+### Option A - Download the Windows Executable
+1. Grab **JARVIS.exe** from [Releases](https://github.com/saharanyonit-rgb/ultron/releases/latest)
+2. Copy `.env.example` → `.env` and add at least one API key
+3. Run `JARVIS.exe`
+### Option B - Run from Source
 ```powershell
 git clone https://github.com/saharanyonit-rgb/ultron.git
 cd ultron
-```
-
-### 2. Create the Python Environment
-
-```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-### 3. Install Dependencies
-
-```powershell
 pip install -e ".[dev]"
-```
-
-### 4. Configure API Keys
-
-```powershell
 Copy-Item .env.example .env
+# Edit .env - set ULTRON_PROVIDER and the matching API key
 ```
-
-Then edit `.env` with your preferred API keys.
-
----
-
-## Configuration
-
-### Provider Selection
-
-Set the provider in `.env`:
-
-```env
-ULTRON_PROVIDER=gemini
-GEMINI_API_KEY=your_api_key_here
-```
-
-### Environment Variables
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `ULTRON_PROVIDER` | `gemini` | Active AI provider |
-| `GEMINI_API_KEY` | — | Gemini API key |
-| `ULTRON_MODEL` | `gemini-3.5-flash` | Model name |
-| `ULTRON_TEMPERATURE` | `0.3` | Generation temperature |
-| `ULTRON_MEMORY_FILE` | `~/.ultron/memory.jsonl` | Memory storage |
-| `ULTRON_REQUIRE_PERMISSION` | `false` | Require confirmation for tools |
-| `ULTRON_DEBUG` | `false` | Debug logging |
-
-See `.env.example` for the complete list of 80+ configuration options.
-
----
-
-## Running
-
-### Terminal Mode
-
+**Terminal mode:**
 ```powershell
-.\.venv\Scripts\python -m ultron
-```
-
-### Web Mode
-
-```powershell
-.\.venv\Scripts\python -m ultron --web
-```
-
-Then open http://127.0.0.1:8080 in your browser.
-
-### Desktop Mode
-
-```powershell
-.\.venv\Scripts\python -m desktop
-```
-
-This starts the JARVIS desktop application with system tray integration.
-
----
-
-## Tests
-
-```powershell
-.\.venv\Scripts\python -m pytest tests/ -v
-```
-
-The test suite covers:
-
-* Agents, Brains, Configuration
-* Memory, Planning, Routing
-* Permissions, Tools, Pipeline
-* Verification, Web APIs
-* Phase-specific functionality
-* Integration behavior
-
-Tests use mocked providers where appropriate. Real E2E tests are marked separately.
-
-**Test count: 1001 (1000 passed)**
-
----
-
-## Project Structure
-
-```
-ultron/
-├── agents/         # Specialized agent architecture
-├── brains/         # Multi-model brain orchestration (Phase 7)
-├── core/           # Agent, Brain, Router
-├── llm/            # 11 LLM provider implementations
-├── memory/         # In-memory, persistent, semantic memory
-├── services/       # Calendar, Notes, Reminders, Memory services
-├── tools/          # 60+ tool implementations
-├── windows/        # Windows-specific utilities
-├── actions/        # Permission gates, audit logging
-├── cli.py          # Terminal REPL
-├── config.py       # Configuration loading
-├── orchestrator.py # Phase 5 autonomous orchestrator
-├── web.py          # HTTP API server
-└── ...
-
-frontend/           # Vanilla HTML/CSS/JS web interface
-desktop/            # Desktop application shell
-tests/              # Automated test suite
-docs/               # Documentation
-```
-
----
-
-## Desktop Application
-
-JARVIS is also available as a Windows desktop application.
-
-### Building
-
-```powershell
-.\build.ps1
-```
-
-### Features
-
-* System tray integration
-* Auto-start backend
-* Close to tray
-* Native Windows notifications
-* Single instance detection
-* Clean shutdown
-
-### Output
-
-```
-release/
-├── JARVIS.exe          # Standalone executable
-├── README.md
-└── RELEASE_NOTES.md
-```
-
----
-
-## Troubleshooting
-
-### ModuleNotFoundError
-
-Make sure the virtual environment is activated:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-```
-
-### API Key Errors
-
-Check that `.env` exists and contains valid API keys:
-
-```powershell
-Test-Path .env
-```
-
-### Permission Prompts
-
-Ultron may request confirmation before executing protected tools:
-
-```
-[permission] Allow 'create_file'? [y/N]:
-```
-
----
-
-## Security
-
-Ultron is a desktop assistant with access to tools that can interact with the operating system.
-
-Security components include:
-
-* Permission management
-* Risk evaluation
-* Execution control
-* Audit logging
-* Sandboxing
-* Network security
-* Verification
-
-### Before Running
-
-Review:
-
-* Enabled tools
-* Provider configuration
-* Permission settings
-* Environment variables
-
-Never run unknown code or configuration without reviewing it first.
-
----
-
-## Development
-
-```powershell
-git clone https://github.com/saharanyonit-rgb/ultron.git
-cd ultron
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-pytest
 python -m ultron
 ```
-
+**Web UI (http://127.0.0.1:8080):**
+```powershell
+python -m ultron --web
+```
+**Desktop shell (system tray):**
+```powershell
+python -m desktop
+```
 ---
-
-## Project Status
-
-**Ultron — Phase 5 Build (Phase 7 Brains)**
-
-The project is under active development.
-
-The architecture is designed to evolve through additional phases, features, agents, tools, providers, memory capabilities, and reliability improvements.
+## Configuration
+Copy `.env.example` to `.env` and set your provider:
+```env
+ULTRON_PROVIDER=openrouter
+ULTRON_OPENROUTER_API_KEY=your_key_here
+ASSISTANT_NAME=JARVIS
+WAKE_WORD=hi jarvis
+LOG_LEVEL=INFO
+```
+### Supported Providers
+| Provider | Env var | Free tier |
+|---|---|---|
+| **OpenRouter** | `ULTRON_OPENROUTER_API_KEY` | ✅ Free models available |
+| **Google Gemini** | `GEMINI_API_KEY` | ✅ Free tier |
+| **NVIDIA** | `ULTRON_NVIDIA_API_KEY` | ✅ Free tier |
+| **OpenAI** | `OPENAI_API_KEY` | - |
+| **Anthropic** | `ANTHROPIC_API_KEY` | - |
+| **xAI (Grok)** | `ULTRON_GROK_API_KEY` | - |
+| **Azure OpenAI** | `AZURE_OPENAI_API_KEY` | - |
+| **Cohere** | `COHERE_API_KEY` | - |
+| **Mistral** | `MISTRAL_API_KEY` | - |
+| **Perplexity** | `PERPLEXITY_API_KEY` | - |
+| **AWS Bedrock** | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | - |
+---
+## Project Structure
+```
+ultron/               # Core Python package
+  core/               # Brain, Agent, Router
+  llm/                # One file per LLM provider (11 providers)
+  brains/             # Specialized brain orchestration (Phase 7)
+  tools/              # 60+ tool implementations
+  memory/             # In-session, persistent, semantic
+  actions/            # Permission gates, audit logging
+  orchestrator.py     # Phase-5 autonomous TaskGraph orchestrator
+  web.py              # HTTP + SSE API server
+  cli.py              # Terminal REPL entry point
+  config.py           # Typed config + .env parser
+frontend/             # Vanilla HTML/CSS/JS web UI (zero deps)
+desktop/              # Windows desktop shell (pystray)
+android/              # Android companion app source
+tests/                # 1001-test pytest suite
+scripts/              # Dev utilities and launcher helpers
+docs/                 # Architecture docs and audit reports
+```
+---
+## Running Tests
+```powershell
+python -m pytest tests/ -v
+python -m pytest tests/ --cov=ultron --cov-report=term-missing
+python -m pytest tests/ -v -m real_e2e
+```
+---
+## Architecture
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full breakdown.
+| Path | When | How |
+|---|---|---|
+| Simple | Quick questions | Brain → Agent → LLM + tools |
+| Phase 5 | Autonomous goals | Orchestrator → TaskGraph → parallel |
+| Phase 7 | Complex, multi-domain | BrainOrchestrator → 6 specialized brains |
+---
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+---
+## Security
+See [SECURITY.md](SECURITY.md). The server is `127.0.0.1`-only by default.
+---
+## License
+[MIT](LICENSE) - © saharanyonit-rgb

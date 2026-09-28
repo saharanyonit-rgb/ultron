@@ -1,0 +1,49 @@
+﻿name: Bug Report
+description: Something is not working as expected
+labels: ["bug", "triage"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows 11, Windows 10, Android, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI Provider
+      options: [Gemini, OpenRouter, OpenAI, Anthropic, NVIDIA, Grok, Azure, Cohere, Mistral, Perplexity, AWS Bedrock, N/A]
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: text
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues - this is not a duplicate
+          required: true
+        - label: I have NOT included any API keys in this report
+          required: true

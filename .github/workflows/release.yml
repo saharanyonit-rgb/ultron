@@ -1,0 +1,30 @@
+﻿name: Release
+on:
+  push:
+    tags:
+      - "v*.*.*"
+permissions:
+  contents: write
+jobs:
+  release:
+    name: Build & Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev,desktop]"
+      - run: python -m pytest tests/ -v -m "not real_e2e"
+      - run: .\build.ps1
+        shell: pwsh
+      - run: .\package.ps1
+        shell: pwsh
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: JARVIS ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            release/JARVIS.exe
+            release/JARVIS-Portable.zip
