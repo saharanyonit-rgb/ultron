@@ -1,0 +1,350 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — UI Components
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --panel-padding: var(--space-3);
+  --panel-gap: var(--space-3);
+}
+
+/* ── Panel Base ──────────────────────────────────────────────── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--panel-padding);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.panel:hover {
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-secondary);
+}
+
+.panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.panel-title .label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--letter-wider);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.panel-title .value {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+.panel-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Status Pill ─────────────────────────────────────────────── */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--letter-wide);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.status-pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.status-pill.online {
+  color: var(--success);
+  border-color: var(--success-dim);
+  background: rgba(0, 255, 136, 0.1);
+}
+.status-pill.online::before {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.status-pill.offline {
+  color: var(--danger);
+  border-color: var(--danger-dim);
+  background: rgba(255, 51, 102, 0.1);
+}
+.status-pill.offline::before {
+  background: var(--danger);
+  box-shadow: 0 0 6px var(--danger);
+}
+
+.status-pill.connecting {
+  color: var(--warning);
+  border-color: var(--warning-dim);
+  background: rgba(255, 170, 0, 0.1);
+}
+.status-pill.connecting::before {
+  background: var(--warning);
+  box-shadow: 0 0 6px var(--warning);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-pill.warning {
+  color: var(--warning);
+  border-color: var(--warning-dim);
+  background: rgba(255, 170, 0, 0.1);
+}
+
+.status-pill.critical {
+  color: var(--critical);
+  border-color: var(--critical);
+  background: rgba(255, 26, 68, 0.1);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── Metric Card ─────────────────────────────────────────────── */
+.metric-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.metric-card.compact {
+  padding: var(--space-2) var(--space-3);
+}
+
+.metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.metric-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--letter-wider);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metric-value small {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.metric-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--border-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: var(--space-2);
+}
+
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width var(--transition-base), background var(--transition-base);
+}
+
+.metric-bar-fill.cpu { background: linear-gradient(90deg, #00ff88, #00d4aa); }
+.metric-bar-fill.ram { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+.metric-bar-fill.temp { background: linear-gradient(90deg, #00d4ff, #0099cc); }
+.metric-bar-fill.disk { background: linear-gradient(90deg, #0099ff, #0066cc); }
+
+/* ── Icon Button ─────────────────────────────────────────────── */
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.icon-btn:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-panel-hover);
+  color: var(--text-primary);
+}
+
+.icon-btn.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(0, 212, 255, 0.1);
+  box-shadow: 0 0 12px var(--glow-cyan);
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-btn.small {
+  width: 32px;
+  height: 32px;
+}
+.icon-btn.small svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Input Field ─────────────────────────────────────────────── */
+.input-field {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+
+.input-field:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px var(--glow-cyan);
+}
+
+/* ── Divider ─────────────────────────────────────────────────── */
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-primary);
+}
+
+.divider-horizontal {
+  width: 100%;
+  height: 1px;
+  background: var(--border-secondary);
+  margin: var(--space-3) 0;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────────── */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 120%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--letter-normal);
+  color: var(--text-inverse);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--transition-fast), visibility var(--transition-fast);
+  z-index: var(--z-tooltip);
+  pointer-events: none;
+}
+
+.tooltip:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+.scrollable {
+  overflow-y: auto;
+}
+.scrollable::-webkit-scrollbar { width: 4px; }
+.scrollable::-webkit-scrollbar-track { background: transparent; }
+.scrollable::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 2px;
+}
+.scrollable::-webkit-scrollbar-thumb:hover {
+  background: var(--border-accent);
+}
+
+/* ── Animation Utilities ─────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes scan {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-spin { animation: spin 20s linear infinite; }
+.animate-pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+.animate-scan { animation: scan 4s linear infinite; }
+
+/* ── Focus Visible ───────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}

@@ -1,0 +1,133 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Design Tokens
+   Dark futuristic command center color system
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Base Background ───────────────────────────────────────── */
+  --bg-primary: #020506;
+  --bg-secondary: #050a0c;
+  --bg-tertiary: #081013;
+  --bg-panel: #0a1215;
+  --bg-panel-hover: #0d181c;
+  --bg-panel-raised: #0f1a1e;
+
+  /* ── Borders ───────────────────────────────────────────────── */
+  --border-primary: #122025;
+  --border-secondary: #0e1a1e;
+  --border-accent: #1a353d;
+  --border-glow: #00d4ff33;
+
+  /* ── Text ──────────────────────────────────────────────────── */
+  --text-primary: #e8f4f8;
+  --text-secondary: #8aa8b0;
+  --text-tertiary: #5a7a82;
+  --text-muted: #3a5a62;
+  --text-inverse: #020506;
+
+  /* ── Accent Colors ─────────────────────────────────────────── */
+  --cyan: #00d4ff;
+  --cyan-dim: #00a8cc;
+  --cyan-bright: #4defff;
+  --blue: #0099ff;
+  --blue-dim: #0077cc;
+  --teal: #00ccaa;
+  --teal-dim: #009988;
+
+  /* ── Status Colors ─────────────────────────────────────────── */
+  --success: #00ff88;
+  --success-dim: #00cc6a;
+  --warning: #ffaa00;
+  --warning-dim: #cc8800;
+  --danger: #ff3366;
+  --danger-dim: #cc2952;
+  --critical: #ff1a44;
+
+  /* ── Glow Effects ──────────────────────────────────────────── */
+  --glow-cyan: rgba(0, 212, 255, 0.4);
+  --glow-cyan-strong: rgba(0, 212, 255, 0.6);
+  --glow-blue: rgba(0, 153, 255, 0.3);
+  --glow-teal: rgba(0, 204, 170, 0.3);
+  --glow-success: rgba(0, 255, 136, 0.4);
+  --glow-warning: rgba(255, 170, 0, 0.4);
+  --glow-danger: rgba(255, 51, 102, 0.4);
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 24px var(--glow-cyan);
+
+  /* ── Typography ────────────────────────────────────────────── */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-ui: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Orbitron', 'Rajdhani', sans-serif;
+
+  --text-xs: 9px;
+  --text-sm: 11px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+
+  --letter-tight: 0.02em;
+  --letter-normal: 0.05em;
+  --letter-wide: 0.1em;
+  --letter-wider: 0.15em;
+
+  /* ── Spacing ───────────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Border Radius ─────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Transitions ───────────────────────────────────────────── */
+  --transition-fast: 100ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* ── Z-Index ───────────────────────────────────────────────── */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-modal: 1000;
+  --z-toast: 2000;
+  --z-tooltip: 3000;
+
+  /* ── Grid ──────────────────────────────────────────────────── */
+  --grid-size: 40px;
+  --grid-color: rgba(0, 212, 255, 0.025);
+  --grid-color-accent: rgba(0, 212, 255, 0.05);
+}
+
+/* ── Reduced Motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0.01ms;
+    --transition-base: 0.01ms;
+    --transition-slow: 0.01ms;
+  }
+}
+
+/* ── High Contrast ──────────────────────────────────────────── */
+@media (prefers-contrast: high) {
+  :root {
+    --border-primary: #2a4a52;
+    --border-secondary: #1e3a42;
+    --text-secondary: #aacccc;
+    --text-tertiary: #88aaaa;
+  }
+}

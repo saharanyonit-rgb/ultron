@@ -199,6 +199,10 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             self._handle_permission_request()
         elif path == "/api/android":
             self._handle_android_status()
+        elif path == "/api/weather":
+            self._handle_weather()
+        elif path == "/api/news":
+            self._handle_news()
         else:
             # ── Static File Serving ─────────────────────────────
             self._serve_static(path)
@@ -450,6 +454,58 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         self.server._wire_voice_broadcast()
         from ultron.web_api import get_voice_state
         self._send_json(get_voice_state())
+
+    # ── Additive module routes (ultron/web_modules.py) ─────────
+    # These are new read-only endpoints for the rebuilt console. No existing
+    # endpoint is changed by them.
+
+    def _handle_weather(self) -> None:
+        query = dict(
+            item.split("=", 1)
+            for item in urlparse(self.path).query.split("&")
+            if "=" in item
+        )
+        place = unquote(query["q"]) if "q" in query else None
+
+        # "Use my location" sends raw coordinates, which must bypass geocoding.
+        lat = lon = None
+        try:
+            if "lat" in query and "lon" in query:
+                lat, lon = float(query["lat"]), float(query["lon"])
+                if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                    raise ValueError("coordinates out of range")
+                # Reverse geocode for a human-readable label, but never fail
+                # the request just because the label could not be resolved.
+                place = None
+        except ValueError as exc:
+            self._send_error(400, f"Invalid coordinates: {exc}")
+            return
+
+        try:
+            from ultron.web_modules import get_weather
+            self._send_json(get_weather(place=place, lat=lat, lon=lon))
+        except LookupError as exc:
+            self._send_error(404, str(exc))
+        except Exception as exc:  # upstream unreachable, malformed feed, ...
+            logger.warning("weather lookup failed: %s", exc)
+            self._send_error(502, f"Weather upstream unavailable: {exc}")
+
+    def _handle_news(self) -> None:
+        query = dict(
+            item.split("=", 1)
+            for item in urlparse(self.path).query.split("&")
+            if "=" in item
+        )
+        try:
+            limit = max(1, min(30, int(query.get("limit", 12))))
+        except (TypeError, ValueError):
+            limit = 12
+        try:
+            from ultron.web_modules import get_news
+            self._send_json(get_news(limit))
+        except Exception as exc:
+            logger.warning("news fetch failed: %s", exc)
+            self._send_error(502, f"News upstream unavailable: {exc}")
 
     # ── Android Status ─────────────────────────────────────────
 

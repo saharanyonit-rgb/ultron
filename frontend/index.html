@@ -3,333 +3,447 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ULTRON — Desktop AI Assistant</title>
-<link rel="stylesheet" href="/css/main.css">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="JARVIS — autonomous system command console">
+<title>J.A.R.V.I.S. — Command Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%230a1418' stroke-width='4'/%3E%3Cpath d='M16 3a13 13 0 0 1 0 26' fill='none' stroke='%2300d4ff' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%2300d4ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/hud.css">
+<link rel="stylesheet" href="/css/modules.css">
 </head>
-<body>
+<body data-link="connecting" data-core-state="idle">
 
-  <div class="titlebar">
-    <div class="left">
-      <span><span class="dot"></span> DESKTOP VOICE ASSISTANT</span>
-      <span class="tb-active">⚡ ACTIVE</span>
+<!-- Reusable SVG icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6 7h2M6 11h4M6 15h2"/>
+    </symbol>
+    <symbol id="i-weather" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.1 10.2 3.5 3.5 0 0 0 6.5 17"/><path d="M17.5 19H7a4 4 0 0 1 0-8"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>
+    </symbol>
+    <symbol id="i-uptime" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
+    </symbol>
+    <symbol id="i-news" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9h4"/><path d="M10 7h6M10 11h6M10 15h4"/>
+    </symbol>
+    <symbol id="i-notes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>
+    </symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/><path d="M2 6h2M20 6h2M2 18h2M20 18h2"/>
+    </symbol>
+    <symbol id="i-telegram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21.9 4.3 2.9 11.6a.5.5 0 0 0 0 .95l4.7 1.6 1.8 5.5a.5.5 0 0 0 .85.13l2.5-3.2 4.7 3.4a.5.5 0 0 0 .77-.4l3.1-14.2a.5.5 0 0 0-.7-.5Z"/><path d="m7.6 14.1 11-7.7"/>
+    </symbol>
+    <symbol id="i-armor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5Z"/><path d="m9 12 2 2 4-4"/>
+    </symbol>
+    <symbol id="i-log" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4h16v16H4z"/><path d="M7 8h10M7 12h10M7 16h6"/>
+    </symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/>
+    </symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/>
+    </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.6 1.6 0 0 0 15 19.4a1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.77.32l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.32-1.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.6 1.6 0 0 0 9 4.6h.08A1.6 1.6 0 0 0 10 3.13V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.6 1.6 0 0 0 19.4 9v.08a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 9-18 9 4.5-9Z"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+    <symbol id="i-unavail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8M16 8l-8 8"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip-link" href="#core-region">Skip to JARVIS core</a>
+
+<div class="app-shell">
+
+  <!-- ══════════ TOP BAR ══════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="identity">
+        <div class="identity-mark" aria-hidden="true"><span class="identity-core"></span></div>
+        <div class="identity-text">
+          <span class="identity-name">J.A.R.V.I.S.</span>
+          <span class="identity-sub">Autonomous System Console</span>
+        </div>
+      </div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="identity-status">
+        <span class="link-dot" aria-hidden="true"></span>
+        <span id="link-label">CONNECTING</span>
+      </div>
     </div>
-    <div class="winctl">
-      <span>—</span><span>▢</span><span>×</span>
+
+    <div class="topbar-center">
+      <div class="clock">
+        <span class="clock-time" id="clock-time">--:--:--</span>
+        <span class="clock-date" id="clock-date">SYNCING</span>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <button type="button" class="weather is-unavailable" id="weather-widget" data-module="weather"
+              aria-label="Weather widget — unavailable. Open weather module.">
+        <svg class="weather-icon" aria-hidden="true"><use href="#i-weather"></use></svg>
+        <span class="weather-text">
+          <span class="weather-temp" id="weather-temp">--</span>
+          <span class="weather-location" id="weather-location">UNAVAILABLE</span>
+        </span>
+      </button>
+      <button type="button" class="icon-btn small tooltip" id="btn-settings" data-module="system"
+              data-tooltip="SYSTEM TELEMETRY" aria-label="Open system telemetry">
+        <svg aria-hidden="true"><use href="#i-settings"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════ SYSTEM STATUS STRIP ══════════ -->
+  <div class="status-strip" id="status-strip" role="status" aria-live="polite">
+    <div class="status-strip-content">
+      <span class="status-strip-indicator" aria-hidden="true"></span>
+      <span id="status-strip-text">INITIALIZING</span>
+      <span class="status-strip-meta" id="status-strip-meta"></span>
     </div>
   </div>
 
-  <div class="topnav">
-    <div class="brand">
-      <div class="brand-mark"></div>
-      <div class="brand-name">ULTRON<span class="sub">PERSONAL AI SYSTEM</span></div>
+  <!-- ══════════ LEFT SYSTEM PANEL ══════════ -->
+  <aside class="left-panel scrollable" aria-label="System telemetry">
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Link</span></span>
+        <span class="status-pill connecting" id="link-pill">CONNECTING</span>
+      </div>
+      <div class="telemetry" id="link-telemetry">
+        <div class="telemetry-row">
+          <span class="telemetry-key">Core Link</span>
+          <span class="telemetry-val is-unknown" id="t-link">CONNECTING</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Latency</span>
+          <span class="telemetry-val is-unknown" id="t-latency">--</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Uplink</span>
+          <span class="telemetry-val is-unknown" id="t-uplink">UNKNOWN</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Backend</span>
+          <span class="telemetry-val is-unknown" id="t-backend">UNKNOWN</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Threat</span></span>
+        <span class="status-pill" id="threat-pill">MONITORING</span>
+      </div>
+      <div class="telemetry">
+        <div class="telemetry-row">
+          <span class="telemetry-key">Risk Level</span>
+          <span class="telemetry-val is-unknown" id="t-risk">UNKNOWN</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Approvals</span>
+          <span class="telemetry-val is-unknown" id="t-approvals">--</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Policy</span>
+          <span class="telemetry-val is-unknown" id="t-policy">UNKNOWN</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Node</span></span>
+      </div>
+      <div class="telemetry">
+        <div class="telemetry-row">
+          <span class="telemetry-key">Platform</span>
+          <span class="telemetry-val is-unknown" id="t-os">UNKNOWN</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Processor</span>
+          <span class="telemetry-val is-unknown" id="t-cpu-name">UNKNOWN</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Host</span>
+          <span class="telemetry-val is-unknown" id="t-host">UNKNOWN</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Temp</span>
+          <span class="telemetry-val is-unknown" id="t-temp">UNKNOWN</span>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ══════════ CENTER: CORE ══════════ -->
+  <main class="center-area" id="core-region" tabindex="-1">
+
+    <button type="button" class="event-strip" id="event-strip" data-module="log"
+            aria-label="Open activity log">
+      <span class="event-strip-time" id="event-time">--:--:--</span>
+      <span class="event-strip-sev" id="event-sev">SYSTEM</span>
+      <span class="event-strip-text" id="event-text">AWAITING FIRST EVENT</span>
+    </button>
+
+    <div class="core-stage" id="core-stage" role="button" tabindex="0"
+         aria-label="JARVIS core — activate to open chat, press V to use the microphone">
+      <svg class="core-svg" id="core-svg" width="320" height="320" viewBox="0 0 320 320"
+           role="img" aria-labelledby="core-svg-title">
+        <title id="core-svg-title">JARVIS core — status <span id="core-svg-state">idle</span></title>
+        <defs>
+          <radialGradient id="coreDisc" cx="50%" cy="45%" r="55%">
+            <stop offset="0%" stop-color="#0a1c22"/>
+            <stop offset="70%" stop-color="#050d10"/>
+            <stop offset="100%" stop-color="#020708"/>
+          </radialGradient>
+          <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#4defff"/>
+            <stop offset="100%" stop-color="#0099ff"/>
+          </linearGradient>
+        </defs>
+
+        <circle class="core-halo core-reactive" cx="160" cy="160" r="152"/>
+        <circle class="core-pulse core-reactive" cx="160" cy="160" r="118"/>
+
+        <g class="core-ticks" id="core-ticks"></g>
+
+        <circle class="core-ring-dashed" cx="160" cy="160" r="140"/>
+        <circle class="core-ring-thin" cx="160" cy="160" r="124"/>
+
+        <g class="core-ring-a core-reactive">
+          <circle class="core-ring-thin" cx="160" cy="160" r="108" stroke-dasharray="30 12 8 12"/>
+          <path class="core-arc" d="M160 52 A108 108 0 0 1 246 74" />
+          <path class="core-arc alt" d="M160 268 A108 108 0 0 1 74 246" />
+        </g>
+
+        <g class="core-ring-b core-reactive">
+          <circle class="core-ring-thin" cx="160" cy="160" r="92" stroke-dasharray="4 10"/>
+          <path class="core-arc" d="M160 68 A92 92 0 0 1 240 190" />
+        </g>
+
+        <g class="core-ring-c core-reactive">
+          <path class="core-arc" d="M160 86 A74 74 0 0 1 216 218" opacity=".7"/>
+        </g>
+
+        <circle class="core-disc core-reactive" cx="160" cy="160" r="66" fill="url(#coreDisc)"/>
+        <circle class="core-inner-glow core-reactive" cx="160" cy="160" r="66"/>
+        <circle class="core-ring-thin core-reactive" cx="160" cy="160" r="58" stroke-dasharray="1 4"/>
+      </svg>
+
+      <div class="core-center">
+        <span class="core-title">J.A.R.V.I.S.</span>
+        <span class="core-sub" id="core-sub">Awaiting backend</span>
+        <div class="waveform" id="waveform" aria-hidden="true"></div>
+        <span class="core-transcript" id="core-transcript"></span>
+      </div>
+
+      <button type="button" class="core-mic" id="btn-mic" aria-label="Start voice command">
+        <svg aria-hidden="true"><use href="#i-mic"></use></svg>
+        <span id="mic-label">ENGAGE MIC</span>
+      </button>
     </div>
 
-    <div class="nav-tabs">
-      <div class="nav-tab active" data-view="command">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        COMMAND
+    <div class="core-flanks">
+      <div class="flank" id="flank-cpu">
+        <div class="flank-head">
+          <span class="flank-label">CPU</span>
+          <span class="flank-value" id="flank-cpu-val">--<small>%</small></span>
+        </div>
+        <div class="flank-track"><div class="flank-fill" id="flank-cpu-fill"></div></div>
+        <span class="flank-sub" id="flank-cpu-sub">AWAITING TELEMETRY</span>
       </div>
-      <div class="nav-tab" data-view="notes">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/></svg>
-        NOTES
-      </div>
-      <div class="nav-tab" data-view="calendar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
-        CALENDAR
-      </div>
-      <div class="nav-tab" data-view="reminders">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92Z"/></svg>
-        REMINDERS
-      </div>
-      <div class="nav-tab" data-view="tools">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
-        TOOLS
+      <div class="flank" id="flank-ram">
+        <div class="flank-head">
+          <span class="flank-label">RAM</span>
+          <span class="flank-value" id="flank-ram-val">--<small>%</small></span>
+        </div>
+        <div class="flank-track"><div class="flank-fill" id="flank-ram-fill"></div></div>
+        <span class="flank-sub" id="flank-ram-sub">AWAITING TELEMETRY</span>
       </div>
     </div>
 
-    <div class="net-status">
-      <div class="label">NETWORK<b id="net-label">CONNECTED</b></div>
-      <div class="pulse"></div>
-    </div>
-  </div>
-
-  <div class="main">
-    <!-- LEFT COLUMN -->
-    <div class="col col-left">
-
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <div class="panel-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+    <div class="lower-deck">
+      <!-- Acoustic scan -->
+      <section class="scan-panel" aria-label="Acoustic scan">
+        <div class="radar is-offline" id="radar">
+          <canvas id="radar-canvas" width="168" height="168" aria-hidden="true"></canvas>
+        </div>
+        <div class="scan-meta">
+          <span class="scan-title">Acoustic Scan</span>
+          <span class="scan-state" id="scan-state">
+            <span class="link-dot" aria-hidden="true"></span><span id="scan-state-text">MIC UNAVAILABLE</span>
+          </span>
+          <div class="scan-stats">
+            <div class="scan-stat">
+              <span class="k">Contacts</span>
+              <span class="v" id="scan-contacts">--</span>
             </div>
-            <div>
-              <div class="t">VISION FEED</div>
-              <div class="s">Optics @ 60Hz</div>
+            <div class="scan-stat">
+              <span class="k">Peak</span>
+              <span class="v" id="scan-peak">--</span>
             </div>
           </div>
-          <span class="pill green" id="vision-pill">READY</span>
+          <span class="scan-disclaimer" id="scan-note">Live microphone spectrum</span>
         </div>
-        <div class="vision-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
-          <div class="label" id="vision-label">NO INPUT</div>
+      </section>
+
+      <!-- Satellite uplink -->
+      <section class="uplink" aria-label="Satellite uplink">
+        <div class="globe" id="globe">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <clipPath id="globeClip"><circle cx="50" cy="50" r="46"/></clipPath>
+            </defs>
+            <g clip-path="url(#globeClip)">
+              <g class="globe-meridians">
+                <ellipse class="globe-graticule" cx="50" cy="50" rx="18" ry="46"/>
+                <ellipse class="globe-graticule" cx="50" cy="50" rx="36" ry="46"/>
+                <line class="globe-graticule" x1="50" y1="4" x2="50" y2="96"/>
+              </g>
+              <line class="globe-graticule" x1="4" y1="50" x2="96" y2="50"/>
+              <path class="globe-graticule" d="M8 30 Q50 42 92 30M8 70 Q50 58 92 70"/>
+              <path class="globe-link dash" d="M18 40 Q50 18 78 34"/>
+              <path class="globe-link" d="M24 66 Q52 84 80 62"/>
+              <circle class="globe-node" cx="18" cy="40" r="1.8"/>
+              <circle class="globe-node" cx="78" cy="34" r="1.4"/>
+              <circle class="globe-node" cx="24" cy="66" r="1.2"/>
+              <circle class="globe-node" cx="80" cy="62" r="1.6"/>
+            </g>
+            <circle class="globe-outline" cx="50" cy="50" r="46"/>
+          </svg>
+        </div>
+        <div class="uplink-meta">
+          <span class="scan-title">Satellite Uplink</span>
+          <span class="uplink-state" id="uplink-state">CONNECTING</span>
+          <div class="uplink-rows">
+            <div class="uplink-row"><span class="k">Host</span><span class="v" id="uplink-host">UNKNOWN</span></div>
+            <div class="uplink-row"><span class="k">IP</span><span class="v" id="uplink-ip">UNKNOWN</span></div>
+            <div class="uplink-row"><span class="k">Ping</span><span class="v" id="uplink-ping">--</span></div>
+          </div>
+          <span class="scan-disclaimer">Orbit grid is decorative · telemetry is real</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ══════════ RIGHT PANEL ══════════ -->
+  <aside class="right-panel scrollable" aria-label="Compute and storage">
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Storage</span></span>
+        <span class="status-pill" id="disk-pill">UNKNOWN</span>
+      </div>
+      <div class="row-list" id="disk-list">
+        <div class="telemetry-row"><span class="telemetry-key">Awaiting telemetry</span><span class="telemetry-val is-unknown">--</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Execution</span></span>
+      </div>
+      <div class="telemetry">
+        <div class="telemetry-row">
+          <span class="telemetry-key">State</span>
+          <span class="telemetry-val is-unknown" id="t-state">IDLE</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Goal</span>
+          <span class="telemetry-val is-unknown" id="t-goal">NONE</span>
+        </div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Progress</span>
+          <span class="telemetry-val is-unknown" id="t-progress">0%</span>
         </div>
       </div>
+      <div class="telemetry-row" style="border:none;padding-bottom:0">
+        <div class="mini-meter" style="width:100%"><div class="mini-meter-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:var(--space-3)">
+        <button type="button" class="btn-mini" id="btn-pause">PAUSE</button>
+        <button type="button" class="btn-mini" id="btn-resume">RESUME</button>
+        <button type="button" class="btn-mini danger" id="btn-stop">ABORT</button>
+      </div>
+    </section>
 
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <div class="panel-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12" y2="20"/></svg>
-            </div>
-            <div>
-              <div class="t">NETWORK</div>
-              <div class="s">Telemetry Link</div>
-            </div>
-          </div>
-          <span class="pill green" id="net-pill">CONNECTED</span>
+    <section class="panel">
+      <div class="panel-header">
+        <span class="panel-title"><span class="label">Active Window</span></span>
+        <span class="status-pill" id="desktop-pill">UNKNOWN</span>
+      </div>
+      <div class="telemetry">
+        <div class="telemetry-row">
+          <span class="telemetry-key">Foreground</span>
+          <span class="telemetry-val is-unknown" id="t-window">UNKNOWN</span>
         </div>
-
-        <div class="stat-mini-row">
-          <div class="stat-mini">
-            <div class="k">LATENCY</div>
-            <div class="v" id="v-latency">--<small>ms</small></div>
-          </div>
-          <div class="stat-mini">
-            <div class="k">UPTIME</div>
-            <div class="v" id="v-uptime">--<small>h</small></div>
-          </div>
-        </div>
-
-        <div class="bar-row">
-          <div class="bar-icon tx">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-          </div>
-          <div class="bar-track"><div class="bar-fill tx" id="bar-tx"></div></div>
-          <div class="bar-val"><b id="v-tx">--</b>% TX</div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-icon rx">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
-          </div>
-          <div class="bar-track"><div class="bar-fill rx" id="bar-rx"></div></div>
-          <div class="bar-val"><b id="v-rx">--</b>% RX</div>
+        <div class="telemetry-row">
+          <span class="telemetry-key">Processes</span>
+          <span class="telemetry-val is-unknown" id="t-procs">--</span>
         </div>
       </div>
+    </section>
+  </aside>
 
-      <div class="stat-grid">
-        <div class="stat-card cpu">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg></div>
-          <div class="label">CPU LOAD</div>
-          <div class="value" id="v-cpu">--<small>%</small></div>
-          <div class="mini-track"><div class="mini-fill" id="mini-cpu"></div></div>
+  <!-- ══════════ BOTTOM DOCK ══════════ -->
+  <footer class="bottom-dock">
+    <div class="dock-left">
+      <div class="dock-metrics">
+        <div class="dock-spark">
+          <canvas id="spark-canvas" width="336" height="52" aria-label="CPU load history" role="img"></canvas>
         </div>
-        <div class="stat-card ram">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg></div>
-          <div class="label">RAM USAGE</div>
-          <div class="value" id="v-ram">--<small>%</small></div>
-          <div class="mini-track"><div class="mini-fill" id="mini-ram"></div></div>
-        </div>
-        <div class="stat-card temp">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg></div>
-          <div class="label">TEMPERATURE</div>
-          <div class="value" id="v-temp">--<small>°C</small></div>
-          <div class="mini-track"><div class="mini-fill" id="mini-temp"></div></div>
-        </div>
-        <div class="stat-card sys">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
-          <div class="label">SYSTEM STATUS</div>
-          <div class="value" style="font-size:16px;" id="v-os">--</div>
-          <span class="sys-badge" id="sys-badge">● ACTIVE</span>
+        <div class="dock-metric-rows">
+          <div class="dock-metric-row"><span class="k">Disk</span><span class="v" id="dock-disk">--</span></div>
+          <div class="dock-metric-row"><span class="k">Uptime</span><span class="v" id="dock-uptime">--:--:--</span></div>
         </div>
       </div>
-
     </div>
 
-    <!-- CENTER ORB -->
-    <div class="col col-center">
-      <canvas id="orb"></canvas>
+    <nav class="dock-center" aria-label="Modules">
+      <div class="dock-items" id="dock-items" role="tablist"></div>
+    </nav>
 
-      <div class="dock">
-        <div class="dock-btn" id="dock-vision">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
-        </div>
-        <div class="dock-center" id="dock-status">
-          <span class="rec-dot"></span>
-          <div class="txt"><b id="dock-title">ULTRON ONLINE</b><small id="dock-sub">NEURAL NETWORK</small></div>
-        </div>
-        <div class="dock-btn mic" id="btn-mic">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4"/></svg>
-        </div>
-      </div>
+    <div class="dock-right">
+      <button type="button" class="icon-btn tooltip" id="btn-chat-quick" data-module="chat"
+              data-tooltip="OPEN CHAT" aria-label="Open chat">
+        <svg aria-hidden="true"><use href="#i-chat"></use></svg>
+      </button>
     </div>
+  </footer>
+</div>
 
-    <!-- RIGHT CONVERSATION -->
-    <div class="col col-right">
-      <div class="conv-head">
-        <div class="t">Conversation</div>
-        <div class="live-tag"><span class="dot"></span> Live</div>
-        <div class="provider-select">
-          <label for="provider-select">Provider:</label>
-          <select id="provider-select">
-            <option value="gemini">Gemini</option>
-            <option value="nvidia">NVIDIA</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="grok">Grok</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="conv-scroll" id="convScroll">
-        <div class="msg typing" id="msg-typing" style="display:none;"><span></span><span></span><span></span></div>
-      </div>
-
-      <div class="conv-input">
-        <input type="text" id="cmd-input" placeholder="Type a command...">
-        <button id="btn-send">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m3 3 18 9-18 9 4.5-9L3 3Z"/></svg>
-        </button>
-      </div>
+<!-- ══════════ MODULE DRAWER ══════════ -->
+<div class="drawer-scrim" id="drawer-scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="drawer-title-block">
+      <span class="drawer-title" id="drawer-title">MODULE</span>
+      <span class="drawer-subtitle" id="drawer-subtitle">—</span>
     </div>
+    <button type="button" class="icon-btn small" id="drawer-close" aria-label="Close module">
+      <svg aria-hidden="true"><use href="#i-close"></use></svg>
+    </button>
   </div>
+  <div class="drawer-body scrollable" id="drawer-body"></div>
+  <div class="drawer-foot" id="drawer-foot" hidden></div>
+</aside>
 
-  <section class="workspace" id="workspace" hidden aria-live="polite">
-    <div class="workspace-head"><div><span id="workspace-title">NOTES</span><small id="workspace-subtitle">Stored in your local JARVIS data</small></div><button id="workspace-close" aria-label="Close workspace">×</button></div>
-    <div class="workspace-form" id="workspace-form"></div>
-    <div class="workspace-list" id="workspace-list"></div>
-  </section>
+<div class="toast-stack" id="toast-stack" role="region" aria-live="polite" aria-label="Notifications"></div>
 
-  <!-- Android Quick Actions Panel -->
-  <div class="android-quick-actions" id="android-qa">
-    <div class="qa-title">Phone Controls</div>
-    <div class="qa-grid" id="android-qa-grid">
-      <button class="qa-btn" onclick="ultronCommand('make_call', {number: '__PROMPT__'})">
-        <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92Z"/></svg>
-        <span class="btn-label">Call</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('send_sms', {to: '__PROMPT__', message: '__PROMPT__'})">
-        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        <span class="btn-label">SMS</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('list_contacts')">
-        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span class="btn-label">Contacts</span>
-      </button>
-      <div class="toolbar-divider"></div>
-      <button class="qa-btn" onclick="ultronCommand('get_battery')">
-        <svg viewBox="0 0 24 24"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"/><line x1="23" y1="13" x2="23" y2="11"/></svg>
-        <span class="btn-label">Battery</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('get_location')">
-        <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        <span class="btn-label">Location</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('take_screenshot')">
-        <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span class="btn-label">Screenshot</span>
-      </button>
-      <div class="toolbar-divider"></div>
-      <button class="qa-btn" onclick="ultronCommand('toggle_wifi', {enabled: true})">
-        <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12" y2="20"/></svg>
-        <span class="btn-label">WiFi</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('set_alarm', {time: '__PROMPT__', label: 'Alarm'})">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></svg>
-        <span class="btn-label">Alarm</span>
-      </button>
-      <button class="qa-btn" onclick="ultronCommand('speak', {text: 'Hello! I am Ultron, your personal AI assistant.'})">
-        <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-        <span class="btn-label">Speak</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Android Toast -->
-  <div class="android-toast" id="android-toast"></div>
-
-  <!-- Android Bottom Toolbar -->
-  <div class="android-toolbar" id="android-toolbar">
-    <div class="toolbar-group">
-      <button class="toolbar-btn" id="tb-back" title="Back">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
-        <span class="btn-label">Back</span>
-      </button>
-      <button class="toolbar-btn" id="tb-home" title="Home">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
-        <span class="btn-label">Home</span>
-      </button>
-      <button class="toolbar-btn" id="tb-recent" title="Recent">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M8 2v20"/><path d="M16 2v20"/></svg>
-        <span class="btn-label">Recent</span>
-      </button>
-    </div>
-    <div class="toolbar-divider"></div>
-    <div class="toolbar-scroll" id="tb-actions">
-      <button class="toolbar-btn" onclick="ultronCommand('make_call', {number: '__PROMPT__'})" title="Call">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.68 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.32 1.85.55 2.81.68A2 2 0 0 1 22 16.92Z"/></svg>
-        <span class="btn-label">Call</span>
-      </button>
-      <button class="toolbar-btn" onclick="ultronCommand('send_sms', {to: '__PROMPT__', message: '__PROMPT__'})" title="SMS">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        <span class="btn-label">SMS</span>
-      </button>
-      <button class="toolbar-btn" onclick="ultronCommand('get_battery')" title="Battery">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2" ry="2"/><line x1="23" y1="13" x2="23" y2="11"/></svg>
-        <span class="btn-label">Battery</span>
-      </button>
-      <button class="toolbar-btn" onclick="ultronCommand('take_screenshot')" title="Screenshot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span class="btn-label">Capture</span>
-      </button>
-      <button class="toolbar-btn" onclick="ultronCommand('get_location')" title="Location">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        <span class="btn-label">Location</span>
-      </button>
-      <button class="toolbar-btn" onclick="ultronCommand('toggle_wifi', {enabled: true})" title="WiFi">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12" y2="20"/></svg>
-        <span class="btn-label">WiFi</span>
-      </button>
-      <button class="toolbar-btn" onclick="document.getElementById('android-qa').classList.toggle('active')" title="More">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-        <span class="btn-label">More</span>
-      </button>
-    </div>
-  </div>
-
-<script src="/js/api.js"></script>
-<script src="/js/app.js"></script>
-<script>
-/* Android toolbar handlers */
-document.getElementById('tb-back')?.addEventListener('click', function(){
-  ultronCommand('press_back');
-});
-document.getElementById('tb-home')?.addEventListener('click', function(){
-  ultronCommand('press_home');
-});
-document.getElementById('tb-recent')?.addEventListener('click', function(){
-  ultronCommand('press_recent');
-});
-
-function ultronCommand(tool, args) {
-  if (args && typeof args === 'object') {
-    const filled = {};
-    for (const [k, v] of Object.entries(args)) {
-      if (v === '__PROMPT__') {
-        const val = prompt('Enter ' + k + ':');
-        if (val === null) return;
-        filled[k] = val;
-      } else {
-        filled[k] = v;
-      }
-    }
-    args = filled;
-  }
-  const input = document.getElementById('cmd-input');
-  if (input) {
-    input.value = tool + ' ' + JSON.stringify(args || {});
-    document.getElementById('btn-send')?.click();
-  }
-}
-</script>
+<script type="module" src="/js/app.js"></script>
 </body>
 </html>
