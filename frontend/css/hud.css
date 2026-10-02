@@ -1071,15 +1071,16 @@ body[data-link="connecting"] .uplink-state { color: var(--warning); }
   background: var(--bg-panel);
   align-items: baseline;
 }
-.log-row .t { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.log-row .s { letter-spacing: .1em; text-transform: uppercase; font-size: 8.5px; }
-.log-row .m { color: var(--text-secondary); word-break: break-word; line-height: 1.5; }
-.log-row.lv-info { border-left-color: var(--border-accent); } .log-row.lv-info .s { color: var(--text-tertiary); }
-.log-row.lv-success { border-left-color: var(--success); } .log-row.lv-success .s { color: var(--success); }
-.log-row.lv-warning { border-left-color: var(--warning); } .log-row.lv-warning .s { color: var(--warning); }
-.log-row.lv-error { border-left-color: var(--danger); } .log-row.lv-error .s { color: var(--danger); }
-.log-row.lv-tool { border-left-color: var(--blue); } .log-row.lv-tool .s { color: var(--blue); }
-.log-row.lv-system { border-left-color: var(--cyan); } .log-row.lv-system .s { color: var(--cyan); }
+.log-row .log-time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.log-row .log-level { letter-spacing: .1em; text-transform: uppercase; font-size: 8.5px; }
+.log-row .log-msg { color: var(--text-secondary); word-break: break-word; line-height: 1.5; }
+.log-row .log-detail { grid-column: 3; color: var(--text-muted); font-size: 9px; }
+.log-row.lv-info { border-left-color: var(--border-accent); } .log-row.lv-info .log-level { color: var(--text-tertiary); }
+.log-row.lv-success { border-left-color: var(--success); } .log-row.lv-success .log-level { color: var(--success); }
+.log-row.lv-warning { border-left-color: var(--warning); } .log-row.lv-warning .log-level { color: var(--warning); }
+.log-row.lv-error { border-left-color: var(--danger); } .log-row.lv-error .log-level { color: var(--danger); }
+.log-row.lv-tool { border-left-color: var(--blue); } .log-row.lv-tool .log-level { color: var(--blue); }
+.log-row.lv-system { border-left-color: var(--cyan); } .log-row.lv-system .log-level { color: var(--cyan); }
 
 /* ───────────────────────────────────────────────────────────────
    CHAT

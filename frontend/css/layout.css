@@ -153,8 +153,8 @@ body::after {
   border-radius: 2px;
 }
 
-/* ── Center Area ─────────────────────────────────────────────── */
-.center-area {
+/* ── Center Area (classic layout) ──────────────────────────────── */
+body:not([data-ui="orb"]) .center-area {
   grid-row: 3;
   grid-column: 2;
   display: flex;
@@ -166,6 +166,15 @@ body::after {
   overflow: hidden;
   position: relative;
   min-width: 0;
+  background: rgba(2, 5, 6, 0.65);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+}
+
+/* Orb mode: center-area is just a positioning layer, no background */
+body[data-ui="orb"] .center-area {
+  pointer-events: none;
 }
 
 /* ── Right Panel ─────────────────────────────────────────────── */

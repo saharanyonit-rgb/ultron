@@ -206,13 +206,6 @@
   text-transform: uppercase;
 }
 
-/* ── Log rows (class names used by intel-modules.js) ──────────── */
-.log-row { display: grid; grid-template-columns: 62px 66px 1fr; gap: var(--space-2); align-items: baseline; }
-.log-row .log-detail { grid-column: 3; color: var(--text-muted); font-size: 9px; }
-.log-row .log-time { color: var(--text-muted); font-variant-numeric: tabular-nums; font-size: 9px; }
-.log-row .log-level { font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; }
-.log-row .log-msg { color: var(--text-secondary); word-break: break-word; line-height: 1.5; }
-
 /* ── Tool cards ───────────────────────────────────────────────── */
 .tool-card {
   padding: var(--space-3);
@@ -245,7 +238,8 @@
 
 /* ── Weather ──────────────────────────────────────────────────── */
 .weather-now { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; }
-.weather-temp {
+/* Scoped to the module: the top bar has its own compact .weather-temp. */
+.weather-now .weather-temp {
   font-family: var(--font-mono);
   font-size: 40px;
   font-weight: 700;
@@ -321,4 +315,4 @@ a.news-title:hover { color: var(--cyan); text-decoration: underline; }
 
 /* ── Permission card inline variant ───────────────────────────── */
 .perm-card.inline { width: 100%; margin-top: var(--space-3); }
-.perm-scrim { position: fixed; inset: 0; z-index: 300; }
+

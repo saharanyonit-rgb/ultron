@@ -1,0 +1,316 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Orb backdrop
+   Adapted from the Ultron Orb UI by Sagar Tamang (MIT).
+   See THIRD_PARTY_NOTICES.md.
+
+   Every rule is scoped under .orb-view (or a class already unique to the orb)
+   so nothing here can affect the existing dashboard. Visual values match the
+   upstream stylesheet; the amber palette is intentional because the orb
+   geometry, bloom and code-text are all authored in amber.
+
+   The orb is the main screen: .orb-view is a fixed backdrop that the console
+   floats above as glass. How the console itself is re-laid-out over it lives
+   in orb-shell.css, which is loaded after this file.
+
+   Visibility: .orb-view[hidden] is the classic console layout, and the
+   operator's chosen layout is applied by js/ui/orb.js via body[data-ui].
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── The overlay layer ──────────────────────────────────────────
+   Hidden when the operator is on the classic console layout, so the orb
+   costs nothing there. */
+.orb-view[hidden] {
+  display: none;
+}
+
+.orb-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1500; /* orb.css standalone; orb-shell.css drops this to 0 */
+  background: #000;
+  font-family: var(--font-mono);
+  color: #ffaa30;
+  user-select: none;
+}
+
+/* ── Three.js mount point ──────────────────────────────────────── */
+.orb-root {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none; /* let the pointer drive orbit rotation, not page pan */
+}
+
+.orb-root:active {
+  cursor: grabbing;
+}
+
+.orb-root canvas {
+  display: block;
+}
+
+.orb-view[data-render="pending"] .orb-root {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.orb-view[data-render="ok"] .orb-root {
+  opacity: 1;
+}
+
+/* ── Atmosphere overlays (never intercept input) ────────────────── */
+.orb-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.orb-overlay-vignette {
+  z-index: 1;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.7) 100%);
+}
+
+.orb-overlay-grain {
+  z-index: 2;
+  opacity: 0.06;
+  mix-blend-mode: screen;
+  background-size: 150px;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.orb-overlay-scanlines {
+  z-index: 3;
+  opacity: 0.3;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+}
+
+/* ── HUD chrome ────────────────────────────────────────────────── */
+.orb-hud {
+  position: absolute;
+  z-index: 4;
+  color: #ffaa30;
+  font-family: var(--font-mono);
+}
+
+.orb-hud-title {
+  top: 24px;
+  left: 24px;
+  font-size: 13px;
+  letter-spacing: 0.35em;
+  opacity: 0.7;
+  text-shadow: 0 0 10px rgba(255, 170, 48, 0.8);
+  pointer-events: none;
+}
+
+.orb-hud-title::after {
+  content: "";
+  display: block;
+  margin-top: 6px;
+  width: 120px;
+  height: 1px;
+  background: linear-gradient(to right, rgba(255, 170, 48, 0.8), transparent);
+}
+
+/* Live JARVIS state readout, driven by the existing core states. */
+.orb-hud-state {
+  top: 58px;
+  left: 24px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  opacity: 0.85;
+  text-shadow: 0 0 8px rgba(255, 170, 48, 0.6);
+  pointer-events: none;
+}
+
+.orb-hud-state b {
+  font-weight: 700;
+  color: #ffcc66;
+}
+
+.orb-hud-hint {
+  bottom: 24px;
+  left: 24px;
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.1em;
+  opacity: 0.55;
+  text-shadow: 0 0 8px rgba(255, 170, 48, 0.6);
+  pointer-events: none;
+}
+
+.orb-hud-hint .key {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  border: 1px solid rgba(255, 170, 48, 0.5);
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.orb-hud-controls {
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.orb-hud-row {
+  display: flex;
+  gap: 8px;
+}
+
+.orb-btn {
+  min-width: 44px;
+  height: 44px;
+  padding: 0 12px;
+  background: rgba(20, 10, 0, 0.55);
+  border: 1px solid rgba(255, 170, 48, 0.45);
+  border-radius: 4px;
+  color: #ffaa30;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+  text-shadow: 0 0 6px rgba(255, 170, 48, 0.7);
+  box-shadow: 0 0 12px rgba(255, 140, 20, 0.12) inset;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.orb-btn:hover:not(:disabled) {
+  background: rgba(60, 30, 0, 0.7);
+  border-color: rgba(255, 200, 100, 0.9);
+  box-shadow: 0 0 14px rgba(255, 150, 30, 0.35), 0 0 12px rgba(255, 140, 20, 0.2) inset;
+}
+
+.orb-btn:active:not(:disabled) {
+  background: rgba(90, 45, 0, 0.8);
+}
+
+.orb-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.orb-btn[aria-pressed="true"] {
+  background: rgba(120, 60, 0, 0.6);
+  border-color: #ffcc66;
+  color: #ffcc66;
+}
+
+/* ── Existing SVG core ────────────────────────────────────────────
+   In orb mode the orb *is* the core, so the dashboard's SVG instrument is
+   hidden by orb-shell.css while its text overlay is repositioned over the
+   render. The element is never removed or unmounted: hud-core.js keeps
+   updating it, so the classic console layout is exact the instant the
+   operator switches back. */
+
+/* ── Gesture status ──────────────────────────────────────────────
+   A camera-less machine shows a quiet, persistent note here. It never blocks
+   the orb, never covers the controls and never raises an error dialog.
+   A missing camera is NOT an error, so it stays amber; only a real failure or
+   a denied permission prompt uses the upstream `.hud-error` red. */
+.orb-gesture-status {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-align: right;
+  color: rgba(255, 170, 48, 0.7);
+  text-shadow: 0 0 8px rgba(255, 170, 48, 0.4);
+  max-width: 46ch;
+}
+
+.orb-gesture-status[data-state="active"] {
+  color: #ffcc66;
+}
+
+.orb-gesture-status[data-state="unavailable"] {
+  color: rgba(255, 170, 48, 0.6);
+}
+
+.orb-gesture-status[data-state="denied"],
+.orb-gesture-status[data-state="error"] {
+  color: #ff5533;
+  text-shadow: 0 0 8px rgba(255, 60, 30, 0.7);
+}
+
+/* ── Camera preview ────────────────────────────────────────────── */
+.orb-camera {
+  position: relative;
+  width: 208px;
+  height: 156px;
+  display: none;
+  border: 1px solid rgba(255, 170, 48, 0.45);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0a0500;
+  box-shadow: 0 0 16px rgba(255, 140, 20, 0.15);
+}
+
+.orb-camera.visible {
+  display: block;
+}
+
+.orb-camera-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror, so it behaves like a mirror */
+  filter: sepia(1) hue-rotate(-15deg) saturate(2.2) brightness(0.75) contrast(1.15);
+  opacity: 0.85;
+}
+
+.orb-camera-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.orb-camera-status {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: #ffcc66;
+  background: rgba(10, 5, 0, 0.65);
+  text-shadow: 0 0 6px rgba(255, 170, 48, 0.8);
+}
+
+/* ── WebGL / render fallback ─────────────────────────────────────
+   The orb is the main screen, so a machine without WebGL is switched
+   to the classic console layout by js/ui/orb.js rather than being
+   shown a blocking error. See the "ORB BACKDROP OFFLINE" toast. */
+
+/* ── Motion preferences ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .orb-overlay-scanlines,
+  .orb-overlay-grain {
+    display: none;
+  }
+}
+
+/* Breakpoint and rule from the upstream `.hud-hint` media query. */
+@media (max-width: 600px) {
+  .orb-hud-hint {
+    display: none;
+  }
+
+  .orb-camera {
+    width: 132px;
+    height: 99px;
+  }
+}

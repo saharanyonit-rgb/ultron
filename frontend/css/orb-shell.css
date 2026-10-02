@@ -1,0 +1,461 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Orb shell
+   ───────────────────────────────────────────────────────────────
+   The holographic orb is the main screen. It renders as a fixed
+   backdrop and the command console floats above it as translucent
+   glass, so the orb is visible through and around every panel
+   instead of being a separate view the operator has to open.
+
+   Colour discipline, matching the operator's brief:
+     · amber  — anything the operator acts on: primary buttons, the
+                core instrument, the active module, focus rings.
+     · cyan   — anything reporting real data: telemetry values,
+                meters, latency, storage, network. Unchanged.
+     · status colours (green/amber/red) — unchanged, they are semantic.
+
+   Every rule is scoped under `body[data-ui="orb"]`. The classic
+   dashboard in `body[data-ui="console"]` is untouched and remains the
+   automatic fallback when WebGL is unavailable, when the operator
+   reduces motion, or when the scene fails to mount.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Backdrop reset ─────────────────────────────────────────────
+   The flat console draws a grid and three radial glows behind itself.
+   The orb supplies far more depth than that, and the grid would read
+   as dirt on top of the render, so both pseudo-elements step aside. */
+body[data-ui="orb"]::before,
+body[data-ui="orb"]::after {
+  display: none;
+}
+
+/* Slightly wider gutters in orb mode: the orb needs room to breathe
+   between the glass columns. */
+body[data-ui="orb"] {
+  --left-panel-width: 264px;
+  --right-panel-width: 264px;
+}
+
+/* ── Layering ──────────────────────────────────────────────────
+   .orb-view drops from a fullscreen takeover (z 1500) to a backdrop
+   (z 0). The drawer (1001), permission modal (2000) and toasts (2000)
+   all sit above it already, so modules open straight over the orb
+   with no z-index surgery. */
+body[data-ui="orb"] .orb-view {
+  z-index: 0;
+}
+
+body[data-ui="orb"] .app-shell {
+  position: relative;
+  z-index: var(--z-base);
+}
+
+/* The orb is an aria-hidden decorative backdrop. The console carries
+   every accessible control, so nothing is lost by hiding it. */
+body[data-ui="orb"] .orb-view {
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .orb-root,
+body[data-ui="orb"] .orb-hud-controls {
+  pointer-events: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GLASS SURFACES
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Top bar ──────────────────────────────────────────────────── */
+body[data-ui="orb"] .topbar {
+  background: linear-gradient(180deg, rgba(2, 6, 8, 0.88), rgba(2, 6, 8, 0.5));
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+  border-bottom: 1px solid var(--glass-hairline);
+  pointer-events: none;
+}
+
+/* ── Status strip ─────────────────────────────────────────────── */
+body[data-ui="orb"] .status-strip {
+  background: rgba(2, 6, 8, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 170, 48, 0.1);
+  pointer-events: none;
+}
+
+/* ── Side columns ───────────────────────────────────────────────
+   The column itself becomes transparent so the orb shows through the
+   gutter; each card inside it becomes a floating glass card. */
+body[data-ui="orb"] .left-panel,
+body[data-ui="orb"] .right-panel {
+  background: transparent;
+  border: none;
+  padding: var(--space-4) 0 var(--space-4) var(--space-4);
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .right-panel {
+  padding: var(--space-4) var(--space-4) var(--space-4) 0;
+}
+
+body[data-ui="orb"] .panel {
+  background: var(--glass);
+  border: 1px solid var(--glass-hairline);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .panel:hover {
+  border-color: var(--glass-hairline-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 18px var(--glow-amber-soft);
+}
+
+body[data-ui="orb"] .panel-header {
+  border-bottom-color: rgba(255, 170, 48, 0.1);
+}
+
+/* Interactive children inside pass-through panels stay clickable */
+body[data-ui="orb"] .panel *:not(.panel-header):not(.row-item):not(.data-cell):not(.metric-card),
+body[data-ui="orb"] .topbar *,
+body[data-ui="orb"] .left-panel *,
+body[data-ui="orb"] .right-panel *,
+body[data-ui="orb"] .bottom-dock *,
+body[data-ui="orb"] .status-strip * {
+  pointer-events: auto;
+}
+
+/* ── Bottom dock ──────────────────────────────────────────────── */
+body[data-ui="orb"] .bottom-dock {
+  background: linear-gradient(0deg, rgba(2, 6, 8, 0.9), rgba(2, 6, 8, 0.5));
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.1);
+  border-top: 1px solid var(--glass-hairline);
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .dock-items {
+  background: var(--glass);
+  border-color: var(--glass-hairline);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body[data-ui="orb"] .dock-spark {
+  background: rgba(2, 6, 8, 0.6);
+  border-color: var(--glass-hairline);
+}
+
+/* ── Inline controls that sit on the glass ────────────────────── */
+body[data-ui="orb"] .icon-btn,
+body[data-ui="orb"] .weather {
+  background: var(--glass);
+  border-color: var(--glass-hairline);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body[data-ui="orb"] .event-strip {
+  background: var(--glass);
+  border-color: var(--glass-hairline);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+body[data-ui="orb"] .scan-panel,
+body[data-ui="orb"] .uplink {
+  background: var(--glass);
+  border-color: var(--glass-hairline);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+body[data-ui="orb"] .row-item,
+body[data-ui="orb"] .data-cell,
+body[data-ui="orb"] .metric-card {
+  background: rgba(2, 6, 8, 0.42);
+  border-color: rgba(255, 170, 48, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CENTRE — THE ORB IS THE HERO
+   ═══════════════════════════════════════════════════════════════
+   The centre column no longer holds an instrument; it holds a HUD
+   readout floating on the orb. The overlay is pinned to the viewport
+   so the JARVIS wordmark, state line, waveform and mic land exactly
+   on the middle of the render rather than on the middle of the flex
+   box, which the topbar, dock and lower deck would otherwise skew. */
+body[data-ui="orb"] .center-area {
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .core-stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  pointer-events: none;
+}
+
+body[data-ui="orb"] .core-mic,
+body[data-ui="orb"] .orb-hud-controls {
+  pointer-events: auto;
+}
+
+/* The SVG instrument is redundant: the orb is the core now. It stays
+   in the DOM — `display:none` rather than removal — so hud-core.js
+   keeps writing to it and the classic console layout is still exact
+   the moment the operator switches back. */
+body[data-ui="orb"] .core-svg {
+  display: none;
+}
+
+body[data-ui="orb"] .core-center {
+  position: static;
+  inset: auto;
+  padding: 0;
+  gap: var(--space-3);
+  pointer-events: auto;
+  cursor: pointer;
+  max-width: min(520px, 70vw);
+}
+
+body[data-ui="orb"] .core-mic {
+  position: static;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  pointer-events: auto;
+  padding: 9px 20px;
+  font-size: var(--text-xs);
+}
+
+/* The lower deck is pushed to the floor of the column so the flanks
+   sit just above it, leaving the middle of the orb clear. */
+body[data-ui="orb"] .core-flanks {
+  margin-top: auto;
+  max-width: 560px;
+}
+
+body[data-ui="orb"] .event-strip,
+body[data-ui="orb"] .scan-panel,
+body[data-ui="orb"] .uplink {
+  pointer-events: auto;
+}
+
+/* The lower deck is decorative instrumentation. The globe's own
+   caption already says it is a decorative orbit grid, so it recedes
+   further here and stops competing with the orb behind it. */
+body[data-ui="orb"] .globe {
+  opacity: 0.55;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AMBER ACCENTS — CHROME THE OPERATOR ACTS ON
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Identity ─────────────────────────────────────────────────── */
+body[data-ui="orb"] .identity-mark::before {
+  border-color: rgba(255, 170, 48, 0.4);
+}
+
+body[data-ui="orb"] .identity-mark::after {
+  border-color: rgba(255, 170, 48, 0.18);
+}
+
+body[data-ui="orb"] .identity-core {
+  background: var(--amber);
+  box-shadow: 0 0 10px var(--glow-amber-strong);
+}
+
+body[data-ui="orb"] .identity-name {
+  color: var(--amber-bright);
+  text-shadow: 0 0 14px var(--glow-amber);
+}
+
+/* The link dot stays semantic: green online, red offline. It is a
+   state readout, not a control, so it is deliberately untouched. */
+
+/* ── Core readout ─────────────────────────────────────────────── */
+body[data-ui="orb"] .core-title {
+  color: var(--amber-bright);
+  text-shadow: 0 0 22px var(--glow-amber-strong), 0 0 44px var(--glow-amber-soft);
+  font-size: clamp(19px, 2.1vw, 30px);
+}
+
+body[data-ui="orb"] .core-sub {
+  color: var(--amber);
+  font-size: var(--text-sm);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px var(--glow-amber-soft);
+}
+
+body[data-ui="orb"] .core-transcript {
+  color: var(--text-secondary);
+}
+
+/* Waveform. Listening is the operator's own voice coming in, so it
+   takes the accent; every other state keeps its semantic colour. */
+body[data-ui="orb"] .waveform-bar {
+  background: rgba(255, 170, 48, 0.35);
+}
+
+body[data-ui="orb"][data-core-state="listening"] .waveform-bar {
+  background: var(--amber-bright);
+  box-shadow: 0 0 6px var(--glow-amber);
+}
+
+body[data-ui="orb"] .core-mic {
+  border-color: rgba(255, 170, 48, 0.4);
+  background: rgba(20, 10, 0, 0.55);
+  color: var(--amber);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body[data-ui="orb"] .core-mic:hover:not(:disabled) {
+  border-color: var(--amber-bright);
+  color: var(--amber-bright);
+  box-shadow: 0 0 18px var(--glow-amber);
+}
+
+body[data-ui="orb"][data-core-state="listening"] .core-mic {
+  border-color: var(--amber);
+  color: var(--amber-hot);
+  background: rgba(120, 60, 0, 0.45);
+  box-shadow: 0 0 20px var(--glow-amber);
+}
+
+/* ── Buttons and active state ──────────────────────────────────── */
+body[data-ui="orb"] :focus-visible {
+  outline-color: var(--amber);
+}
+
+body[data-ui="orb"] .icon-btn:hover,
+body[data-ui="orb"] .weather:hover {
+  border-color: var(--glass-hairline-strong);
+}
+
+body[data-ui="orb"] .icon-btn.active,
+body[data-ui="orb"] .icon-btn.is-active {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(255, 170, 48, 0.12);
+  box-shadow: 0 0 12px var(--glow-amber);
+}
+
+body[data-ui="orb"] .dock-item.is-active {
+  color: var(--amber);
+  background: rgba(255, 170, 48, 0.09);
+  border-color: var(--glass-hairline);
+}
+
+body[data-ui="orb"] .dock-item.is-active::after {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--glow-amber);
+}
+
+body[data-ui="orb"] .btn-mini.primary {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(255, 170, 48, 0.1);
+}
+
+body[data-ui="orb"] .btn-mini:hover {
+  border-color: var(--glass-hairline-strong);
+}
+
+body[data-ui="orb"] .panel-icon {
+  background: rgba(255, 170, 48, 0.1);
+  color: var(--amber);
+}
+
+/* Text entry keeps the cyan focus ring: the field holds operator text,
+   not a control affordance, and cyan on a dark field is the more
+   legible of the two at 13px. */
+body[data-ui="orb"] .weather-icon {
+  color: var(--amber);
+}
+
+/* ── Orb HUD chrome ─────────────────────────────────────────────
+   The orb carried its own title and state readout when it was a
+   fullscreen takeover. Both are now duplicated by the topbar and the
+   centre overlay, so they are dropped here to avoid saying the same
+   thing twice. The keyboard hints and the gesture controls are not
+   duplicated anywhere, so they stay — repositioned clear of the dock. */
+body[data-ui="orb"] .orb-hud-title,
+body[data-ui="orb"] .orb-hud-state {
+  display: none;
+}
+
+body[data-ui="orb"] .orb-hud-hint {
+  bottom: calc(var(--dock-height) + var(--space-4));
+  left: var(--space-5);
+  max-width: 30ch;
+}
+
+body[data-ui="orb"] .orb-hud-controls {
+  bottom: calc(var(--dock-height) + var(--space-4));
+  right: var(--space-5);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 1600px) {
+  body[data-ui="orb"] {
+    --left-panel-width: 232px;
+    --right-panel-width: 232px;
+  }
+}
+
+@media (max-width: 1280px) {
+  body[data-ui="orb"] .orb-hud-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  body[data-ui="orb"] .core-flanks {
+    max-width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOTION PREFERENCES
+   ═══════════════════════════════════════════════════════════════
+   orb.css already drops the grain and scanlines under reduced motion.
+   The camera preview's sepia filter and the panel glow are added here
+   for the same reason: they are decoration, not information. */
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui="orb"] .panel:hover {
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  }
+
+  body[data-ui="orb"] .orb-camera-video {
+    filter: grayscale(1) brightness(0.75);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HIGH CONTRAST
+   ═══════════════════════════════════════════════════════════════
+   Glass relies on translucency to separate surfaces. Where that is
+   unavailable the panels need real borders, or the orb shows straight
+   through the text. */
+@media (prefers-contrast: high) {
+  body[data-ui="orb"] .panel,
+  body[data-ui="orb"] .topbar,
+  body[data-ui="orb"] .bottom-dock,
+  body[data-ui="orb"] .dock-items,
+  body[data-ui="orb"] .status-strip {
+    background: #020506;
+    border-color: var(--amber);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

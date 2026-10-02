@@ -179,4 +179,3 @@ export function disposeCore() {
   document.removeEventListener('visibilitychange', handleVisibility);
 }
 
-export { rafId };

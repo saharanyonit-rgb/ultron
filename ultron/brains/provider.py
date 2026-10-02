@@ -14,6 +14,7 @@ from ultron.config import BrainModelConfig, LLMConfig
 from ultron.llm.base import LLMProvider
 from ultron.llm.gemini import GeminiProvider
 from ultron.llm.grok import GrokProvider
+from ultron.llm.openai_ import OpenAIProvider
 from ultron.llm.openrouter import OpenRouterProvider
 
 logger = logging.getLogger("ultron.brains.provider")
@@ -99,11 +100,11 @@ class BrainProviderFactory:
         model: str,
         temperature: float,
         system_prompt: Optional[str],
-    ) -> OpenRouterProvider:
+    ) -> OpenAIProvider:
         api_key = self._llm_config.openai_api_key
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not configured")
-        return OpenRouterProvider(
+        return OpenAIProvider(
             api_key=api_key,
             model=model,
             system_prompt=system_prompt,

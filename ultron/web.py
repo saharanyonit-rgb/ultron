@@ -70,6 +70,12 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     server: JarvisAPI
 
+    # Keep-alive is required: the UI loads ~25 ES modules in parallel over a
+    # small pool of reused sockets. Under the stdlib default (HTTP/1.0) the
+    # server closes each socket after one response, which Chrome reports as
+    # ERR_CONNECTION_RESET and the app never finishes booting.
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, fmt: str, *args: Any) -> None:
         logger.debug(fmt, *args)
 
@@ -105,7 +111,10 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         # Check If-None-Match header
         client_etag = self.headers.get("If-None-Match", "")
         if client_etag == etag:
+            # 304 carries no body by definition, but HTTP/1.1 still wants an
+            # explicit zero length on a reused connection.
             self.send_response(304)
+            self.send_header("Content-Length", "0")
             self.end_headers()
             return
 
@@ -273,6 +282,9 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept, Cache-Control")
         self.send_header("Access-Control-Max-Age", "86400")
+        # HTTP/1.1 forbids a bodyless 200: without this the client waits for
+        # bytes that never arrive and desynchronises the reused connection.
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     # ── Static File Serving ─────────────────────────────────────

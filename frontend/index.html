@@ -12,8 +12,24 @@
 <link rel="stylesheet" href="/css/components.css">
 <link rel="stylesheet" href="/css/hud.css">
 <link rel="stylesheet" href="/css/modules.css">
+<link rel="stylesheet" href="/css/orb.css">
+<!-- Loaded last: the orb shell only styles body[data-ui="orb"], so it can
+     override the chrome without any risk to the classic console layout. -->
+<link rel="stylesheet" href="/css/orb-shell.css">
+<!-- Three.js is vendored locally (no CDN, no build step). The import map below
+     is what lets the orb module use the bare "three" specifier its addons
+     expect. Only /js/ui/orb-scene.js imports it, and that module is fetched
+     lazily the first time the orb view is opened. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/vendor/three/three.module.min.js",
+    "three/addons/": "/vendor/three/addons/"
+  }
+}
+</script>
 </head>
-<body data-link="connecting" data-core-state="idle">
+<body data-link="connecting" data-core-state="idle" data-ui="orb">
 
 <!-- Reusable SVG icon sprite -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -61,10 +77,65 @@
     <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 9-18 9 4.5-9Z"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v5M12 17.5v.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
     <symbol id="i-unavail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 8 8 8M16 8l-8 8"/></symbol>
+    <symbol id="i-orb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3.2"/><ellipse cx="12" cy="12" rx="9.5" ry="4.2"/><ellipse cx="12" cy="12" rx="9.5" ry="4.2" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9.5" ry="4.2" transform="rotate(120 12 12)"/>
+    </symbol>
   </defs>
 </svg>
 
 <a class="skip-link" href="#core-region">Skip to JARVIS core</a>
+
+<!-- ══════════ ORB BACKDROP ══════════
+     The holographic orb is the main screen. It sits behind the whole
+     console as a fixed backdrop, and the telemetry panels float over it
+     as glass. Three.js and the MediaPipe hand tracker are still fetched
+     on demand by js/ui/orb.js, so a machine without a GPU never pays for
+     them: the scene simply fails to mount and the layout falls back to
+     body[data-ui="console"], the original flat dashboard. -->
+<section class="orb-view" id="orb-view" data-render="pending" aria-hidden="true"
+         aria-label="Holographic core backdrop">
+  <div class="orb-root" id="orb-root"></div>
+
+  <div class="orb-overlay orb-overlay-vignette" aria-hidden="true"></div>
+  <div class="orb-overlay orb-overlay-grain" aria-hidden="true"></div>
+  <div class="orb-overlay orb-overlay-scanlines" aria-hidden="true"></div>
+
+  <div class="orb-hud orb-hud-title">J.A.R.V.I.S.</div>
+  <div class="orb-hud orb-hud-state">CORE <b id="orb-state">STANDBY</b></div>
+
+  <div class="orb-hud orb-hud-hint">
+    <div>
+      <span class="key">DRAG</span> spin&nbsp;&nbsp;
+      <span class="key">SCROLL</span> zoom&nbsp;&nbsp;
+      <span class="key">R</span> reset
+    </div>
+    <div>
+      <span class="key">+</span><span class="key">−</span> zoom&nbsp;&nbsp;
+      <span class="key">G</span> gestures (needs a camera)
+    </div>
+  </div>
+
+  <div class="orb-hud orb-hud-controls">
+    <div class="orb-camera" id="orb-camera">
+      <video class="orb-camera-video" id="orb-camera-video" muted playsinline></video>
+      <canvas class="orb-camera-overlay" id="orb-camera-overlay" width="208" height="156"></canvas>
+      <div class="orb-camera-status" id="orb-camera-state">SHOW HANDS</div>
+    </div>
+
+    <p class="orb-gesture-status" id="orb-gesture-status" data-state="idle" role="status" aria-live="polite">
+      GESTURES OFF · PRESS G IF A CAMERA IS CONNECTED
+    </p>
+
+    <div class="orb-hud-row">
+      <button type="button" class="orb-btn" id="orb-gestures" aria-pressed="false" aria-describedby="orb-gesture-status">GESTURES OFF</button>
+    </div>
+    <div class="orb-hud-row">
+      <button type="button" class="orb-btn" id="orb-zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" class="orb-btn" id="orb-zoom-out" aria-label="Zoom out">−</button>
+      <button type="button" class="orb-btn" id="orb-reset">RESET</button>
+    </div>
+  </div>
+</section>
 
 <div class="app-shell">
 
@@ -100,6 +171,10 @@
           <span class="weather-temp" id="weather-temp">--</span>
           <span class="weather-location" id="weather-location">UNAVAILABLE</span>
         </span>
+      </button>
+      <button type="button" class="icon-btn small tooltip" id="btn-orb" data-tooltip="CLASSIC CONSOLE LAYOUT"
+              aria-label="Switch to the classic console layout" aria-pressed="true">
+        <svg aria-hidden="true"><use href="#i-orb"></use></svg>
       </button>
       <button type="button" class="icon-btn small tooltip" id="btn-settings" data-module="system"
               data-tooltip="SYSTEM TELEMETRY" aria-label="Open system telemetry">
@@ -201,9 +276,9 @@
     </button>
 
     <div class="core-stage" id="core-stage" role="button" tabindex="0"
-         aria-label="JARVIS core — activate to open chat, press V to use the microphone">
+         aria-label="JARVIS core — activate to open chat, press V to use the microphone. Drag the background to spin the orb.">
       <svg class="core-svg" id="core-svg" width="320" height="320" viewBox="0 0 320 320"
-           role="img" aria-labelledby="core-svg-title">
+           role="img" aria-labelledby="core-svg-title" aria-hidden="true">
         <title id="core-svg-title">JARVIS core — status <span id="core-svg-state">idle</span></title>
         <defs>
           <radialGradient id="coreDisc" cx="50%" cy="45%" r="55%">
@@ -277,68 +352,7 @@
       </div>
     </div>
 
-    <div class="lower-deck">
-      <!-- Acoustic scan -->
-      <section class="scan-panel" aria-label="Acoustic scan">
-        <div class="radar is-offline" id="radar">
-          <canvas id="radar-canvas" width="168" height="168" aria-hidden="true"></canvas>
-        </div>
-        <div class="scan-meta">
-          <span class="scan-title">Acoustic Scan</span>
-          <span class="scan-state" id="scan-state">
-            <span class="link-dot" aria-hidden="true"></span><span id="scan-state-text">MIC UNAVAILABLE</span>
-          </span>
-          <div class="scan-stats">
-            <div class="scan-stat">
-              <span class="k">Contacts</span>
-              <span class="v" id="scan-contacts">--</span>
-            </div>
-            <div class="scan-stat">
-              <span class="k">Peak</span>
-              <span class="v" id="scan-peak">--</span>
-            </div>
-          </div>
-          <span class="scan-disclaimer" id="scan-note">Live microphone spectrum</span>
-        </div>
-      </section>
-
-      <!-- Satellite uplink -->
-      <section class="uplink" aria-label="Satellite uplink">
-        <div class="globe" id="globe">
-          <svg viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <clipPath id="globeClip"><circle cx="50" cy="50" r="46"/></clipPath>
-            </defs>
-            <g clip-path="url(#globeClip)">
-              <g class="globe-meridians">
-                <ellipse class="globe-graticule" cx="50" cy="50" rx="18" ry="46"/>
-                <ellipse class="globe-graticule" cx="50" cy="50" rx="36" ry="46"/>
-                <line class="globe-graticule" x1="50" y1="4" x2="50" y2="96"/>
-              </g>
-              <line class="globe-graticule" x1="4" y1="50" x2="96" y2="50"/>
-              <path class="globe-graticule" d="M8 30 Q50 42 92 30M8 70 Q50 58 92 70"/>
-              <path class="globe-link dash" d="M18 40 Q50 18 78 34"/>
-              <path class="globe-link" d="M24 66 Q52 84 80 62"/>
-              <circle class="globe-node" cx="18" cy="40" r="1.8"/>
-              <circle class="globe-node" cx="78" cy="34" r="1.4"/>
-              <circle class="globe-node" cx="24" cy="66" r="1.2"/>
-              <circle class="globe-node" cx="80" cy="62" r="1.6"/>
-            </g>
-            <circle class="globe-outline" cx="50" cy="50" r="46"/>
-          </svg>
-        </div>
-        <div class="uplink-meta">
-          <span class="scan-title">Satellite Uplink</span>
-          <span class="uplink-state" id="uplink-state">CONNECTING</span>
-          <div class="uplink-rows">
-            <div class="uplink-row"><span class="k">Host</span><span class="v" id="uplink-host">UNKNOWN</span></div>
-            <div class="uplink-row"><span class="k">IP</span><span class="v" id="uplink-ip">UNKNOWN</span></div>
-            <div class="uplink-row"><span class="k">Ping</span><span class="v" id="uplink-ping">--</span></div>
-          </div>
-          <span class="scan-disclaimer">Orbit grid is decorative · telemetry is real</span>
-        </div>
-      </section>
-    </div>
+    <div class="lower-deck"></div>
   </main>
 
   <!-- ══════════ RIGHT PANEL ══════════ -->

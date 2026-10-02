@@ -4,7 +4,7 @@
  * language and the same refresh/teardown discipline.
  */
 
-import { el, setText } from '../lib/dom.js';
+import { el } from '../lib/dom.js';
 import * as toast from '../core/toast.js';
 import * as log from '../core/activity-log.js';
 
@@ -124,4 +124,3 @@ export function reportError(action, err) {
   toast.error(`${action} FAILED`, err.message);
 }
 
-export { setText };

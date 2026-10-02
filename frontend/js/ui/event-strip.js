@@ -28,7 +28,6 @@ export function renderLatest(entry) {
   setText($('#event-sev'), entry.level.toUpperCase());
   setText($('#event-text'), entry.detail ? `${entry.message} — ${entry.detail}` : entry.message);
   const sev = $('#event-sev');
-  setClass(sev, `sev-${SEVERITY[entry.level] || 'info'}`, true);
   for (const key of Object.values(SEVERITY)) setClass(sev, `sev-${key}`, false);
   setClass(sev, `sev-${SEVERITY[entry.level] || 'info'}`, true);
 }

@@ -1,4 +1,4 @@
-﻿[build-system]
+[build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 [project]
@@ -51,6 +51,8 @@ jarvis = "desktop.main:main"
 where = ["."]
 include = ["ultron*", "desktop*"]
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".*", "build", "dist", "agenticSeek", "Vane", "ui-ux-pro-max-skill", "ultron/skills"]
 addopts = "-m 'not real_e2e'"
 markers = [
     "real_e2e: tests that call live model providers and external services",

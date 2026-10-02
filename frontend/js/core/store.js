@@ -6,7 +6,7 @@
  * actually reports it, and the UI renders `UNKNOWN` / `UNAVAILABLE`.
  */
 
-import { emit, on } from '../lib/bus.js';
+import { emit } from '../lib/bus.js';
 
 const state = {
   link: 'connecting',          // connecting | online | offline
@@ -140,4 +140,3 @@ export function severityFor(percent, { warn = 70, crit = 90 } = {}) {
   return 'normal';
 }
 
-export { on, emit };

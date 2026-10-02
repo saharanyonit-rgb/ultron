@@ -24,6 +24,13 @@ let currentStep = -1;
 let awaitingFinal = false;
 let goalId = null;
 let activeProvider = null;
+/*
+ * The backend broadcasts `goal_created` from inside `POST /api/goals`, so the
+ * SSE frame can land *before* the fetch resolves and `goalId` is still null.
+ * This records the description we already rendered optimistically so the echo
+ * is not painted a second time.
+ */
+let localEcho = null;
 
 const STATE_TO_CORE = {
   planning: 'processing',
@@ -52,16 +59,19 @@ export async function submit(text) {
   setTranscript(message);
   setCoreState('processing');
   awaitingFinal = true;
+  localEcho = message;
   resetPlan();
 
   try {
     const result = await api.submitGoal(message, 'chat');
     goalId = result?.id || null;
     activeProvider = null;
+    localEcho = null;
     if (!goalId) throw new Error('Backend accepted no goal identifier');
     log.push('system', `Goal submitted · ${goalId}`);
   } catch (err) {
     awaitingFinal = false;
+    localEcho = null;
     setCoreState(get().link === 'offline' ? 'offline' : 'error');
     render.system('COMMAND REJECTED — backend unreachable or errored');
     log.push('error', `Goal submission failed: ${err.message}`);
@@ -94,6 +104,11 @@ function wireEvents() {
   on('sse:goal_created', (d) => {
     if (!d) return;
     if (goalId && d.id === goalId) return; // already rendered optimistically
+    if (localEcho !== null && (d.description || '') === localEcho) {
+      // Our own submission echoing back before the fetch resolved.
+      localEcho = null;
+      return;
+    }
     render.user(d.description || '');
     setCoreState('processing');
     awaitingFinal = true;
@@ -243,7 +258,9 @@ export function initChat() {
   setVoiceReplyHandler(async (text) => {
     await submit(text);
   });
-  on('teardown', resetPlan);
+  on('teardown', () => {
+    localEcho = null;
+    resetPlan();
+  });
 }
 
-export { goalId, activeProvider };

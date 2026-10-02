@@ -6,7 +6,7 @@
  * own; we only translate its lifecycle into application state.
  */
 
-import { on, emit } from '../lib/bus.js';
+import { emit } from '../lib/bus.js';
 import { setLink, setStreaming } from '../core/store.js';
 import * as log from '../core/activity-log.js';
 import * as toast from '../core/toast.js';
@@ -64,6 +64,10 @@ export function initSSE() {
 
   for (const type of STREAM_EVENTS) {
     source.addEventListener(type, (event) => {
+      // `error` is also EventSource's native transport event, which carries no
+      // payload. Only server-sent events have a string `data`; the native one
+      // is already handled by source.onerror above.
+      if (typeof event.data !== 'string') return;
       let data = {};
       try {
         data = JSON.parse(event.data);
@@ -89,4 +93,3 @@ export function isStreaming() {
   return Boolean(source && source.readyState === EventSource.OPEN);
 }
 
-export { on };

@@ -5,7 +5,6 @@
 
 import { $, el, icon, setClass } from '../lib/dom.js';
 import { on } from '../lib/bus.js';
-import { get, setActiveModule } from '../core/store.js';
 
 let registry = [];
 let onOpen = () => {};
@@ -93,4 +92,3 @@ export function isModuleAvailable(id) {
   return mod ? mod.available !== false : false;
 }
 
-export { get };

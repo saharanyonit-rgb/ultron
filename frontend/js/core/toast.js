@@ -6,7 +6,7 @@
  * an annoyance.
  */
 
-import { $, el, icon } from '../lib/dom.js';
+import { $, el } from '../lib/dom.js';
 
 const stack = () => $('#toast-stack');
 
@@ -68,4 +68,3 @@ export const success = (title, message, opts) => notify('success', title, messag
 export const warning = (title, message, opts) => notify('warning', title, message, opts);
 export const error = (title, message, opts) => notify('error', title, message, opts);
 
-export { icon };

@@ -412,4 +412,4 @@ export function initLowerDeck() {
   on('teardown', () => Radar.stop('MIC RELEASED'));
 }
 
-export { Radar, Spark };
+export { Radar };

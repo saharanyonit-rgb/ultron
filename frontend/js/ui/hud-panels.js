@@ -7,28 +7,27 @@
 import { $, setText, setClass, setWidth, formatBytes } from '../lib/dom.js';
 import { on } from '../lib/bus.js';
 import { get, severityFor } from '../core/store.js';
-import { setClass as toggle } from '../lib/dom.js';
 
 /* ── Left: link panel ─────────────────────────────────────────────── */
 function renderLinkRow() {
   const { link, latencyMs, network, backend } = get();
 
   setText($('#t-latency'), typeof latencyMs === 'number' ? `${latencyMs}ms` : '--');
-  toggle($('#t-latency'), 'is-unknown', typeof latencyMs !== 'number');
+  setClass($('#t-latency'), 'is-unknown', typeof latencyMs !== 'number');
 
   const uplink = network?.connected;
   const uplinkNode = $('#t-uplink');
   if (uplink === true) {
     setText(uplinkNode, 'CONNECTED');
-    toggle(uplinkNode, 'is-unknown', false);
-    toggle(uplinkNode, 'ok', true);
+    setClass(uplinkNode, 'is-unknown', false);
+    setClass(uplinkNode, 'ok', true);
   } else if (uplink === false) {
     setText(uplinkNode, 'OFFLINE');
-    toggle(uplinkNode, 'is-unknown', false);
-    toggle(uplinkNode, 'crit', true);
+    setClass(uplinkNode, 'is-unknown', false);
+    setClass(uplinkNode, 'crit', true);
   } else {
     setText(uplinkNode, 'UNKNOWN');
-    toggle(uplinkNode, 'is-unknown', true);
+    setClass(uplinkNode, 'is-unknown', true);
   }
 
   const backendNode = $('#t-backend');
@@ -38,12 +37,12 @@ function renderLinkRow() {
     if (backend.provider) parts.push(String(backend.provider).toUpperCase());
     if (backend.orchestrator) parts.push('ORCH');
     setText(backendNode, parts.join(' · '));
-    toggle(backendNode, 'is-unknown', false);
-    toggle(backendNode, 'ok', backend.status === 'running');
+    setClass(backendNode, 'is-unknown', false);
+    setClass(backendNode, 'ok', backend.status === 'running');
   } else {
     setText(backendNode, link === 'online' ? 'RUNNING' : 'UNREACHABLE');
-    toggle(backendNode, 'is-unknown', link !== 'online');
-    toggle(backendNode, 'crit', link === 'offline');
+    setClass(backendNode, 'is-unknown', link !== 'online');
+    setClass(backendNode, 'crit', link === 'offline');
   }
 }
 

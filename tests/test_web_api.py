@@ -277,7 +277,7 @@ class TestHTTPIntegration:
         try:
             r = httpx.get(f"http://127.0.0.1:{port}/")
             assert r.status_code == 200
-            assert "ULTRON" in r.text
+            assert "J.A.R.V.I.S." in r.text
             assert "<html" in r.text.lower()
         finally:
             server.shutdown()

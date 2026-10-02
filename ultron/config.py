@@ -303,6 +303,54 @@ class Config:
         return self.llm.grok_api_key
 
     @property
+    def openai_api_key(self) -> str:
+        return self.llm.openai_api_key
+
+    @property
+    def azure_openai_api_key(self) -> str:
+        return self.llm.azure_openai_api_key
+
+    @property
+    def azure_openai_endpoint(self) -> str:
+        return self.llm.azure_openai_endpoint
+
+    @property
+    def azure_openai_deployment(self) -> str:
+        return self.llm.azure_openai_deployment
+
+    @property
+    def azure_openai_version(self) -> str:
+        return self.llm.azure_openai_version
+
+    @property
+    def anthropic_api_key(self) -> str:
+        return self.llm.anthropic_api_key
+
+    @property
+    def cohere_api_key(self) -> str:
+        return self.llm.cohere_api_key
+
+    @property
+    def mistral_api_key(self) -> str:
+        return self.llm.mistral_api_key
+
+    @property
+    def perplexity_api_key(self) -> str:
+        return self.llm.perplexity_api_key
+
+    @property
+    def bedrock_region(self) -> str:
+        return self.llm.bedrock_region
+
+    @property
+    def bedrock_access_key(self) -> str:
+        return self.llm.bedrock_access_key
+
+    @property
+    def bedrock_secret_key(self) -> str:
+        return self.llm.bedrock_secret_key
+
+    @property
     def model(self) -> str:
         return self.llm.model
 

@@ -18,6 +18,7 @@ import { initLowerDeck, Radar } from './ui/hud-lower.js';
 import { initEventStrip } from './ui/event-strip.js';
 import { initDock, setOpenHandler } from './ui/dock.js';
 import { initDrawer } from './ui/drawer.js';
+import { initOrb } from './ui/orb.js';
 import { renderer as chatRenderer } from './ui/chat-view.js';
 
 import { initTelemetry, disposeTelemetry } from './features/telemetry.js';
@@ -44,6 +45,7 @@ function boot() {
   setOpenHandler((id, options) => openModule(id, options));
   initDock(MODULES);
   initModuleRouter();
+  initOrb();
 
   initChat();
   setChatRenderer(chatRenderer);

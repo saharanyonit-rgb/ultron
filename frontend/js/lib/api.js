@@ -149,4 +149,3 @@ export async function probe() {
   return Math.round(performance.now() - started);
 }
 
-export { ApiError };

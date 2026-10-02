@@ -5,13 +5,13 @@
  * module states the truth rather than inventing data.
  */
 
-import { el, escapeHtml, relativeTime } from '../lib/dom.js';
+import { el, relativeTime } from '../lib/dom.js';
 import { get, setWeatherLocation } from '../core/store.js';
 import * as api from '../lib/api.js';
 import * as log from '../core/activity-log.js';
 import * as toast from '../core/toast.js';
 import { setSubtitle, emptyBlock } from '../ui/drawer.js';
-import { section, row, field, textarea, button, reportError } from './kit.js';
+import { section, field, textarea, button, reportError } from './kit.js';
 
 /* ── NOTES ────────────────────────────────────────────────────────── */
 function notesView(body) {
@@ -307,4 +307,3 @@ export const news = {
   render: newsView,
 };
 
-export { escapeHtml, row };

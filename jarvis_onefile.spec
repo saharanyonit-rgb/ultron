@@ -1,6 +1,11 @@
+import os
+
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
+
+# Project root
+ROOT = os.path.dirname(os.path.abspath(SPEC))
 
 hiddenimports = [
     "desktop",
@@ -23,10 +28,13 @@ for package in [
     hiddenimports += collect_submodules(package)
 
 a = Analysis(
-    ["ultron_desktop_entry.py"],
-    pathex=["."],
+    [os.path.join(ROOT, "scripts", "ultron_desktop_entry.py")],
+    pathex=[ROOT],
     binaries=[],
-    datas=[("frontend", "frontend")],
+    datas=[
+        # Include the frontend files (index.html, css, js, vendor/three)
+        (os.path.join(ROOT, "frontend"), "frontend"),
+    ],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -60,5 +68,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=["assets/icons/jarvis.ico"],
+    icon=[os.path.join(ROOT, "assets", "icons", "jarvis.ico")] if os.path.exists(os.path.join(ROOT, "assets", "icons", "jarvis.ico")) else None,
 )

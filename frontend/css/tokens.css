@@ -34,6 +34,27 @@
   --teal: #00ccaa;
   --teal-dim: #009988;
 
+  /* ── Orb Accent ──────────────────────────────────────────────
+     The holographic orb is authored in amber upstream, so amber is
+     the chrome accent for anything the operator acts on: primary
+     buttons, the core instrument, active state, focus. Anything that
+     reports real data keeps the cyan/teal palette below. */
+  --amber: #ffaa30;
+  --amber-dim: #b8791f;
+  --amber-bright: #ffcc66;
+  --amber-hot: #ffe0a0;
+  --glow-amber: rgba(255, 170, 48, 0.4);
+  --glow-amber-strong: rgba(255, 204, 102, 0.6);
+  --glow-amber-soft: rgba(255, 170, 48, 0.14);
+
+  /* ── Glass Surfaces ───────────────────────────────────────────
+     Translucent panels that let the orb bleed through. */
+  --glass: rgba(3, 8, 10, 0.58);
+  --glass-raised: rgba(5, 11, 14, 0.74);
+  --glass-hairline: rgba(255, 170, 48, 0.16);
+  --glass-hairline-strong: rgba(255, 170, 48, 0.38);
+  --glass-blur: 12px;
+
   /* ── Status Colors ─────────────────────────────────────────── */
   --success: #00ff88;
   --success-dim: #00cc6a;
