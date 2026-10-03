@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import logging
 import threading
-import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from ultron.services.base import BaseService
 
 logger = logging.getLogger("ultron.services.reminders")
 
 
-class ReminderStatus(str, Enum):
+class ReminderStatus(StrEnum):
     PENDING = "pending"
     TRIGGERED = "triggered"
     CANCELLED = "cancelled"
@@ -28,13 +28,13 @@ class Reminder:
     id: str
     message: str
     trigger_time: str
-    recurrence: Optional[str] = None
+    recurrence: str | None = None
     status: ReminderStatus = ReminderStatus.PENDING
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
-    triggered_at: Optional[str] = None
+    triggered_at: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "message": self.message,
@@ -47,7 +47,7 @@ class Reminder:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Reminder":
+    def from_dict(cls, data: dict[str, Any]) -> Reminder:
         return cls(
             id=data["id"],
             message=data["message"],
@@ -65,10 +65,10 @@ class RemindersService(BaseService):
 
     _data_file = "reminders.json"
 
-    def __init__(self, data_dir: Optional[Path] = None) -> None:
+    def __init__(self, data_dir: Path | None = None) -> None:
         super().__init__(data_dir)
-        self._timers: Dict[str, threading.Timer] = {}
-        self._notification_callback: Optional[Callable[[Reminder], None]] = None
+        self._timers: dict[str, threading.Timer] = {}
+        self._notification_callback: Callable[[Reminder], None] | None = None
         self._schedule_pending()
 
     def set_notification_callback(self, callback: Callable[[Reminder], None]) -> None:
@@ -79,9 +79,9 @@ class RemindersService(BaseService):
         self,
         message: str,
         trigger_time: str,
-        recurrence: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        recurrence: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Create a new reminder and schedule it."""
         now = self._now_iso()
         reminder_id = self._generate_id()
@@ -101,7 +101,7 @@ class RemindersService(BaseService):
         logger.info("Reminder created and scheduled: %s", reminder_id)
         return reminder.to_dict()
 
-    def get_reminder(self, reminder_id: str) -> Optional[Dict[str, Any]]:
+    def get_reminder(self, reminder_id: str) -> dict[str, Any] | None:
         """Retrieve a single reminder by ID."""
         for item in self._items():
             if item.get("id") == reminder_id:
@@ -110,9 +110,9 @@ class RemindersService(BaseService):
 
     def list_reminders(
         self,
-        status: Optional[str] = None,
+        status: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List reminders, optionally filtered by status."""
         reminders = self._items()
         if status:
@@ -151,8 +151,8 @@ class RemindersService(BaseService):
         try:
             trigger_dt = datetime.fromisoformat(reminder.trigger_time)
             if trigger_dt.tzinfo is None:
-                trigger_dt = trigger_dt.replace(tzinfo=timezone.utc)
-            now = datetime.now(timezone.utc)
+                trigger_dt = trigger_dt.replace(tzinfo=UTC)
+            now = datetime.now(UTC)
             delay = (trigger_dt - now).total_seconds()
             if delay <= 0:
                 logger.info("Reminder %s is already past, triggering immediately", reminder.id)
@@ -209,12 +209,12 @@ class RemindersService(BaseService):
                 except Exception as exc:
                     logger.error("Failed to re-schedule reminder %s: %s", item.get("id"), exc)
 
-    def _calculate_next_recurrence(self, trigger_time: str, recurrence: str) -> Optional[str]:
+    def _calculate_next_recurrence(self, trigger_time: str, recurrence: str) -> str | None:
         """Calculate the next occurrence for a recurrence rule."""
         try:
             dt = datetime.fromisoformat(trigger_time)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
 
             if recurrence == "daily":
                 next_dt = dt.replace(day=dt.day + 1)
@@ -222,6 +222,7 @@ class RemindersService(BaseService):
                 next_dt = dt.replace(day=dt.day + 7)
             elif recurrence == "hourly":
                 from datetime import timedelta
+
                 next_dt = dt + timedelta(hours=1)
             else:
                 return None
@@ -230,20 +231,17 @@ class RemindersService(BaseService):
         except Exception:
             return None
 
-    def get_upcoming(self, count: int = 5) -> List[Dict[str, Any]]:
+    def get_upcoming(self, count: int = 5) -> list[dict[str, Any]]:
         """Get the next N pending reminders."""
-        pending = [
-            r for r in self._items()
-            if r.get("status") == ReminderStatus.PENDING.value
-        ]
+        pending = [r for r in self._items() if r.get("status") == ReminderStatus.PENDING.value]
         pending.sort(key=lambda r: r.get("trigger_time", ""))
         return pending[:count]
 
 
-_reminders_service: Optional[RemindersService] = None
+_reminders_service: RemindersService | None = None
 
 
-def get_reminders_service(data_dir: Optional[Path] = None) -> RemindersService:
+def get_reminders_service(data_dir: Path | None = None) -> RemindersService:
     global _reminders_service
     if _reminders_service is None:
         _reminders_service = RemindersService(data_dir)

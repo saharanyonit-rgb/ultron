@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Orb</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .orb {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 
+                0 0 30px rgba(102, 126, 234, 0.6),
+                0 0 60px rgba(118, 75, 162, 0.4),
+                inset 0 -10px 20px rgba(0, 0, 0, 0.2);
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1), 
+                        box-shadow 0.3s ease,
+                        width 0.3s ease,
+                        height 0.3s ease;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            user-select: none;
+        }
+
+        .orb:hover {
+            box-shadow: 
+                0 0 40px rgba(102, 126, 234, 0.8),
+                0 0 80px rgba(118, 75, 162, 0.6),
+                inset 0 -10px 20px rgba(0, 0, 0, 0.2);
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        .orb:active {
+            transform: translate(-50%, -50%) scale(0.95);
+            transition: transform 0.1s ease;
+        }
+
+        .orb.moving {
+            transition: transform 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .trail {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(102, 126, 234, 0.6) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 50;
+            transform: translate(-50%, -50%);
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+        }
+
+        .instructions {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .coords {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: monospace;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="orb" id="orb">CLICK</div>
+    <div class="instructions">Click anywhere to move the orb</div>
+    <div class="coords" id="coords">x: 0, y: 0</div>
+
+    <script>
+        const orb = document.getElementById('orb');
+        const coordsDisplay = document.getElementById('coords');
+        let isMoving = false;
+
+        // Create trail effect
+        function createTrail(x, y) {
+            const trail = document.createElement('div');
+            trail.className = 'trail';
+            trail.style.left = x + 'px';
+            trail.style.top = y + 'px';
+            document.body.appendChild(trail);
+            setTimeout(() => trail.remove(), 500);
+        }
+
+        // Move orb to position
+        function moveOrb(x, y) {
+            const orbRect = orb.getBoundingClientRect();
+            const orbCenterX = orbRect.left + orbRect.width / 2;
+            const orbCenterY = orbRect.top + orbRect.height / 2;
+
+            // Create trail at current position
+            createTrail(orbCenterX, orbCenterY);
+
+            // Move orb
+            orb.classList.add('moving');
+            orb.style.left = x + 'px';
+            orb.style.top = y + 'px';
+            orb.style.transform = 'translate(-50%, -50%)';
+
+            // Update coords display
+            coordsDisplay.textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+
+            // Remove moving class after animation
+            setTimeout(() => {
+                orb.classList.remove('moving');
+            }, 800);
+        }
+
+        // Click anywhere on document to move orb
+        document.addEventListener('click', (e) => {
+            // Don't move if clicking on the orb itself (prevents double trigger)
+            if (e.target === orb) return;
+            
+            moveOrb(e.clientX, e.clientY);
+        });
+
+        // Also allow dragging the orb
+        let isDragging = false;
+        let offsetX, offsetY;
+
+        orb.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            const rect = orb.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            orb.style.transition = 'none';
+            orb.style.cursor = 'grabbing';
+            e.stopPropagation();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const x = e.clientX - offsetX + orb.offsetWidth / 2;
+            const y = e.clientY - offsetY + orb.offsetHeight / 2;
+            
+            orb.style.left = x + 'px';
+            orb.style.top = y + 'px';
+            orb.style.transform = 'translate(-50%, -50%)';
+            
+            coordsDisplay.textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                orb.style.transition = 'transform 0.5s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease';
+                orb.style.cursor = 'pointer';
+                // Create trail at drop position
+                const rect = orb.getBoundingClientRect();
+                createTrail(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            }
+        });
+
+        // Touch support for mobile
+        orb.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            const touch = e.touches[0];
+            const rect = orb.getBoundingClientRect();
+            offsetX = touch.clientX - rect.left;
+            offsetY = touch.clientY - rect.top;
+            orb.style.transition = 'none';
+            e.stopPropagation();
+        }, { passive: true });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const x = touch.clientX - offsetX + orb.offsetWidth / 2;
+            const y = touch.clientY - offsetY + orb.offsetHeight / 2;
+            orb.style.left = x + 'px';
+            orb.style.top = y + 'px';
+            orb.style.transform = 'translate(-50%, -50%)';
+            coordsDisplay.textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+        }, { passive: false });
+
+        document.addEventListener('touchend', () => {
+            if (isDragging) {
+                isDragging = false;
+                orb.style.transition = 'transform 0.5s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease';
+                const rect = orb.getBoundingClientRect();
+                createTrail(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            }
+        });
+
+        // Click on orb to toggle size
+        orb.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentWidth = parseInt(getComputedStyle(orb).width);
+            const newSize = currentWidth === 60 ? 100 : 60;
+            orb.style.width = newSize + 'px';
+            orb.style.height = newSize + 'px';
+            orb.textContent = newSize === 100 ? 'BIG' : 'CLICK';
+        });
+
+        // Keyboard support - arrow keys to nudge
+        document.addEventListener('keydown', (e) => {
+            const rect = orb.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const step = e.shiftKey ? 50 : 10;
+            
+            let newX = centerX;
+            let newY = centerY;
+            
+            switch(e.key) {
+                case 'ArrowLeft': newX -= step; break;
+                case 'ArrowRight': newX += step; break;
+                case 'ArrowUp': newY -= step; break;
+                case 'ArrowDown': newY += step; break;
+                default: return;
+            }
+            
+            // Keep within viewport
+            newX = Math.max(orb.offsetWidth / 2, Math.min(window.innerWidth - orb.offsetWidth / 2, newX));
+            newY = Math.max(orb.offsetHeight / 2, Math.min(window.innerHeight - orb.offsetHeight / 2, newY));
+            
+            moveOrb(newX, newY);
+        });
+    </script>
+</body>
+</html>

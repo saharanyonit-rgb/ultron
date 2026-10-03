@@ -10,7 +10,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger("jarvis.desktop.startup")
 
@@ -19,7 +18,7 @@ STARTUP_RELATIVE = r"Microsoft\Windows\Start Menu\Programs\Startup"
 SHORTCUT_NAME = "JARVIS.lnk"
 
 
-def _get_startup_folder() -> Optional[Path]:
+def _get_startup_folder() -> Path | None:
     """Get the Windows Startup folder."""
     appdata = os.environ.get(STARTUP_FOLDER_ENV)
     if not appdata:
@@ -55,7 +54,6 @@ def register() -> bool:
     else:
         # In development mode, create a batch file launcher
         python_exe = sys.executable
-        project_root = Path(__file__).resolve().parent.parent
         batch_content = f'@echo off\n"{python_exe}" -m desktop --start-minimized\n'
         batch_path = startup / "JARVIS.bat"
         try:
@@ -69,6 +67,7 @@ def register() -> bool:
     # Create .lnk shortcut using PowerShell
     try:
         import subprocess
+
         ps_script = f"""
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut("{startup / SHORTCUT_NAME}")

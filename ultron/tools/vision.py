@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import base64
+from ultron.risk import RiskLevel
+
 import logging
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ultron.platform import is_windows
-from ultron.tools.base import Tool, ToolError
+from ultron.tools.base import Tool
 
 logger = logging.getLogger("ultron.tools.vision")
 
@@ -20,6 +20,14 @@ class VisionTool(Tool):
     """Capture the screen and analyze it with a vision-capable LLM."""
 
     name = "vision_analyze"
+    keywords = (
+        "analyze screen",
+        "what do you see",
+        "look at the screen",
+        "describe the screen",
+        "read the screen",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Capture the screen and analyze it with a vision-capable LLM. "
         "Use this when the user asks to look at the screen, check what's displayed, "
@@ -56,7 +64,7 @@ class VisionTool(Tool):
     }
     mutates = True
 
-    def run(self, prompt: str, path: Optional[str] = None, **_: Any) -> Dict[str, Any]:
+    def run(self, prompt: str, path: str | None = None, **_: Any) -> dict[str, Any]:
         screenshot_result = self._capture_screen(path)
         if "error" in screenshot_result:
             return screenshot_result
@@ -74,7 +82,7 @@ class VisionTool(Tool):
             "height": screenshot_result["height"],
         }
 
-    def _capture_screen(self, path: Optional[str]) -> Dict[str, Any]:
+    def _capture_screen(self, path: str | None) -> dict[str, Any]:
         if path:
             target = Path(path).expanduser()
             if target.suffix.lower() != ".png":
@@ -91,7 +99,7 @@ class VisionTool(Tool):
             return self._capture_windows(target)
         return self._capture_posix(target)
 
-    def _capture_windows(self, target: Path) -> Dict[str, Any]:
+    def _capture_windows(self, target: Path) -> dict[str, Any]:
         from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
 
         script = (
@@ -116,7 +124,7 @@ class VisionTool(Tool):
             width, height = 0, 0
         return {"path": str(target), "width": width, "height": height}
 
-    def _capture_posix(self, target: Path) -> Dict[str, Any]:
+    def _capture_posix(self, target: Path) -> dict[str, Any]:
         """Take screenshot on Linux/Android using available tools."""
         tools = [
             (["scrot", str(target)], None),
@@ -129,7 +137,10 @@ class VisionTool(Tool):
         for cmd, _ in tools:
             try:
                 proc = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=15,
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
                 )
                 if proc.returncode == 0 and target.is_file():
                     return {"path": str(target), "width": 0, "height": 0}
@@ -138,10 +149,10 @@ class VisionTool(Tool):
 
         return {"error": "No screenshot tool available. Install scrot, maim, or termux-api."}
 
-    def _analyze_image(self, image_path: str, prompt: str) -> Dict[str, Any]:
+    def _analyze_image(self, image_path: str, prompt: str) -> dict[str, Any]:
         try:
+            from ultron.config import ConfigError, load_config
             from ultron.llm import build_provider
-            from ultron.config import load_config, ConfigError
         except Exception as exc:
             return {"error": f"cannot import LLM provider: {exc}"}
 

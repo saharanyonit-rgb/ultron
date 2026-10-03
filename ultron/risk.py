@@ -14,10 +14,14 @@ Risk levels:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ultron.tools.catalog import ToolCatalog
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     READ = "read"
     LOW = "low"
     MEDIUM = "medium"
@@ -25,62 +29,53 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
-# Default risk classifications for known tool categories
-DEFAULT_RISK_MAP: dict[str, RiskLevel] = {
-    # Read-only tools
-    "get_system_info": RiskLevel.READ,
-    "get_clipboard": RiskLevel.READ,
-    "search_files": RiskLevel.READ,
-    "read_file": RiskLevel.READ,
-    "open_url": RiskLevel.READ,
-    "take_screenshot": RiskLevel.READ,
-    # Low-risk mutations
-    "set_clipboard": RiskLevel.LOW,
-    "open_app": RiskLevel.LOW,
-    # Medium-risk mutations
-    "create_file": RiskLevel.MEDIUM,
-    "close_app": RiskLevel.MEDIUM,
-    # High-risk mutations
-    "delete_file": RiskLevel.HIGH,
-    "move_file": RiskLevel.HIGH,
-    "rename_file": RiskLevel.HIGH,
-    # Critical operations
-    "execute_command": RiskLevel.CRITICAL,
-    "execute_shell": RiskLevel.CRITICAL,
-    "windows_shutdown": RiskLevel.CRITICAL,
-    # GitHub integration
-    "github_search": RiskLevel.READ,
-    "github_clone": RiskLevel.LOW,
-    "github_pull": RiskLevel.LOW,
-    "github_push": RiskLevel.MEDIUM,
-    "github_create_repo": RiskLevel.MEDIUM,
-    # UI/UX design generator
-    "generate_ui": RiskLevel.LOW,
-}
-
-
 class RiskClassifier:
-    """Classifies tool operations by risk level."""
+    """Classifies tool operations by risk level.
 
-    def __init__(self, custom_risk_map: dict[str, RiskLevel] | None = None) -> None:
-        self._risk_map = dict(DEFAULT_RISK_MAP)
-        if custom_risk_map:
-            self._risk_map.update(custom_risk_map)
+    Risk is derived from the tool's own `risk` declaration in its metadata.
+    No hardcoded side-tables are used — the catalog is the single source of truth.
+
+    The catalog import is deferred to construction time: `ultron.tools.catalog`
+    imports `RiskLevel` from this module, so importing it eagerly would be
+    circular.
+    """
+
+    def __init__(self, catalog: ToolCatalog | None = None) -> None:
+        if catalog is None:
+            from ultron.tools.catalog import default_catalog
+
+            catalog = default_catalog()
+        self._catalog = catalog
+        # Runtime overrides layered on top of the declared risk. Kept separate
+        # from the catalog so a caller's decision never mutates tool metadata.
+        self._overrides: dict[str, RiskLevel] = {}
 
     def classify(self, tool_name: str, arguments: dict | None = None) -> RiskLevel:
         """Classify a tool operation by risk level."""
-        if tool_name in self._risk_map:
-            return self._risk_map[tool_name]
-        # Default to MEDIUM for unknown tools
+        if tool_name in self._overrides:
+            return self._overrides[tool_name]
+        risk = self._catalog.risk_of(tool_name)
+        if risk is not None:
+            return risk
+        # Not in the catalog. MEDIUM keeps a per-session downgrade possible
+        # without letting an unregistered name default to something permissive.
         return RiskLevel.MEDIUM
 
     def register(self, tool_name: str, risk_level: RiskLevel) -> None:
-        """Register a custom risk classification for a tool."""
-        self._risk_map[tool_name] = risk_level
+        """Override the risk level for `tool_name` for this classifier only.
+
+        The authoritative value is the tool's own `risk` declaration; this is a
+        session-scoped override and is not written back to the catalog.
+        """
+        self._overrides[tool_name] = risk_level
+
+    def clear_overrides(self) -> None:
+        """Drop every runtime override, restoring declared risk levels."""
+        self._overrides.clear()
 
     def get_all_classifications(self) -> dict[str, RiskLevel]:
-        """Return all registered risk classifications."""
-        return dict(self._risk_map)
+        """Return every known classification: declared risk plus overrides."""
+        return {**self._catalog.risk_map(), **self._overrides}
 
 
-__all__ = ["RiskLevel", "RiskClassifier", "DEFAULT_RISK_MAP"]
+__all__ = ["RiskLevel", "RiskClassifier"]

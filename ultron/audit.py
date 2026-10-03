@@ -21,16 +21,16 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ultron.audit")
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     REQUEST_RECEIVED = "request_received"
     PLAN_CREATED = "plan_created"
     AGENT_SELECTED = "agent_selected"
@@ -55,8 +55,16 @@ class EventType(str, Enum):
 
 # Sensitive keys to redact
 SENSITIVE_KEYS = {
-    "api_key", "apikey", "api-key", "secret", "password", "token",
-    "authorization", "credentials", "access_token", "refresh_token",
+    "api_key",
+    "apikey",
+    "api-key",
+    "secret",
+    "password",
+    "token",
+    "authorization",
+    "credentials",
+    "access_token",
+    "refresh_token",
 }
 
 
@@ -65,17 +73,17 @@ class AuditEvent:
     """A single audit event."""
 
     event_type: EventType
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     request_id: str = ""
     task_id: str = ""
     step_id: str = ""
     tool_name: str = ""
     agent_name: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event_type": self.event_type.value,
             "timestamp": self.timestamp,
@@ -89,9 +97,9 @@ class AuditEvent:
             "error": self.error,
         }
 
-    def _redact_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _redact_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         """Redact sensitive information from metadata."""
-        redacted = {}
+        redacted: dict[str, Any] = {}
         for key, value in metadata.items():
             if key.lower() in SENSITIVE_KEYS:
                 redacted[key] = "***REDACTED***"
@@ -107,12 +115,12 @@ class AuditLogger:
 
     def __init__(self, path: str | Path | None = None) -> None:
         self._path = Path(path) if path else None
-        self._events: List[AuditEvent] = []
+        self._events: list[AuditEvent] = []
         if self._path:
             self._path.parent.mkdir(parents=True, exist_ok=True)
 
     @property
-    def events(self) -> List[AuditEvent]:
+    def events(self) -> list[AuditEvent]:
         return list(self._events)
 
     def log(self, event: AuditEvent) -> None:
@@ -131,97 +139,117 @@ class AuditLogger:
             self._persist_event(event)
 
     def log_request_received(self, request_id: str, user_input: str) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.REQUEST_RECEIVED,
-            request_id=request_id,
-            metadata={"input_length": len(user_input)},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.REQUEST_RECEIVED,
+                request_id=request_id,
+                metadata={"input_length": len(user_input)},
+            )
+        )
 
     def log_plan_created(self, request_id: str, plan_id: str, step_count: int) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.PLAN_CREATED,
-            request_id=request_id,
-            metadata={"plan_id": plan_id, "step_count": step_count},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.PLAN_CREATED,
+                request_id=request_id,
+                metadata={"plan_id": plan_id, "step_count": step_count},
+            )
+        )
 
     def log_agent_selected(self, request_id: str, agent_name: str) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.AGENT_SELECTED,
-            request_id=request_id,
-            agent_name=agent_name,
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.AGENT_SELECTED,
+                request_id=request_id,
+                agent_name=agent_name,
+            )
+        )
 
     def log_tool_requested(
-        self, request_id: str, tool_name: str, arguments: Dict[str, Any]
+        self, request_id: str, tool_name: str, arguments: dict[str, Any]
     ) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.TOOL_REQUESTED,
-            request_id=request_id,
-            tool_name=tool_name,
-            metadata={"arguments": arguments},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.TOOL_REQUESTED,
+                request_id=request_id,
+                tool_name=tool_name,
+                metadata={"arguments": arguments},
+            )
+        )
 
     def log_permission_decision(
         self, request_id: str, tool_name: str, allowed: bool, risk_level: str
     ) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.PERMISSION_DECIDED,
-            request_id=request_id,
-            tool_name=tool_name,
-            success=allowed,
-            metadata={"risk_level": risk_level, "allowed": allowed},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.PERMISSION_DECIDED,
+                request_id=request_id,
+                tool_name=tool_name,
+                success=allowed,
+                metadata={"risk_level": risk_level, "allowed": allowed},
+            )
+        )
 
     def log_tool_executed(
         self, request_id: str, tool_name: str, success: bool, duration_ms: float
     ) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.TOOL_EXECUTED,
-            request_id=request_id,
-            tool_name=tool_name,
-            success=success,
-            metadata={"duration_ms": duration_ms},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.TOOL_EXECUTED,
+                request_id=request_id,
+                tool_name=tool_name,
+                success=success,
+                metadata={"duration_ms": duration_ms},
+            )
+        )
 
     def log_verification(
-        self, request_id: str, tool_name: str, passed: bool, checks: Dict[str, bool]
+        self, request_id: str, tool_name: str, passed: bool, checks: dict[str, bool]
     ) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.VERIFICATION_RESULT,
-            request_id=request_id,
-            tool_name=tool_name,
-            success=passed,
-            metadata={"checks": checks},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.VERIFICATION_RESULT,
+                request_id=request_id,
+                tool_name=tool_name,
+                success=passed,
+                metadata={"checks": checks},
+            )
+        )
 
     def log_retry(self, request_id: str, step_id: str, retry_count: int, reason: str) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.RETRY,
-            request_id=request_id,
-            step_id=step_id,
-            metadata={"retry_count": retry_count, "reason": reason},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.RETRY,
+                request_id=request_id,
+                step_id=step_id,
+                metadata={"retry_count": retry_count, "reason": reason},
+            )
+        )
 
     def log_recovery(self, request_id: str, action: str, reason: str) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.RECOVERY_ACTION,
-            request_id=request_id,
-            metadata={"action": action, "reason": reason},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.RECOVERY_ACTION,
+                request_id=request_id,
+                metadata={"action": action, "reason": reason},
+            )
+        )
 
     def log_final_response(self, request_id: str, success: bool, response_length: int) -> None:
-        self.log(AuditEvent(
-            event_type=EventType.FINAL_RESPONSE,
-            request_id=request_id,
-            success=success,
-            metadata={"response_length": response_length},
-        ))
+        self.log(
+            AuditEvent(
+                event_type=EventType.FINAL_RESPONSE,
+                request_id=request_id,
+                success=success,
+                metadata={"response_length": response_length},
+            )
+        )
 
-    def get_trace(self, request_id: str) -> List[AuditEvent]:
+    def get_trace(self, request_id: str) -> list[AuditEvent]:
         """Get all events for a specific request."""
         return [e for e in self._events if e.request_id == request_id]
 
-    def get_task_trace(self, task_id: str) -> List[AuditEvent]:
+    def get_task_trace(self, task_id: str) -> list[AuditEvent]:
         """Get all events for a specific task."""
         return [e for e in self._events if e.task_id == task_id]
 
@@ -231,9 +259,13 @@ class AuditLogger:
 
     def _persist_event(self, event: AuditEvent) -> None:
         """Append an event to the audit file."""
+        path = self._path
+        if path is None:
+            # No file configured; log() only calls this when a path is set.
+            return
         try:
             line = json.dumps(event.to_dict(), ensure_ascii=False, default=str)
-            with self._path.open("a", encoding="utf-8") as fh:
+            with path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
         except OSError as exc:
             logger.error("Failed to persist audit event: %s", exc)

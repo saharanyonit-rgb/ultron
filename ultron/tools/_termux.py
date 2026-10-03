@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger("ultron.tools.termux")
 
@@ -20,6 +20,7 @@ COMMAND_TIMEOUT = 15
 @dataclass
 class TermuxResult:
     """Structured result of a termux command."""
+
     command: str
     stdout: str = ""
     stderr: str = ""
@@ -30,8 +31,12 @@ class TermuxResult:
     def ok(self) -> bool:
         return self.returncode == 0
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {"command": self.command, "success": self.ok, "returncode": self.returncode}
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "command": self.command,
+            "success": self.ok,
+            "returncode": self.returncode,
+        }
         if self.data is not None:
             d["data"] = self.data
         if self.stdout:
@@ -43,8 +48,8 @@ class TermuxResult:
 
 def run_termux(
     subcommand: str,
-    args: Optional[List[str]] = None,
-    stdin_text: Optional[str] = None,
+    args: list[str] | None = None,
+    stdin_text: str | None = None,
     timeout: int = COMMAND_TIMEOUT,
     parse_json: bool = False,
 ) -> TermuxResult:
@@ -89,7 +94,7 @@ def run_termux(
 
 
 def run_raw(
-    args: List[str],
+    args: list[str],
     timeout: int = COMMAND_TIMEOUT,
 ) -> TermuxResult:
     """Run an arbitrary shell command (not termux-*)."""
@@ -120,27 +125,27 @@ def run_input(keyevent: str) -> TermuxResult:
     return run_raw(["input", keyevent], timeout=10)
 
 
-def run_am(args: List[str]) -> TermuxResult:
+def run_am(args: list[str]) -> TermuxResult:
     """Run an Android 'am' activity manager command."""
     return run_raw(["am"] + args, timeout=10)
 
 
-def run_pm(args: List[str]) -> TermuxResult:
+def run_pm(args: list[str]) -> TermuxResult:
     """Run Android 'pm' package manager command."""
     return run_raw(["pm"] + args, timeout=10)
 
 
-def run_settings(args: List[str]) -> TermuxResult:
+def run_settings(args: list[str]) -> TermuxResult:
     """Run Android 'settings' command."""
     return run_raw(["settings"] + args, timeout=10)
 
 
-def run_dumpsys(args: List[str]) -> TermuxResult:
+def run_dumpsys(args: list[str]) -> TermuxResult:
     """Run Android 'dumpsys' command."""
     return run_raw(["dumpsys"] + args, timeout=15)
 
 
-def run_cmd(args: List[str]) -> TermuxResult:
+def run_cmd(args: list[str]) -> TermuxResult:
     """Run any shell command."""
     return run_raw(args, timeout=15)
 

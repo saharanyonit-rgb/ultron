@@ -14,15 +14,15 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ultron.memory_manager")
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     WORKING = "working"
     EPISODIC = "episodic"
     SEMANTIC = "semantic"
@@ -32,23 +32,25 @@ class MemoryType(str, Enum):
 @dataclass
 class MemoryEntry:
     """A single memory record."""
+
     content: str
     memory_type: str = MemoryType.WORKING.value
     importance: float = 0.5
     source: str = ""
-    tags: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    tags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     entry_id: str = ""
 
     def __post_init__(self):
         if not self.entry_id:
             import hashlib
-            self.entry_id = hashlib.md5(
-                f"{self.content}:{self.timestamp}".encode()
-            ).hexdigest()[:12]
 
-    def to_dict(self) -> Dict[str, Any]:
+            self.entry_id = hashlib.md5(f"{self.content}:{self.timestamp}".encode()).hexdigest()[
+                :12
+            ]
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "entry_id": self.entry_id,
             "content": self.content,
@@ -61,25 +63,26 @@ class MemoryEntry:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MemoryEntry":
+    def from_dict(cls, data: dict[str, Any]) -> MemoryEntry:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 @dataclass
 class EpisodeRecord:
     """Record of a completed goal execution."""
+
     goal_id: str = ""
     goal_description: str = ""
     outcome: str = ""
     tasks_completed: int = 0
     tasks_failed: int = 0
     duration_seconds: float = 0.0
-    strategies_used: List[str] = field(default_factory=list)
-    lessons_learned: List[str] = field(default_factory=list)
-    tools_used: List[str] = field(default_factory=list)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    strategies_used: list[str] = field(default_factory=list)
+    lessons_learned: list[str] = field(default_factory=list)
+    tools_used: list[str] = field(default_factory=list)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "goal_description": self.goal_description,
@@ -108,16 +111,16 @@ class MemoryManager:
         self,
         working_memory_limit: int = 50,
         episodic_memory_limit: int = 200,
-        persistence_path: Optional[str | Path] = None,
+        persistence_path: str | Path | None = None,
     ) -> None:
         self._working_limit = working_memory_limit
         self._episodic_limit = episodic_memory_limit
         self._persistence_path = Path(persistence_path) if persistence_path else None
 
-        self._working: List[MemoryEntry] = []
-        self._episodic: List[EpisodeRecord] = []
-        self._semantic: List[MemoryEntry] = []
-        self._project: Dict[str, List[MemoryEntry]] = {}
+        self._working: list[MemoryEntry] = []
+        self._episodic: list[EpisodeRecord] = []
+        self._semantic: list[MemoryEntry] = []
+        self._project: dict[str, list[MemoryEntry]] = {}
 
         if self._persistence_path:
             self._load()
@@ -133,10 +136,10 @@ class MemoryManager:
         )
         self._working.append(entry)
         if len(self._working) > self._working_limit:
-            self._working = self._working[-self._working_limit:]
+            self._working = self._working[-self._working_limit :]
         return entry
 
-    def get_working(self, limit: int = 10) -> List[MemoryEntry]:
+    def get_working(self, limit: int = 10) -> list[MemoryEntry]:
         return list(self._working[-limit:])
 
     def clear_working(self) -> None:
@@ -148,21 +151,21 @@ class MemoryManager:
         """Store a completed goal execution episode."""
         self._episodic.append(episode)
         if len(self._episodic) > self._episodic_limit:
-            self._episodic = self._episodic[-self._episodic_limit:]
+            self._episodic = self._episodic[-self._episodic_limit :]
         self._persist()
 
     def get_episodes(
         self,
-        outcome: Optional[str] = None,
+        outcome: str | None = None,
         limit: int = 10,
-    ) -> List[EpisodeRecord]:
+    ) -> list[EpisodeRecord]:
         """Retrieve episodes, optionally filtered by outcome."""
         episodes = self._episodic
         if outcome:
             episodes = [e for e in episodes if e.outcome == outcome]
         return list(episodes[-limit:])
 
-    def search_episodes(self, query: str, limit: int = 5) -> List[EpisodeRecord]:
+    def search_episodes(self, query: str, limit: int = 5) -> list[EpisodeRecord]:
         """Search episodes by keyword relevance."""
         query_words = set(query.lower().split())
         scored = []
@@ -188,7 +191,7 @@ class MemoryManager:
         self._persist()
         return entry
 
-    def search_semantic(self, query: str, limit: int = 10) -> List[MemoryEntry]:
+    def search_semantic(self, query: str, limit: int = 10) -> list[MemoryEntry]:
         """Search semantic memory by keyword relevance."""
         query_words = set(query.lower().split())
         scored = []
@@ -216,7 +219,7 @@ class MemoryManager:
         self._persist()
         return entry
 
-    def get_project(self, project: str, limit: int = 20) -> List[MemoryEntry]:
+    def get_project(self, project: str, limit: int = 20) -> list[MemoryEntry]:
         """Get memory entries for a project."""
         return list(self._project.get(project, [])[-limit:])
 
@@ -269,10 +272,7 @@ class MemoryManager:
         data = {
             "episodic": [e.to_dict() for e in self._episodic],
             "semantic": [e.to_dict() for e in self._semantic],
-            "project": {
-                k: [e.to_dict() for e in v]
-                for k, v in self._project.items()
-            },
+            "project": {k: [e.to_dict() for e in v] for k, v in self._project.items()},
         }
 
         self._persistence_path.parent.mkdir(parents=True, exist_ok=True)
@@ -291,10 +291,15 @@ class MemoryManager:
             with self._persistence_path.open("r", encoding="utf-8") as fh:
                 data = json.load(fh)
                 for e in data.get("episodic", []):
-                    self._episodic.append(EpisodeRecord(**{
-                        k: v for k, v in e.items()
-                        if k in EpisodeRecord.__dataclass_fields__
-                    }))
+                    self._episodic.append(
+                        EpisodeRecord(
+                            **{
+                                k: v
+                                for k, v in e.items()
+                                if k in EpisodeRecord.__dataclass_fields__
+                            }
+                        )
+                    )
                 for e in data.get("semantic", []):
                     self._semantic.append(MemoryEntry.from_dict(e))
                 for project, entries in data.get("project", {}).items():
@@ -302,7 +307,7 @@ class MemoryManager:
         except (json.JSONDecodeError, OSError) as exc:
             logger.error("Failed to load memory: %s", exc)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get memory statistics."""
         return {
             "working": len(self._working),

@@ -25,21 +25,19 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any, cast
 
 from ultron.network_security import (
-    BrowserSandboxPolicy,
     BrowserSecurityGuard,
     NetworkSecurityGuard,
-    NetworkPolicy,
 )
 from ultron.risk import RiskLevel
 
 logger = logging.getLogger("ultron.browser")
 
 
-class BrowserAction(str, Enum):
+class BrowserAction(StrEnum):
     NAVIGATE = "navigate"
     READ = "read"
     CLICK = "click"
@@ -50,7 +48,7 @@ class BrowserAction(str, Enum):
 
 
 # Risk levels for browser actions
-BROWSER_RISK_MAP: Dict[BrowserAction, RiskLevel] = {
+BROWSER_RISK_MAP: dict[BrowserAction, RiskLevel] = {
     BrowserAction.NAVIGATE: RiskLevel.READ,
     BrowserAction.READ: RiskLevel.READ,
     BrowserAction.EXTRACT: RiskLevel.READ,
@@ -67,11 +65,11 @@ class BrowserResult:
 
     action: BrowserAction
     success: bool
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     error: str = ""
     url: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "action": self.action.value,
             "success": self.success,
@@ -83,6 +81,14 @@ class BrowserResult:
 
 class BrowserPage(ABC):
     """Abstract representation of a browser page."""
+
+    # Raw driver handle backing this page: a Playwright sync `Page` for
+    # `PlaywrightBrowserPage`, or `_MockPageProxy` for `MockBrowserPage`.
+    # Declared (annotation only, no runtime attribute) because
+    # `ultron.tools.browser_tools` reaches into it for the low-level
+    # mouse/keyboard/navigation calls the `BrowserPage` ABC does not model;
+    # every concrete implementation sets it in `__init__`.
+    _page: Any
 
     @abstractmethod
     def get_url(self) -> str:
@@ -262,20 +268,20 @@ class PlaywrightBrowserPage(BrowserPage):
         self._page = page
 
     def get_url(self) -> str:
-        return self._page.url
+        return cast(str, self._page.url)
 
     def get_title(self) -> str:
-        return self._page.title()
+        return cast(str, self._page.title())
 
     def get_text(self) -> str:
         try:
-            return self._page.inner_text("body")
+            return cast(str, self._page.inner_text("body"))
         except Exception:
             return ""
 
     def get_html(self) -> str:
         try:
-            return self._page.content()
+            return cast(str, self._page.content())
         except Exception:
             return ""
 
@@ -284,18 +290,23 @@ class PlaywrightBrowserPage(BrowserPage):
             self._page.click(selector, timeout=10000)
             return BrowserResult(action=BrowserAction.CLICK, success=True, url=self.get_url())
         except Exception as exc:
-            return BrowserResult(action=BrowserAction.CLICK, success=False, error=str(exc), url=self.get_url())
+            return BrowserResult(
+                action=BrowserAction.CLICK, success=False, error=str(exc), url=self.get_url()
+            )
 
     def fill(self, selector: str, value: str) -> BrowserResult:
         try:
             self._page.fill(selector, value, timeout=10000)
             return BrowserResult(action=BrowserAction.FILL, success=True, url=self.get_url())
         except Exception as exc:
-            return BrowserResult(action=BrowserAction.FILL, success=False, error=str(exc), url=self.get_url())
+            return BrowserResult(
+                action=BrowserAction.FILL, success=False, error=str(exc), url=self.get_url()
+            )
 
     def screenshot(self) -> BrowserResult:
         try:
-            import tempfile, os
+            import tempfile
+
             tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             tmp.close()
             self._page.screenshot(path=tmp.name)
@@ -306,7 +317,9 @@ class PlaywrightBrowserPage(BrowserPage):
                 url=self.get_url(),
             )
         except Exception as exc:
-            return BrowserResult(action=BrowserAction.SCREENSHOT, success=False, error=str(exc), url=self.get_url())
+            return BrowserResult(
+                action=BrowserAction.SCREENSHOT, success=False, error=str(exc), url=self.get_url()
+            )
 
 
 class PlaywrightBrowserSession(BrowserSession):
@@ -314,8 +327,8 @@ class PlaywrightBrowserSession(BrowserSession):
 
     def __init__(self, headless: bool = False) -> None:
         self._headless = headless
-        self._pw = None
-        self._browser = None
+        self._pw: Any = None
+        self._browser: Any = None
         self._page: PlaywrightBrowserPage | None = None
         self._running = False
 
@@ -323,6 +336,7 @@ class PlaywrightBrowserSession(BrowserSession):
         if self._running:
             return
         from playwright.sync_api import sync_playwright
+
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(headless=self._headless)
         context = self._browser.new_context(
@@ -352,12 +366,21 @@ class PlaywrightBrowserSession(BrowserSession):
 
     def navigate(self, url: str) -> BrowserResult:
         if not self._running:
-            return BrowserResult(action=BrowserAction.NAVIGATE, success=False, error="Browser not started")
+            return BrowserResult(
+                action=BrowserAction.NAVIGATE, success=False, error="Browser not started"
+            )
+        page = self._page
+        if page is None:
+            return BrowserResult(
+                action=BrowserAction.NAVIGATE, success=False, error="No page loaded", url=url
+            )
         try:
-            self._page._page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page._page.goto(url, wait_until="domcontentloaded", timeout=30000)
             return BrowserResult(action=BrowserAction.NAVIGATE, success=True, url=url)
         except Exception as exc:
-            return BrowserResult(action=BrowserAction.NAVIGATE, success=False, error=str(exc), url=url)
+            return BrowserResult(
+                action=BrowserAction.NAVIGATE, success=False, error=str(exc), url=url
+            )
 
     def get_page(self) -> BrowserPage | None:
         return self._page
@@ -370,13 +393,16 @@ def create_default_session() -> BrowserSession:
     """Create a real Playwright browser session, fall back to mock."""
     try:
         import asyncio
-        loop = asyncio.get_running_loop()
+
+        asyncio.get_running_loop()
         logger.info("Async event loop detected, using mock browser for compatibility")
         return MockBrowserSession()
     except RuntimeError:
         pass
     try:
-        from playwright.sync_api import sync_playwright
+        # Import probe only: playwright is used by PlaywrightBrowserSession itself.
+        from playwright.sync_api import sync_playwright  # noqa: F401
+
         return PlaywrightBrowserSession(headless=False)
     except ImportError:
         logger.warning("Playwright not installed, using mock browser")
@@ -425,7 +451,8 @@ class BrowserTool:
         if not verdict.allowed:
             logger.warning(
                 "Browser navigation blocked: %s (url=%s)",
-                verdict.reason, url,
+                verdict.reason,
+                url,
             )
             return BrowserResult(
                 action=BrowserAction.NAVIGATE,

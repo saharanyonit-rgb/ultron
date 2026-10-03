@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import re
 import socket
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger("ultron.network_security")
@@ -20,20 +19,23 @@ logger = logging.getLogger("ultron.network_security")
 @dataclass
 class NetworkPolicy:
     """Network access policy configuration."""
-    allowed_domains: List[str] = field(default_factory=lambda: ["*"])
-    blocked_domains: List[str] = field(default_factory=list)
-    allowed_schemes: List[str] = field(default_factory=lambda: ["https"])
+
+    allowed_domains: list[str] = field(default_factory=lambda: ["*"])
+    blocked_domains: list[str] = field(default_factory=list)
+    allowed_schemes: list[str] = field(default_factory=lambda: ["https"])
     max_request_size: int = 10 * 1024 * 1024
     require_https: bool = True
     block_private_ips: bool = True
-    blocked_ip_ranges: List[str] = field(default_factory=lambda: [
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "127.0.0.0/8",
-    ])
+    blocked_ip_ranges: list[str] = field(
+        default_factory=lambda: [
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "127.0.0.0/8",
+        ]
+    )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "allowed_domains": self.allowed_domains,
             "blocked_domains": self.blocked_domains,
@@ -45,9 +47,10 @@ class NetworkPolicy:
 @dataclass
 class NetworkRequest:
     """Represents a network request for validation."""
+
     url: str = ""
     method: str = "GET"
-    headers: Dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
     body_size: int = 0
 
     @property
@@ -63,11 +66,12 @@ class NetworkRequest:
 @dataclass
 class NetworkVerdict:
     """Result of network request validation."""
+
     allowed: bool = True
     reason: str = ""
     domain: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "allowed": self.allowed,
             "reason": self.reason,
@@ -82,7 +86,7 @@ class NetworkSecurityGuard:
     and prevents access to private/internal networks.
     """
 
-    def __init__(self, policy: Optional[NetworkPolicy] = None) -> None:
+    def __init__(self, policy: NetworkPolicy | None = None) -> None:
         self._policy = policy or NetworkPolicy()
 
     @property
@@ -154,7 +158,7 @@ class NetworkSecurityGuard:
 
         return NetworkVerdict(allowed=True, domain=domain)
 
-    def _check_private_ip(self, domain: str) -> Optional[str]:
+    def _check_private_ip(self, domain: str) -> str | None:
         """Resolve domain and check if IP is private/blocked.
 
         Returns error message if blocked, None if allowed.
@@ -177,9 +181,7 @@ class NetworkSecurityGuard:
                             continue
                     # Also check is_private for ranges not explicitly listed
                     if ip.is_private:
-                        return (
-                            f"Domain '{domain}' resolves to private IP {ip_str}"
-                        )
+                        return f"Domain '{domain}' resolves to private IP {ip_str}"
                 except ValueError:
                     continue
         except (socket.gaierror, OSError) as exc:
@@ -208,7 +210,8 @@ class NetworkSecurityGuard:
 @dataclass
 class BrowserSandboxPolicy:
     """Browser sandbox configuration."""
-    allowed_origins: List[str] = field(default_factory=list)
+
+    allowed_origins: list[str] = field(default_factory=list)
     block_download: bool = True
     block_javascript_dialogs: bool = True
     block_clipboard: bool = True
@@ -216,7 +219,7 @@ class BrowserSandboxPolicy:
     timeout_seconds: float = 30.0
     headless: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "allowed_origins": self.allowed_origins,
             "block_download": self.block_download,
@@ -236,8 +239,8 @@ class BrowserSecurityGuard:
 
     def __init__(
         self,
-        policy: Optional[BrowserSandboxPolicy] = None,
-        network_guard: Optional[NetworkSecurityGuard] = None,
+        policy: BrowserSandboxPolicy | None = None,
+        network_guard: NetworkSecurityGuard | None = None,
     ) -> None:
         self._policy = policy or BrowserSandboxPolicy()
         self._network_guard = network_guard or NetworkSecurityGuard()

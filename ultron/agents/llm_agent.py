@@ -19,8 +19,8 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
 from ultron.llm.base import LLMProvider, ToolCall, ToolResult
@@ -29,8 +29,9 @@ from ultron.tools import Tool
 logger = logging.getLogger("ultron.agents.llm_agent")
 
 
-class AgentDecisionType(str, Enum):
+class AgentDecisionType(StrEnum):
     """Structured decisions an agent can make."""
+
     CONTINUE = "continue"
     COMPLETE = "complete"
     RETRY = "retry"
@@ -42,14 +43,15 @@ class AgentDecisionType(str, Enum):
 @dataclass
 class AgentDecision:
     """A structured decision made by an LLM agent."""
+
     decision_type: AgentDecisionType
     reasoning: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
-    final_answer: Optional[str] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    final_answer: str | None = None
     confidence: float = 0.5
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "decision_type": self.decision_type.value,
             "reasoning": self.reasoning,
@@ -63,16 +65,17 @@ class AgentDecision:
 @dataclass
 class AgentTrace:
     """Trace of an agent's execution for observability."""
+
     agent_name: str = ""
     task_description: str = ""
     iterations: int = 0
-    decisions: List[AgentDecision] = field(default_factory=list)
+    decisions: list[AgentDecision] = field(default_factory=list)
     tool_calls_made: int = 0
-    final_answer: Optional[str] = None
+    final_answer: str | None = None
     completed: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "task_description": self.task_description,
@@ -133,10 +136,10 @@ class LLMAgent(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
-        spec: Optional[AgentSpec] = None,
+        tools: list[Tool],
+        spec: AgentSpec | None = None,
         max_iterations: int = 10,
-        tool_executor: Optional[Any] = None,
+        tool_executor: Any | None = None,
     ) -> None:
         if spec is None:
             spec = AgentSpec(
@@ -150,7 +153,7 @@ class LLMAgent(BaseAgent):
         self._max_iterations = max_iterations
         self._tool_executor = tool_executor
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute a task using LLM reasoning.
 
         Returns the agent's final answer as a string.
@@ -161,7 +164,7 @@ class LLMAgent(BaseAgent):
     def run_with_trace(
         self,
         user_text: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> AgentTrace:
         """Execute a task and return the full execution trace."""
         return self._run_with_trace(user_text, context)
@@ -169,7 +172,7 @@ class LLMAgent(BaseAgent):
     def _run_with_trace(
         self,
         user_text: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> AgentTrace:
         """Core execution loop with trace recording."""
         trace = AgentTrace(
@@ -189,7 +192,9 @@ class LLMAgent(BaseAgent):
             if "goal" in context:
                 context_parts.append(f"Goal context: {context['goal']}")
             if "previous_results" in context:
-                context_parts.append(f"Previous results: {json.dumps(context['previous_results'])[:500]}")
+                context_parts.append(
+                    f"Previous results: {json.dumps(context['previous_results'])[:500]}"
+                )
             if "verification_criteria" in context:
                 context_parts.append(f"Verification: {context['verification_criteria']}")
             context_str = "\n".join(context_parts)
@@ -227,7 +232,8 @@ class LLMAgent(BaseAgent):
                             if self._tool_executor:
                                 # Route through ToolExecutor for security enforcement
                                 exec_result = self._tool_executor.execute(
-                                    call.name, call.arguments,
+                                    call.name,
+                                    call.arguments,
                                 )
                                 output = exec_result.output
                                 if exec_result.error:
@@ -274,11 +280,13 @@ class LLMAgent(BaseAgent):
         else:
             # Hit iteration limit
             trace.error = f"Iteration limit reached ({self._max_iterations})"
-            trace.decisions.append(AgentDecision(
-                decision_type=AgentDecisionType.FAIL,
-                reasoning=trace.error,
-                confidence=1.0,
-            ))
+            trace.decisions.append(
+                AgentDecision(
+                    decision_type=AgentDecisionType.FAIL,
+                    reasoning=trace.error,
+                    confidence=1.0,
+                )
+            )
 
         return trace
 

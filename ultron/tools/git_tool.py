@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.tools.base import Tool
 
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
-def _run_git(cwd: str, *args: str, timeout: int = 120) -> Dict[str, Any]:
+
+def _run_git(cwd: str, *args: str, timeout: int = 120) -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["git"] + list(args),
@@ -37,6 +41,12 @@ def _run_git(cwd: str, *args: str, timeout: int = 120) -> Dict[str, Any]:
 
 class GitStatus(Tool):
     name = "git_status"
+    keywords = (
+        "git status",
+        "show git status",
+        "working tree status",
+    )
+    risk = RiskLevel.READ
     description = "Get the current git repository status."
     parameters = {
         "type": "object",
@@ -61,7 +71,7 @@ class GitStatus(Tool):
         },
     }
 
-    def run(self, repo_path: str, **_: Any) -> Dict[str, Any]:
+    def run(self, repo_path: str, **_: Any) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.exists():
             return {"error": f"Path not found: {path}"}
@@ -107,6 +117,12 @@ class GitStatus(Tool):
 
 class GitLog(Tool):
     name = "git_log"
+    keywords = (
+        "git log",
+        "show commits",
+        "commit history",
+    )
+    risk = RiskLevel.READ
     description = "Get the git commit history."
     parameters = {
         "type": "object",
@@ -141,7 +157,7 @@ class GitLog(Tool):
         max_count: int = 10,
         format: str = "%h|%s|%an|%ad",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.exists():
             return {"error": f"Path not found: {path}"}
@@ -161,25 +177,35 @@ class GitLog(Tool):
                 continue
             parts = line.split("|")
             if len(parts) >= 4:
-                commits.append({
-                    "hash": parts[0],
-                    "subject": parts[1],
-                    "author": parts[2],
-                    "date": parts[3],
-                })
+                commits.append(
+                    {
+                        "hash": parts[0],
+                        "subject": parts[1],
+                        "author": parts[2],
+                        "date": parts[3],
+                    }
+                )
             elif len(parts) == 3:
-                commits.append({
-                    "hash": parts[0],
-                    "subject": parts[1],
-                    "author": parts[2],
-                    "date": "",
-                })
+                commits.append(
+                    {
+                        "hash": parts[0],
+                        "subject": parts[1],
+                        "author": parts[2],
+                        "date": "",
+                    }
+                )
 
         return {"commits": commits}
 
 
 class GitDiff(Tool):
     name = "git_diff"
+    keywords = (
+        "git diff",
+        "show changes",
+        "uncommitted diff",
+    )
+    risk = RiskLevel.READ
     description = "Get the git diff for changed files."
     parameters = {
         "type": "object",
@@ -211,10 +237,10 @@ class GitDiff(Tool):
     def run(
         self,
         repo_path: str,
-        file: Optional[str] = None,
+        file: str | None = None,
         staged: bool = False,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.exists():
             return {"error": f"Path not found: {path}"}
@@ -236,6 +262,13 @@ class GitDiff(Tool):
 
 class GitBranch(Tool):
     name = "git_branch"
+    keywords = (
+        "git branch",
+        "switch branch",
+        "change branch",
+        "list branches",
+    )
+    risk = RiskLevel.MEDIUM
     description = "List, create, or delete git branches."
     parameters = {
         "type": "object",
@@ -268,10 +301,10 @@ class GitBranch(Tool):
     def run(
         self,
         repo_path: str,
-        create: Optional[str] = None,
-        delete: Optional[str] = None,
+        create: str | None = None,
+        delete: str | None = None,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.exists():
             return {"error": f"Path not found: {path}"}
@@ -306,6 +339,12 @@ class GitBranch(Tool):
 
 class GitCommit(Tool):
     name = "git_commit"
+    keywords = (
+        "git commit",
+        "commit changes",
+        "make a commit",
+    )
+    risk = RiskLevel.HIGH
     description = "Create a git commit with a message."
     parameters = {
         "type": "object",
@@ -341,7 +380,7 @@ class GitCommit(Tool):
         message: str,
         add_all: bool = True,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.exists():
             return {"error": f"Path not found: {path}"}

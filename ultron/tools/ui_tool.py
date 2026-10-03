@@ -8,9 +8,11 @@ in any browser to preview, use, or extend the design.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ultron.tools.base import Tool
 
@@ -80,6 +82,7 @@ _THEMES = {
     },
 }
 
+
 def _slug(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug[:48] or "ui-design"
@@ -89,6 +92,18 @@ class GenerateUI(Tool):
     """Generate a complete UI/UX design with animations as a runnable HTML file."""
 
     name = "generate_ui"
+    keywords = (
+        "generate ui",
+        "design a page",
+        "design a website",
+        "make a landing page",
+        "ui design",
+        "design an interface",
+        "make an animated page",
+        "design a dashboard",
+        "generate html design",
+    )
+    risk = RiskLevel.LOW
     description = (
         "Generate a complete, ready-to-run HTML/CSS UI design with animations for coding work. "
         "Provide a description of the page/component you want (e.g. 'landing page for my AI startup', "
@@ -135,20 +150,27 @@ class GenerateUI(Tool):
         preset: str = "jarvis",
         output_file: str = "",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         description = (description or "").strip()
         if not description:
             return {"success": False, "error": "Missing 'description' parameter."}
 
         preset = (preset or "jarvis").lower()
         if preset not in PRESETS:
-            return {"success": False, "error": f"Unknown preset '{preset}'. Choose from: jarvis, neon, glass, minimal."}
+            return {
+                "success": False,
+                "error": f"Unknown preset '{preset}'. Choose from: jarvis, neon, glass, minimal.",
+            }
 
         theme = _THEMES[preset]
         doc = self._build_page(description, preset, theme)
 
         try:
-            out = Path(output_file).expanduser() if output_file else OUTPUT_DIR / f"{_slug(description)}.html"
+            out = (
+                Path(output_file).expanduser()
+                if output_file
+                else OUTPUT_DIR / f"{_slug(description)}.html"
+            )
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(doc, encoding="utf-8")
         except OSError as exc:
@@ -170,12 +192,10 @@ class GenerateUI(Tool):
         words = [w for w in description.split() if w[0].isalnum()][:5]
         return " ".join(words).title() if words else "UI Design"
 
-    def _build_page(self, description: str, preset: str, theme: Dict[str, str]) -> str:
+    def _build_page(self, description: str, preset: str, theme: dict[str, str]) -> str:
         t = theme
         title = self._title_of(description)
         is_dark = preset in {"jarvis", "neon", "glass"}
-        body_text = t["text"]
-        shadow_text = t["muted"]
 
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -185,13 +205,13 @@ class GenerateUI(Tool):
 <title>{title} — Generated UI</title>
 <style>
 :root{{
-  --bg:{t['bg']};
-  --panel:{t['panel']};
-  --accent:{t['accent']};
-  --accent2:{t['accent2']};
-  --text:{t['text']};
-  --muted:{t['muted']};
-  --radius:{t['radius']};
+  --bg:{t["bg"]};
+  --panel:{t["panel"]};
+  --accent:{t["accent"]};
+  --accent2:{t["accent2"]};
+  --text:{t["text"]};
+  --muted:{t["muted"]};
+  --radius:{t["radius"]};
   --shadow-pop:0 18px 50px rgba(0,0,0,.35);
 }}
 *{{margin:0;padding:0;box-sizing:border-box}}
@@ -199,7 +219,7 @@ body{{
   min-height:100vh;
   background:var(--bg);
   color:var(--text);
-  font-family:{t['font']};
+  font-family:{t["font"]};
   overflow-x:hidden;
   background-image:
     radial-gradient(60rem 40rem at 15% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent),
@@ -236,7 +256,7 @@ h1{{font-size:clamp(2rem,5.4vw,4rem);line-height:1.08;font-weight:800;letter-spa
 .btn{{display:inline-block;cursor:pointer;position:relative;overflow:hidden;
   padding:14px 30px;border:0;border-radius:999px;font-weight:700;letter-spacing:.04em;
   font-size:.95rem;background:linear-gradient(120deg,var(--accent),var(--accent2));
-  color:{'#04120c' if is_dark else '#fff'};transition:transform .18s ease, box-shadow .18s ease;
+  color:{"#04120c" if is_dark else "#fff"};transition:transform .18s ease, box-shadow .18s ease;
   box-shadow:0 10px 30px color-mix(in srgb, var(--accent) 34%, transparent);}}
 .btn:hover{{transform:translateY(-2px);box-shadow:0 16px 40px color-mix(in srgb, var(--accent) 46%, transparent)}}
 .btn.ghost{{background:transparent;border:1px solid color-mix(in srgb, var(--accent) 50%, transparent);

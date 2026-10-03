@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
+from typing import Any
+
 import httpx
-from typing import Any, Dict, List, Optional
 
 from ultron.tools.base import Tool
 
 
 class HttpRequest(Tool):
     name = "http_request"
+    risk = RiskLevel.MEDIUM
     description = (
         "Make HTTP requests to APIs or web services. "
         "Supports GET, POST, PUT, DELETE methods with headers and JSON body. "
@@ -66,12 +70,12 @@ class HttpRequest(Tool):
         self,
         url: str,
         method: str = "GET",
-        headers: Optional[Dict[str, str]] = None,
-        body: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
+        body: dict[str, Any] | None = None,
+        params: dict[str, str] | None = None,
         timeout: int = 30,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         import time
 
         start = time.time()
@@ -91,7 +95,7 @@ class HttpRequest(Tool):
                 )
 
             duration_ms = round((time.time() - start) * 1000, 2)
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "success": 200 <= response.status_code < 300,
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
@@ -129,6 +133,7 @@ class HttpRequest(Tool):
 
 class FetchJson(Tool):
     name = "fetch_json"
+    risk = RiskLevel.LOW
     description = "Fetch and parse JSON data from a URL."
     parameters = {
         "type": "object",
@@ -160,10 +165,10 @@ class FetchJson(Tool):
     def run(
         self,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        key_path: Optional[str] = None,
+        headers: dict[str, str] | None = None,
+        key_path: str | None = None,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         import time
 
         start = time.time()
@@ -181,7 +186,7 @@ class FetchJson(Tool):
                 }
 
             data = response.json()
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "success": True,
                 "data": data,
                 "duration_ms": round((time.time() - start) * 1000, 2),

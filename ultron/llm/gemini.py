@@ -7,25 +7,23 @@ permission gate). Tool schemas are passed straight through as JSON Schema.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from google.api_core.exceptions import GoogleAPIError
-
 import json
-import uuid
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+import uuid
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from google import genai
+from google.api_core.exceptions import GoogleAPIError
 from google.genai import types as gt
 
-from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
 from ultron.errors import (
     AuthenticationError,
-    QuotaError,
     ProviderError,
+    QuotaError,
     RateLimitError,
 )
+from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
 
 if TYPE_CHECKING:  # type-only import — avoids any circular import with tools
     from ultron.tools.base import ToolSpec
@@ -41,7 +39,7 @@ class GeminiProvider(LLMProvider):
         self,
         api_key: str,
         model: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
     ) -> None:
         self._gt = gt
@@ -54,7 +52,7 @@ class GeminiProvider(LLMProvider):
 
     # -- LLMProvider ---------------------------------------------------
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         if text is not None:
             self._contents.append(
                 self._gt.Content(role="user", parts=[self._gt.Part.from_text(text=text)])
@@ -101,7 +99,11 @@ class GeminiProvider(LLMProvider):
             ) from exc
 
         # Check for authentication error
-        if "auth" in error_message or "invalid api key" in error_message or "api key" in error_message:
+        if (
+            "auth" in error_message
+            or "invalid api key" in error_message
+            or "api key" in error_message
+        ):
             raise AuthenticationError(
                 provider="gemini",
                 model=self._model,
@@ -115,7 +117,7 @@ class GeminiProvider(LLMProvider):
             message=str(exc),
         ) from exc
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         parts = []
         for result in results:
             payload: dict[str, Any] = {"result": result.output}
@@ -125,21 +127,21 @@ class GeminiProvider(LLMProvider):
             except (json.JSONDecodeError, TypeError):
                 pass
             try:
-                part = self._gt.Part.from_function_response(
+                # `id` is only present in some google-genai releases; the
+                # TypeError fallback below covers the versions that lack it.
+                part = self._gt.Part.from_function_response(  # type: ignore[call-arg]
                     name=result.call.name,
                     response=payload,
                     id=result.call.id,
                 )
             except TypeError:
-                part = self._gt.Part.from_function_response(
-                    name=result.call.name, response=payload
-                )
+                part = self._gt.Part.from_function_response(name=result.call.name, response=payload)
             parts.append(part)
         self._contents.append(self._gt.Content(role="tool", parts=parts))
 
     # -- internals -----------------------------------------------------
 
-    def _to_tool(self, spec: "ToolSpec") -> Any:
+    def _to_tool(self, spec: ToolSpec) -> Any:
         gt = self._gt
         return gt.Tool(
             function_declarations=[
@@ -152,7 +154,6 @@ class GeminiProvider(LLMProvider):
         )
 
     def _parse_response(self, response: Any) -> ProviderResult:
-        gt = self._gt
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
         for candidate in response.candidates or []:
@@ -172,7 +173,6 @@ class GeminiProvider(LLMProvider):
         text = "".join(text_parts) if text_parts else None
         return ProviderResult(text=text, tool_calls=tool_calls)
 
-
     def supports_vision(self) -> bool:
         return True
 
@@ -187,8 +187,13 @@ class GeminiProvider(LLMProvider):
         image_bytes = img_path.read_bytes()
         # Determine MIME type from extension
         ext = img_path.suffix.lower()
-        mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                    ".gif": "image/gif", ".webp": "image/webp"}
+        mime_map = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }
         mime_type = mime_map.get(ext, "image/png")
 
         user_content = gt.Content(
@@ -196,7 +201,7 @@ class GeminiProvider(LLMProvider):
             parts=[
                 gt.Part.from_bytes(data=image_bytes, mime_type=mime_type),
                 gt.Part.from_text(text=prompt),
-            ]
+            ],
         )
 
         response = self._client.models.generate_content(

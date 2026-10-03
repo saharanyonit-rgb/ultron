@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.tools._termux import run_termux
 from ultron.tools.base import Tool
@@ -12,6 +14,7 @@ class SendNotification(Tool):
     """Send a notification to the device."""
 
     name = "send_notification"
+    risk = RiskLevel.MEDIUM
     description = "Post a notification to the Android notification bar."
     parameters = {
         "type": "object",
@@ -56,11 +59,15 @@ class SendNotification(Tool):
     mutates = True
 
     def run(
-        self, title: str = "", message: str = "",
-        id: str = "", priority: str = "default",
-        vibrate: bool = True, sound: bool = True,
+        self,
+        title: str = "",
+        message: str = "",
+        id: str = "",
+        priority: str = "default",
+        vibrate: bool = True,
+        sound: bool = True,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         t = title or kwargs.get("header") or ""
         m = message or kwargs.get("text") or kwargs.get("body") or ""
         nid = id or kwargs.get("notification_id") or ""
@@ -89,6 +96,7 @@ class ListNotifications(Tool):
     """List current notifications in the notification bar."""
 
     name = "list_notifications"
+    risk = RiskLevel.READ
     description = "List all active notifications on the device."
     parameters = {
         "type": "object",
@@ -103,7 +111,7 @@ class ListNotifications(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("notification-list", parse_json=True)
         if not result.ok:
             return {"notifications": [], "count": 0, "error": result.stderr}
@@ -116,6 +124,7 @@ class RemoveNotification(Tool):
     """Remove a specific notification by ID."""
 
     name = "remove_notification"
+    risk = RiskLevel.LOW
     description = "Dismiss/remove a notification by its ID."
     parameters = {
         "type": "object",
@@ -136,7 +145,7 @@ class RemoveNotification(Tool):
     }
     mutates = True
 
-    def run(self, id: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, id: str = "", **kwargs: Any) -> dict[str, Any]:
         nid = id or kwargs.get("notification_id") or kwargs.get("nid") or ""
         if not nid:
             return {"error": "No notification ID provided", "success": False}
@@ -148,6 +157,7 @@ class RemoveAllNotifications(Tool):
     """Dismiss all active notifications."""
 
     name = "remove_all_notifications"
+    risk = RiskLevel.MEDIUM
     description = "Clear all active notifications from the notification bar."
     parameters = {
         "type": "object",
@@ -162,7 +172,7 @@ class RemoveAllNotifications(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("notification-remove", args=["-a", "all"])
         return {"success": result.ok}
 
@@ -171,6 +181,7 @@ class GetNotificationSettings(Tool):
     """Get Android notification settings."""
 
     name = "get_notification_settings"
+    risk = RiskLevel.READ
     description = "Get notification channel settings or global notification status."
     parameters = {
         "type": "object",
@@ -185,7 +196,7 @@ class GetNotificationSettings(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("notification-list", parse_json=True)
         notifications = result.data if isinstance(result.data, list) else []
         return {

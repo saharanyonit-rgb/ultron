@@ -1,13 +1,19 @@
 """JARVIS Desktop Application - Main Entry Point.
 
 This is the primary entry point for the JARVIS desktop application.
-It starts the ULTRON backend in-process, manages the system tray,
-and provides a native Windows desktop experience.
+It starts the ULTRON backend in-process, hosts the UI in a native
+WebView2 window, and manages the system tray.
+
+No browser is required: on Windows the window is backed by the WebView2
+runtime that ships with Windows 10 21H2+ / Windows 11.
 
 Usage:
-    python -m desktop              # Start JARVIS desktop
-    python -m desktop --no-tray    # Start without system tray
-    python -m desktop --port 8080  # Specify backend port
+    python -m desktop                      # Native WebView2 window
+    python -m desktop --browser            # Fall back to the system browser
+    python -m desktop --no-window          # Backend + tray only, no UI
+    python -m desktop --no-tray            # Start without system tray
+    python -m desktop --start-minimized    # Start hidden in the tray
+    python -m desktop --port 8080          # Specify backend port
 """
 
 from __future__ import annotations
@@ -22,12 +28,12 @@ import sys
 import threading
 import time
 import webbrowser
-from pathlib import Path
 
-from desktop.config import DesktopConfig, get_logs_dir, get_app_data_dir
+from desktop.config import DesktopConfig, get_app_data_dir, get_logs_dir
+from desktop.notifications import NotificationManager
 from desktop.server import InProcessBackend
 from desktop.tray import SystemTray
-from desktop.notifications import NotificationManager
+from desktop.window import WINDOW_TITLE, NativeWindow, probe
 
 logger = logging.getLogger("jarvis.desktop")
 
@@ -46,8 +52,10 @@ class JarvisDesktop:
         self.backend: InProcessBackend = None  # type: ignore[assignment]
         self.tray: SystemTray = None  # type: ignore[assignment]
         self.notifications: NotificationManager = None  # type: ignore[assignment]
+        self.window: NativeWindow | None = None
         self._shutdown_event = threading.Event()
         self._mutex = None
+        self._ui_mode = "browser"
 
     def run(self) -> int:
         """Run the JARVIS desktop application."""
@@ -62,7 +70,9 @@ class JarvisDesktop:
             self._focus_existing_instance()
             return 0
 
-        # Setup signal handlers
+        # Setup signal handlers. In native-window mode pywebview installs its
+        # own SIGINT handler once the GUI loop starts, which closes the window
+        # and lets us fall through to _shutdown() the same way.
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
@@ -70,13 +80,13 @@ class JarvisDesktop:
             # Start backend
             self._start_backend()
 
+            # Decide how the UI is hosted before touching the tray, so the tray
+            # callbacks below always have the right target.
+            self._ui_mode = self._select_ui_mode()
+
             # Start system tray
             if not self.args.no_tray:
                 self._start_tray()
-
-            # Open browser UI
-            if not self.args.no_browser and not self.args.start_minimized:
-                self._open_browser()
 
             # Send startup notification
             if self.config.show_notifications and self.notifications:
@@ -89,8 +99,14 @@ class JarvisDesktop:
             # Show startup info
             self._print_startup_info()
 
-            # Wait for shutdown
-            self._wait_for_shutdown()
+            if self._ui_mode == "window":
+                # Blocks on the main thread until the window is really closed.
+                self._host_window()
+            else:
+                if self._ui_mode == "browser" and self._should_open_ui():
+                    self._open_browser()
+                # Wait for shutdown
+                self._wait_for_shutdown()
 
         except KeyboardInterrupt:
             logger.info("Interrupted by user")
@@ -104,6 +120,7 @@ class JarvisDesktop:
 
         return 0
 
+
     def _setup_logging(self) -> None:
         """Configure logging for the desktop application."""
         logs_dir = get_logs_dir()
@@ -116,19 +133,23 @@ class JarvisDesktop:
         # Console handler
         console = logging.StreamHandler(sys.stdout)
         console.setLevel(logging.DEBUG if self.args.debug else logging.INFO)
-        console.setFormatter(logging.Formatter(
-            "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-            datefmt="%H:%M:%S",
-        ))
+        console.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
         root_logger.addHandler(console)
 
         # File handler
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(
-            "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        ))
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
         root_logger.addHandler(file_handler)
 
         logger.info(f"Logging to: {log_file}")
@@ -155,10 +176,12 @@ class JarvisDesktop:
             return
 
         try:
-            import ctypes.wintypes
+            import ctypes.wintypes  # noqa: F401
+
             user32 = ctypes.windll.user32
-            hwnd = user32.FindWindowW(None, "JARVIS - Personal AI Assistant")
+            hwnd = user32.FindWindowW(None, WINDOW_TITLE)
             if hwnd:
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                 user32.SetForegroundWindow(hwnd)
                 logger.info("Focused existing JARVIS window")
         except Exception as e:
@@ -215,20 +238,80 @@ class JarvisDesktop:
 
     def _on_tray_open(self) -> None:
         """Handle tray 'Open' click."""
-        self._open_browser()
+        self._show_ui()
 
     def _on_tray_show(self) -> None:
         """Handle tray 'Show' click."""
-        self._open_browser()
+        self._show_ui()
 
     def _on_tray_hide(self) -> None:
         """Handle tray 'Hide' click."""
         logger.info("Hide requested")
+        if self.window:
+            self.window.hide()
+        else:
+            logger.debug("Nothing to hide: no native window")
 
     def _on_tray_exit(self) -> None:
         """Handle tray 'Exit' click."""
         logger.info("Exit requested from tray")
         self._shutdown_event.set()
+        # Releases the GUI loop, which unblocks the main thread in
+        # _host_window() and lets run() fall through to _shutdown().
+        if self.window:
+            self.window.close()
+
+    def _select_ui_mode(self) -> str:
+        """Decide between the native window and the legacy browser fallback."""
+        if self.args.browser or self.config.ui_mode == "browser":
+            logger.info("UI mode: system browser (requested)")
+            return "browser"
+
+        available, reason = probe(self.args.webview_backend)
+        if not available:
+            logger.warning("Native window unavailable (%s); falling back to browser", reason)
+            return "browser"
+
+        logger.info("UI mode: native window (%s)", reason)
+        return "window"
+
+    def _should_open_ui(self) -> bool:
+        """Whether to open the UI immediately in browser mode."""
+        return not (self.args.no_window or self.args.no_browser or self.args.start_minimized)
+
+    def _host_window(self) -> None:
+        """Run the native WebView2 window on the main thread.
+
+        `webview.start()` requires the main thread but hands the actual GUI
+        loop to its own STA thread, so this call blocks here while the tray,
+        backend and shutdown signalling keep running normally.
+        """
+        assert self.backend is not None
+        self.window = NativeWindow(
+            self.backend.url,
+            self.config,
+            backend=self.args.webview_backend,
+            hidden=self.args.start_minimized or self.args.no_window,
+        )
+        try:
+            self.window.run()
+        except Exception as e:
+            logger.error("Native window failed to start: %s", e, exc_info=True)
+            # Do not leave the user with a running backend and no way to reach
+            # it: degrade to the browser and keep serving on the same port.
+            self.window = None
+            self._ui_mode = "browser"
+            self._open_browser()
+            self._wait_for_shutdown()
+
+    def _show_ui(self) -> None:
+        """Bring up whatever UI mode is active."""
+        if self.window:
+            if not self.window.show():
+                logger.warning("Could not show native window")
+            return
+        if self._ui_mode == "browser" or self.window is None:
+            self._open_browser()
 
     def _open_browser(self) -> None:
         """Open the JARVIS web UI in the default browser."""
@@ -247,16 +330,20 @@ class JarvisDesktop:
         """Print startup information."""
         print()
         print("=" * 60)
-        print(f"  JARVIS v{APP_VERSION} - Personal AI Desktop Assistant")
+        print(f"  JARVIS v{APP_VERSION} - {APP_DESCRIPTION}")
         print("=" * 60)
         print()
         print(f"  Backend:  {self.backend.url}")
-        print(f"  Status:   Running")
+        print(f"  UI:       {self._ui_mode}")
         print(f"  Logs:     {get_logs_dir()}")
         print(f"  Config:   {get_app_data_dir()}")
         print()
-        print("  Press Ctrl+C to exit")
-        print("  System tray icon is active")
+        if self._ui_mode == "window":
+            print("  Close the window to keep JARVIS in the tray.")
+        else:
+            print("  Press Ctrl+C to exit")
+        if self.tray and self.tray.is_running:
+            print("  System tray icon is active")
         print()
         print("=" * 60)
         print()
@@ -268,6 +355,11 @@ class JarvisDesktop:
     def _shutdown(self) -> None:
         """Clean shutdown of all components."""
         logger.info("Shutting down JARVIS...")
+
+        # Close the native window (releases the GUI loop if it is still up)
+        if self.window:
+            self.window.close()
+            self.window = None
 
         # Stop tray
         if self.tray:
@@ -305,30 +397,65 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--port", type=int, default=0,
+        "--port",
+        type=int,
+        default=0,
         help="Backend port (default: auto-detect)",
     )
     parser.add_argument(
-        "--host", type=str, default=None,
+        "--host",
+        type=str,
+        default=None,
         help="Backend host (default: 127.0.0.1)",
     )
     parser.add_argument(
-        "--no-tray", action="store_true",
+        "--no-tray",
+        action="store_true",
         help="Disable system tray icon",
     )
     parser.add_argument(
-        "--no-browser", action="store_true",
-        help="Don't automatically open browser",
+        "--no-window",
+        action="store_true",
+        help="Don't show the UI on startup (backend and tray only)",
     )
     parser.add_argument(
-        "--start-minimized", action="store_true",
+        "--browser",
+        action="store_true",
+        help="Open the UI in the system browser instead of the native window",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help=argparse.SUPPRESS,  # deprecated alias for --no-window
+    )
+    parser.add_argument(
+        "--webview-backend",
+        type=str,
+        default=None,
+        choices=["auto", "edgechromium", "mshtml", "cef", "qt"],
+        help="Force a pywebview backend (default: from config, else auto-detect)",
+    )
+    parser.add_argument(
+        "--start-minimized",
+        action="store_true",
         help="Start minimized to tray",
     )
     parser.add_argument(
-        "--debug", action="store_true",
+        "--debug",
+        action="store_true",
         help="Enable debug logging",
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    # Legacy alias kept so existing shortcuts and scripts keep working.
+    if args.no_browser:
+        args.no_window = True
+
+    if args.webview_backend is None:
+        args.webview_backend = DesktopConfig.load().webview_backend or "auto"
+
+    return args
 
 
 def main() -> int:

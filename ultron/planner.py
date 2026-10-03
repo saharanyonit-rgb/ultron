@@ -7,14 +7,14 @@ steps in dependency order, handling retries and failures.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ultron.models import (
     ExecutionResult,
     ExecutionStatus,
     MultiStepPlan,
     MultiStepPlanStep,
-    PlanStepPriority,
     PlanStepStatus,
 )
 
@@ -33,7 +33,7 @@ class Planner:
 
     def create_plan(
         self,
-        steps: List[MultiStepPlanStep],
+        steps: list[MultiStepPlanStep],
         description: str = "",
     ) -> MultiStepPlan:
         """Create and validate a multi-step plan."""
@@ -41,9 +41,7 @@ class Planner:
             raise PlanValidationError("Plan must have at least one step")
 
         if len(steps) > self._max_steps:
-            raise PlanValidationError(
-                f"Plan has {len(steps)} steps, maximum is {self._max_steps}"
-            )
+            raise PlanValidationError(f"Plan has {len(steps)} steps, maximum is {self._max_steps}")
 
         plan = MultiStepPlan(
             steps=steps,
@@ -58,9 +56,7 @@ class Planner:
         for step in steps:
             for dep in step.dependencies:
                 if dep not in step_ids:
-                    raise PlanValidationError(
-                        f"Step {step.step_id} depends on unknown step {dep}"
-                    )
+                    raise PlanValidationError(f"Step {step.step_id} depends on unknown step {dep}")
 
         return plan
 
@@ -70,7 +66,7 @@ class PlanExecutor:
 
     def __init__(
         self,
-        tool_executor: Callable[[str, Dict[str, Any]], ExecutionResult],
+        tool_executor: Callable[[str, dict[str, Any]], ExecutionResult],
     ) -> None:
         self._tool_executor = tool_executor
 

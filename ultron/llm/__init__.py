@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ultron.config import Config, ConfigError, SUPPORTED_PROVIDERS
+from ultron.config import SUPPORTED_PROVIDERS, Config, ConfigError
 from ultron.llm.base import LLMProvider
 
 
@@ -52,6 +52,18 @@ def build_provider(config: Config) -> LLMProvider:
             model=config.model,
             system_prompt=config.system_prompt,
             temperature=config.temperature,
+        )
+
+    if config.provider == "groq":
+        from ultron.llm.openai_ import OpenAIProvider
+
+        base_url = config.api_base_url or "https://api.groq.com/openai/v1"
+        return OpenAIProvider(
+            api_key=config.groq_api_key,
+            model=config.model,
+            system_prompt=config.system_prompt,
+            temperature=config.temperature,
+            base_url=base_url,
         )
 
     if config.provider == "openai":

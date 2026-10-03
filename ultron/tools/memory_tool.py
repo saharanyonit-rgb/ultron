@@ -7,16 +7,29 @@ Backed by the MemoryService / SemanticMemory engine.
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.services import get_memory_service
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 
 class RememberTool(Tool):
     """Store a fact or preference for long-term recall."""
 
     name = "remember"
+    risk = RiskLevel.LOW
+    keywords = (
+        "remember that",
+        "remember this",
+        "i prefer",
+        "keep in mind",
+        "make a note that",
+        "store this",
+    )
     description = (
         "Store a fact, preference, or personal detail about the user for long-term memory. "
         "Use whenever the user says things like 'remember that ...', 'my name is ...', "
@@ -48,7 +61,7 @@ class RememberTool(Tool):
     }
     mutates = True
 
-    def run(self, fact: str, topic: str = "", **_: Any) -> Dict[str, Any]:
+    def run(self, fact: str, topic: str = "", **_: Any) -> dict[str, Any]:
         try:
             return get_memory_service().remember(fact, topic)
         except Exception as exc:
@@ -59,6 +72,14 @@ class RecallTool(Tool):
     """Search long-term and past-conversation memory."""
 
     name = "recall"
+    risk = RiskLevel.READ
+    keywords = (
+        "recall",
+        "do you remember",
+        "what did i tell you",
+        "what did we discuss",
+        "what do you know about me",
+    )
     description = (
         "Search JARVIS long-term memory and past conversations for relevant facts. "
         "Use when the user asks 'what do you know about me?', 'do you remember ...', "
@@ -87,7 +108,7 @@ class RecallTool(Tool):
         },
     }
 
-    def run(self, query: str, limit: int = 10, **_: Any) -> Dict[str, Any]:
+    def run(self, query: str, limit: int = 10, **_: Any) -> dict[str, Any]:
         try:
             results = get_memory_service().recall(query, limit=limit)
             return {"results": results, "count": len(results)}
@@ -99,6 +120,14 @@ class ListMemoriesTool(Tool):
     """List the most recent memories."""
 
     name = "list_memories"
+    risk = RiskLevel.READ
+    keywords = (
+        "list memories",
+        "show your memories",
+        "what memories",
+        "what do you remember",
+        "list what you know",
+    )
     description = (
         "List JARVIS recently stored memories, facts, or past conversation highlights. "
         "Use when the user asks 'what do you remember?', 'list what you know', "
@@ -122,7 +151,7 @@ class ListMemoriesTool(Tool):
         },
     }
 
-    def run(self, limit: int = 20, **_: Any) -> Dict[str, Any]:
+    def run(self, limit: int = 20, **_: Any) -> dict[str, Any]:
         try:
             memories = get_memory_service().recent(limit=limit)
             return {"memories": memories, "count": len(memories)}
@@ -134,6 +163,14 @@ class ForgetTool(Tool):
     """Remove memories by keyword or record ID."""
 
     name = "forget"
+    risk = RiskLevel.MEDIUM
+    keywords = (
+        "forget that",
+        "forget what i said",
+        "delete that memory",
+        "stop remembering",
+        "erase that memory",
+    )
     description = (
         "Delete memories from JARVIS long-term memory. "
         "Use when the user says 'forget ...', 'forget what I said about ...', "
@@ -162,7 +199,7 @@ class ForgetTool(Tool):
     }
     mutates = True
 
-    def run(self, query: str = "", record_id: str = "", **_: Any) -> Dict[str, Any]:
+    def run(self, query: str = "", record_id: str = "", **_: Any) -> dict[str, Any]:
         try:
             return get_memory_service().forget(query, record_id)
         except Exception as exc:

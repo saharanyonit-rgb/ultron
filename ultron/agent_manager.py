@@ -9,20 +9,20 @@ Extends the existing Phase 3 agent architecture with:
 
 from __future__ import annotations
 
-import json
-import uuid
 import logging
+import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentRegistry, BaseAgent
 
 logger = logging.getLogger("ultron.agent_manager")
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     TASK_REQUEST = "task_request"
     TASK_RESULT = "task_result"
     TASK_ERROR = "task_error"
@@ -43,11 +43,11 @@ class AgentMessage:
     sender: str = ""
     receiver: str = ""
     task_id: str = ""
-    payload: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    payload: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "message_type": self.message_type.value,
@@ -60,7 +60,7 @@ class AgentMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentMessage":
+    def from_dict(cls, data: dict[str, Any]) -> AgentMessage:
         return cls(
             id=data.get("id", str(uuid.uuid4())[:10]),
             message_type=MessageType(data.get("message_type", "task_request")),
@@ -79,8 +79,8 @@ class AgentMessage:
         receiver: str,
         task_id: str,
         task_description: str,
-        task_input: Optional[Dict[str, Any]] = None,
-    ) -> "AgentMessage":
+        task_input: dict[str, Any] | None = None,
+    ) -> AgentMessage:
         return cls(
             message_type=MessageType.TASK_REQUEST,
             sender=sender,
@@ -98,8 +98,8 @@ class AgentMessage:
         sender: str,
         receiver: str,
         task_id: str,
-        result: Dict[str, Any],
-    ) -> "AgentMessage":
+        result: dict[str, Any],
+    ) -> AgentMessage:
         return cls(
             message_type=MessageType.TASK_RESULT,
             sender=sender,
@@ -115,7 +115,7 @@ class AgentMessage:
         receiver: str,
         task_id: str,
         error: str,
-    ) -> "AgentMessage":
+    ) -> AgentMessage:
         return cls(
             message_type=MessageType.TASK_ERROR,
             sender=sender,
@@ -131,8 +131,8 @@ class AgentMessage:
         receiver: str,
         task_id: str,
         status: str,
-        progress: Optional[float] = None,
-    ) -> "AgentMessage":
+        progress: float | None = None,
+    ) -> AgentMessage:
         return cls(
             message_type=MessageType.TASK_UPDATE,
             sender=sender,
@@ -148,10 +148,10 @@ class AgentAvailability:
 
     agent_name: str
     is_available: bool = True
-    current_task_id: Optional[str] = None
+    current_task_id: str | None = None
     completed_tasks: int = 0
     failed_tasks: int = 0
-    last_active: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    last_active: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @property
     def success_rate(self) -> float:
@@ -171,11 +171,13 @@ class AgentManager:
     - Load balancing
     """
 
-    def __init__(self, registry: Optional[AgentRegistry] = None) -> None:
+    def __init__(self, registry: AgentRegistry | None = None) -> None:
         self._registry = registry or AgentRegistry()
-        self._availability: Dict[str, AgentAvailability] = {}
-        self._message_handlers: Dict[MessageType, Callable[[AgentMessage], Optional[AgentMessage]]] = {}
-        self._message_log: List[AgentMessage] = []
+        self._availability: dict[str, AgentAvailability] = {}
+        self._message_handlers: dict[
+            MessageType, Callable[[AgentMessage], AgentMessage | None]
+        ] = {}
+        self._message_log: list[AgentMessage] = []
 
         for msg_type in MessageType:
             self._message_handlers[msg_type] = self._default_handler
@@ -185,7 +187,7 @@ class AgentManager:
         return self._registry
 
     @property
-    def message_log(self) -> List[AgentMessage]:
+    def message_log(self) -> list[AgentMessage]:
         return list(self._message_log)
 
     def register_agent(self, agent: BaseAgent) -> None:
@@ -194,17 +196,19 @@ class AgentManager:
         self._availability[agent.spec.name] = AgentAvailability(
             agent_name=agent.spec.name,
         )
-        logger.info("Registered agent: %s (capabilities=%s)", agent.spec.name, agent.spec.capabilities)
+        logger.info(
+            "Registered agent: %s (capabilities=%s)", agent.spec.name, agent.spec.capabilities
+        )
 
     def select_agent(
         self,
-        required_capabilities: List[str],
-        exclude_agents: Optional[List[str]] = None,
-    ) -> Optional[BaseAgent]:
+        required_capabilities: list[str],
+        exclude_agents: list[str] | None = None,
+    ) -> BaseAgent | None:
         """Select the best available agent for a set of capabilities."""
         exclude = set(exclude_agents or [])
 
-        scored_agents: List[tuple[float, BaseAgent]] = []
+        scored_agents: list[tuple[float, BaseAgent]] = []
 
         for agent in self._registry.all():
             if agent.spec.name in exclude:
@@ -224,7 +228,7 @@ class AgentManager:
         scored_agents.sort(key=lambda x: x[0], reverse=True)
         return scored_agents[0][1]
 
-    def select_by_capability(self, capability: AgentCapability) -> Optional[BaseAgent]:
+    def select_by_capability(self, capability: AgentCapability) -> BaseAgent | None:
         """Select an agent by a specific capability."""
         agent = self._registry.select(capability)
         if agent:
@@ -239,7 +243,7 @@ class AgentManager:
         if avail:
             avail.is_available = False
             avail.current_task_id = task_id
-            avail.last_active = datetime.now(timezone.utc).isoformat()
+            avail.last_active = datetime.now(UTC).isoformat()
 
     def mark_available(self, agent_name: str, success: bool = True) -> None:
         """Mark an agent as available after task completion."""
@@ -251,15 +255,15 @@ class AgentManager:
                 avail.completed_tasks += 1
             else:
                 avail.failed_tasks += 1
-            avail.last_active = datetime.now(timezone.utc).isoformat()
+            avail.last_active = datetime.now(UTC).isoformat()
 
-    def get_availability(self, agent_name: str) -> Optional[AgentAvailability]:
+    def get_availability(self, agent_name: str) -> AgentAvailability | None:
         return self._availability.get(agent_name)
 
-    def get_all_availability(self) -> Dict[str, AgentAvailability]:
+    def get_all_availability(self) -> dict[str, AgentAvailability]:
         return dict(self._availability)
 
-    def send_message(self, message: AgentMessage) -> Optional[AgentMessage]:
+    def send_message(self, message: AgentMessage) -> AgentMessage | None:
         """Send a message and get a response."""
         self._message_log.append(message)
 
@@ -274,12 +278,12 @@ class AgentManager:
     def register_handler(
         self,
         message_type: MessageType,
-        handler: Callable[[AgentMessage], Optional[AgentMessage]],
+        handler: Callable[[AgentMessage], AgentMessage | None],
     ) -> None:
         """Register a custom message handler."""
         self._message_handlers[message_type] = handler
 
-    def _score_agent(self, agent: BaseAgent, required_capabilities: List[str]) -> float:
+    def _score_agent(self, agent: BaseAgent, required_capabilities: list[str]) -> float:
         """Score an agent's suitability for a capability set."""
         if not required_capabilities:
             return 0.5
@@ -299,7 +303,7 @@ class AgentManager:
 
         return score
 
-    def _default_handler(self, message: AgentMessage) -> Optional[AgentMessage]:
+    def _default_handler(self, message: AgentMessage) -> AgentMessage | None:
         """Default message handler."""
         logger.debug("Default handler for %s from %s", message.message_type.value, message.sender)
         return None

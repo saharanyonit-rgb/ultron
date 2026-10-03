@@ -1,0 +1,16 @@
+{
+  "tasks": [
+    {
+      "id": "ccd44818b005",
+      "tool_name": "take_screenshot",
+      "arguments": {},
+      "run_at": "2026-10-01T17:54:57.448992+05:30",
+      "risk": "low",
+      "created_at": "2026-10-01T17:24:57.449970+05:30",
+      "status": "pending",
+      "result": null,
+      "error": null
+    }
+  ],
+  "automations": []
+}

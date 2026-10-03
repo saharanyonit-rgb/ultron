@@ -41,11 +41,15 @@ export function svgEl(tag, attrs = {}) {
   return node;
 }
 
-/** Reference an icon from the sprite. */
+/**
+ * Reference an icon from the sprite. `id` is the full symbol id as defined in
+ * the sprite, e.g. `i-system` — the same string the modules carry in
+ * `icon:` — because the static markup writes `<use href="#i-system">`.
+ */
 export function icon(id, className = '') {
   const svg = svgEl('svg', className ? { class: className, 'aria-hidden': 'true' } : { 'aria-hidden': 'true' });
   const use = svgEl('use');
-  use.setAttribute('href', `#i-${id}`);
+  use.setAttribute('href', `#${id}`);
   svg.append(use);
   return svg;
 }
@@ -73,12 +77,6 @@ export function setClass(node, name, on) {
 export function setClassName(node, value) {
   if (!node) return;
   if (node.className !== value) node.className = value;
-}
-
-export function setWidth(node, percent) {
-  if (!node) return;
-  const next = `${Math.max(0, Math.min(100, percent || 0))}%`;
-  if (node.style.width !== next) node.style.width = next;
 }
 
 export function clear(node) {

@@ -18,45 +18,51 @@ capability-based routing instead of keyword-based routing.
 
 from __future__ import annotations
 
-from ultron.brains.router import BrainRouter, BrainType, BrainRouteDecision
-from ultron.brains.planning import PlanningBrain, ExecutionPlan, PlannedTask
-from ultron.brains.research import ResearchBrain, ResearchFinding, ResearchReport
-from ultron.brains.coding import CodingBrain, CodeChange, CodingResult
-from ultron.brains.computer import ComputerBrain, ComputerAction, ComputerResult
-from ultron.brains.verification import (
-    VerificationBrain,
-    VerificationResult,
-    VerificationStatus,
-    VerificationRecommendation,
-)
-from ultron.brains.provider import BrainProviderFactory
 from ultron.brains.capability_router import (
-    CapabilityBasedRouter,
-    BrainCapability,
     BrainCapabilities,
+    BrainCapability,
     BrainCapabilityRegistry,
-    TaskRequirements,
+    CapabilityBasedRouter,
+    Complexity,
+    Intent,
+    RiskLevel,
     RoutingDecision,
     RoutingScore,
-    Intent,
-    Complexity,
-    RiskLevel,
+    TaskRequirements,
 )
+from ultron.brains.coding import CodeChange, CodingBrain, CodingResult
+from ultron.brains.computer import ComputerAction, ComputerBrain, ComputerResult
+from ultron.brains.planning import ExecutionPlan, PlannedTask, PlanningBrain
+from ultron.brains.provider import BrainProviderFactory
+from ultron.brains.research import ResearchBrain, ResearchFinding, ResearchReport
+from ultron.brains.router import BrainRouteDecision, BrainRouter, BrainType
+from ultron.brains.verification import (
+    VerificationBrain,
+    VerificationRecommendation,
+    VerificationResult,
+    VerificationStatus,
+)
+
 
 def __getattr__(name: str):
     if name == "BrainOrchestrator":
         from ultron.brains.orchestrator import BrainOrchestrator
+
         return BrainOrchestrator
     if name == "BrainOrchestrationResult":
         from ultron.brains.orchestrator import BrainOrchestrationResult
+
         return BrainOrchestrationResult
     if name == "BrainOrchestrationEvent":
         from ultron.brains.orchestrator import BrainOrchestrationEvent
+
         return BrainOrchestrationEvent
     if name == "BrainContext":
         from ultron.brains.orchestrator import BrainContext
+
         return BrainContext
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "BrainProviderFactory",

@@ -9,27 +9,28 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
-
+from enum import StrEnum
+from typing import Any
 
 # ── Runtime Context ────────────────────────────────────────────────
+
 
 @dataclass
 class RuntimeContext:
     """Carries request-scoped state through the entire pipeline."""
 
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    conversation_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    route_type: Optional[str] = None
-    route_target: Optional[str] = None
+    conversation_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    route_type: str | None = None
+    route_target: str | None = None
     route_confidence: float = 0.0
 
 
 # ── Planning ───────────────────────────────────────────────────────
 
-class PlanStepStatus(str, Enum):
+
+class PlanStepStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -42,18 +43,18 @@ class PlanStep:
     """A single step inside an execution plan."""
 
     tool_name: str
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
     description: str = ""
     step_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     status: PlanStepStatus = PlanStepStatus.PENDING
-    result: Optional["ExecutionResult"] = None
+    result: ExecutionResult | None = None
 
 
 @dataclass
 class Plan:
     """An ordered sequence of steps the Brain intends to execute."""
 
-    steps: List[PlanStep] = field(default_factory=list)
+    steps: list[PlanStep] = field(default_factory=list)
     plan_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     description: str = ""
 
@@ -61,13 +62,14 @@ class Plan:
     def is_empty(self) -> bool:
         return len(self.steps) == 0
 
-    def pending_steps(self) -> List[PlanStep]:
+    def pending_steps(self) -> list[PlanStep]:
         return [s for s in self.steps if s.status == PlanStepStatus.PENDING]
 
 
 # ── Execution ──────────────────────────────────────────────────────
 
-class ExecutionStatus(str, Enum):
+
+class ExecutionStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     NOT_FOUND = "not_found"
@@ -83,14 +85,15 @@ class ExecutionResult:
 
     tool_name: str
     status: ExecutionStatus
-    output: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    output: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 # ── Verification ───────────────────────────────────────────────────
 
-class VerificationStatus(str, Enum):
+
+class VerificationStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
@@ -102,11 +105,12 @@ class VerificationResult:
 
     execution_result: ExecutionResult
     status: VerificationStatus
-    checks: Dict[str, bool] = field(default_factory=dict)
+    checks: dict[str, bool] = field(default_factory=dict)
     message: str = ""
 
 
 # ── Error ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class ErrorResult:
@@ -114,11 +118,11 @@ class ErrorResult:
 
     error_type: str
     message: str
-    details: Optional[str] = None
+    details: str | None = None
     recoverable: bool = True
 
     @classmethod
-    def from_exception(cls, exc: Exception, recoverable: bool = True) -> "ErrorResult":
+    def from_exception(cls, exc: Exception, recoverable: bool = True) -> ErrorResult:
         return cls(
             error_type=type(exc).__name__,
             message=str(exc),
@@ -128,7 +132,8 @@ class ErrorResult:
 
 # ── Phase 3: Memory Records ──────────────────────────────────────
 
-class MemoryType(str, Enum):
+
+class MemoryType(StrEnum):
     CONVERSATION = "conversation"
     FACT = "fact"
     TASK = "task"
@@ -144,18 +149,19 @@ class MemoryRecord:
     content: str
     record_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     timestamp: str = ""
-    session_id: Optional[str] = None
+    session_id: str | None = None
     role: str = "user"
     record_type: MemoryType = MemoryType.CONVERSATION
     importance: float = 0.5
     source: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    keywords: List[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    keywords: list[str] = field(default_factory=list)
 
 
 # ── Phase 3: Multi-step Planning ─────────────────────────────────
 
-class PlanStepPriority(str, Enum):
+
+class PlanStepPriority(StrEnum):
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
@@ -169,15 +175,15 @@ class MultiStepPlanStep:
     step_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     objective: str = ""
     tool_name: str = ""
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
     description: str = ""
-    dependencies: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
     status: PlanStepStatus = PlanStepStatus.PENDING
-    result: Optional["ExecutionResult"] = None
+    result: ExecutionResult | None = None
     retry_count: int = 0
     max_retries: int = 3
     priority: PlanStepPriority = PlanStepPriority.NORMAL
-    verification_state: Optional["VerificationResult"] = None
+    verification_state: VerificationResult | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -194,7 +200,7 @@ class MultiStepPlanStep:
 class MultiStepPlan:
     """A plan with dependency management and retry support."""
 
-    steps: List[MultiStepPlanStep] = field(default_factory=list)
+    steps: list[MultiStepPlanStep] = field(default_factory=list)
     plan_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     description: str = ""
     max_steps: int = 20
@@ -203,22 +209,23 @@ class MultiStepPlan:
     def is_empty(self) -> bool:
         return len(self.steps) == 0
 
-    def pending_steps(self) -> List[MultiStepPlanStep]:
+    def pending_steps(self) -> list[MultiStepPlanStep]:
         return [s for s in self.steps if s.status == PlanStepStatus.PENDING]
 
-    def ready_steps(self) -> List[MultiStepPlanStep]:
+    def ready_steps(self) -> list[MultiStepPlanStep]:
         """Return steps whose dependencies are all satisfied."""
         completed_ids = {s.step_id for s in self.steps if s.status == PlanStepStatus.SUCCEEDED}
         return [
-            s for s in self.steps
+            s
+            for s in self.steps
             if s.status == PlanStepStatus.PENDING
             and all(dep in completed_ids for dep in s.dependencies)
         ]
 
-    def failed_steps(self) -> List[MultiStepPlanStep]:
+    def failed_steps(self) -> list[MultiStepPlanStep]:
         return [s for s in self.steps if s.status == PlanStepStatus.FAILED]
 
-    def completed_steps(self) -> List[MultiStepPlanStep]:
+    def completed_steps(self) -> list[MultiStepPlanStep]:
         return [s for s in self.steps if s.status == PlanStepStatus.SUCCEEDED]
 
     def has_cycle(self) -> bool:

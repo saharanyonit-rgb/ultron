@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from ultron.actions import PermissionDecision
 
@@ -27,12 +27,12 @@ class AuditLog:
     def record(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-        result: Dict[str, Any],
+        arguments: dict[str, Any],
+        result: dict[str, Any],
         decision: PermissionDecision,
     ) -> None:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "tool": tool_name,
             "arguments": arguments,
             "result": result,
@@ -43,10 +43,10 @@ class AuditLog:
         with self._path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
 
-    def entries(self) -> list[Dict[str, Any]]:
+    def entries(self) -> list[dict[str, Any]]:
         if not self._path.is_file():
             return []
-        out: list[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         with self._path.open("r", encoding="utf-8") as fh:
             for raw in fh:
                 raw = raw.strip()

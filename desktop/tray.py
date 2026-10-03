@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger("jarvis.desktop.tray")
 
@@ -22,6 +22,7 @@ def _import_pystray():
     try:
         import pystray
         from pystray import MenuItem as item
+
         _tray_icon = pystray.Icon
         _tray_menu = pystray.Menu
         return pystray, item
@@ -61,10 +62,10 @@ class SystemTray:
 
     def __init__(
         self,
-        on_open: Optional[Callable] = None,
-        on_hide: Optional[Callable] = None,
-        on_show: Optional[Callable] = None,
-        on_exit: Optional[Callable] = None,
+        on_open: Callable | None = None,
+        on_hide: Callable | None = None,
+        on_show: Callable | None = None,
+        on_exit: Callable | None = None,
         accent_color: str = "#3dffb0",
     ):
         self.on_open = on_open
@@ -73,7 +74,7 @@ class SystemTray:
         self.on_exit = on_exit
         self.accent_color = accent_color
         self._icon = None
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._running = False
 
     def start(self) -> bool:
@@ -104,12 +105,15 @@ class SystemTray:
         )
 
         self._running = True
-        self._thread = threading.Thread(
-            target=self._run, daemon=True, name="jarvis-tray"
-        )
+        self._thread = threading.Thread(target=self._run, daemon=True, name="jarvis-tray")
         self._thread.start()
         logger.info("System tray started")
         return True
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the tray icon was started successfully and is still up."""
+        return self._running
 
     def _run(self) -> None:
         """Run the tray icon (blocking)."""

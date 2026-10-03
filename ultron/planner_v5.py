@@ -11,10 +11,9 @@ unnecessary decomposition.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
 from ultron.goal import Goal, GoalComplexity
-from ultron.task import Task, TaskGraph, TaskPriority, TaskStatus
+from ultron.task import Task, TaskGraph, TaskPriority
 
 logger = logging.getLogger("ultron.planner_v5")
 
@@ -103,7 +102,8 @@ class GoalPlanner:
         )
 
         affected_dependents = [
-            t for t in existing_graph.tasks
+            t
+            for t in existing_graph.tasks
             if failed_task_id in t.dependencies and t.id != failed_task_id
         ]
         for dep_task in affected_dependents:
@@ -152,12 +152,19 @@ class GoalPlanner:
         tools = goal.required_tools or self._infer_tools(goal)
 
         needs_analysis = any(c in capabilities for c in ["research", "analysis"])
-        needs_execution = any(t in tools for t in [
-            "create_file", "read_file", "search_files", "open_url", "open_app",
-        ])
+        needs_execution = any(
+            t in tools
+            for t in [
+                "create_file",
+                "read_file",
+                "search_files",
+                "open_url",
+                "open_app",
+            ]
+        )
         needs_verification = len(goal.success_criteria) > 1
 
-        tasks: List[Task] = []
+        tasks: list[Task] = []
 
         if needs_analysis:
             analysis_task = Task(
@@ -173,8 +180,12 @@ class GoalPlanner:
             exec_task = Task(
                 description=f"Execute: {goal.description}",
                 objective=goal.original_request,
-                required_capabilities=[c for c in capabilities if c not in ["analysis", "research"]],
-                required_tools=[t for t in tools if t not in ["read_file", "search_files", "open_url"]],
+                required_capabilities=[
+                    c for c in capabilities if c not in ["analysis", "research"]
+                ],
+                required_tools=[
+                    t for t in tools if t not in ["read_file", "search_files", "open_url"]
+                ],
                 metadata={"phase": "execution", "goal_id": goal.id},
             )
             if needs_analysis:
@@ -217,7 +228,7 @@ class GoalPlanner:
         capabilities = goal.required_capabilities or self._infer_capabilities(goal)
         tools = goal.required_tools or self._infer_tools(goal)
 
-        tasks: List[Task] = []
+        tasks: list[Task] = []
 
         analysis_task = Task(
             description="Analyze requirements and gather context",
@@ -239,7 +250,7 @@ class GoalPlanner:
             )
             tasks.append(research_task)
 
-        execution_tasks: List[Task] = []
+        execution_tasks: list[Task] = []
         action_capabilities = [c for c in capabilities if c not in ["analysis", "research"]]
         action_tools = [t for t in tools if t not in ["read_file", "search_files", "open_url"]]
 
@@ -277,7 +288,7 @@ class GoalPlanner:
         )
         tasks.append(summary_task)
 
-        for t in tasks[:self._max_tasks]:
+        for t in tasks[: self._max_tasks]:
             graph.add_task(t)
 
         if len(tasks) > self._max_tasks:
@@ -289,7 +300,7 @@ class GoalPlanner:
 
         return graph
 
-    def _infer_capabilities(self, goal: Goal) -> List[str]:
+    def _infer_capabilities(self, goal: Goal) -> list[str]:
         """Infer required capabilities from goal description."""
         desc = goal.description.lower()
         caps = []
@@ -312,7 +323,7 @@ class GoalPlanner:
 
         return caps
 
-    def _infer_tools(self, goal: Goal) -> List[str]:
+    def _infer_tools(self, goal: Goal) -> list[str]:
         """Infer required tools from goal description."""
         desc = goal.description.lower()
         tools = []

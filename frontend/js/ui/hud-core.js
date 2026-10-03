@@ -90,11 +90,15 @@ export function setCoreState(next, sublabel = null) {
 
   const mic = $('#btn-mic');
   if (mic) {
-    mic.disabled = resolved === 'processing' || resolved === 'executing';
-    mic.setAttribute(
-      'aria-label',
-      resolved === 'listening' ? 'Stop listening' : 'Start voice command',
-    );
+    // Never hard-disable this button. `toggleVoice` already reads an in-flight
+    // turn as a cancel, so a real `disabled` removed the operator's only way
+    // out of a stalled processing state — and the core stays in `processing`
+    // for as long as the backend goal takes. Busy is conveyed with
+    // aria-disabled plus the label, which keeps it focusable and clickable.
+    const busy = ['listening', 'processing', 'executing', 'speaking'].includes(resolved);
+    mic.disabled = false;
+    mic.setAttribute('aria-disabled', busy ? 'true' : 'false');
+    mic.setAttribute('aria-label', busy ? 'Cancel voice turn' : 'Start voice command');
   }
 }
 

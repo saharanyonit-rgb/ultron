@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from ultron.actions import PermissionGate
 from ultron.actions.audit_log import AuditLog
 from ultron.core.agent import Agent
 from ultron.core.router import IntentRouter, RouteType
-from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
-from ultron.memory import Memory
+from ultron.llm.base import LLMProvider, ProviderResult, ToolCall
 from ultron.models import RuntimeContext, VerificationStatus
 from ultron.pipeline import Pipeline, PipelineResult
 from ultron.tools import ALL_TOOLS, ToolRegistry
@@ -18,7 +15,7 @@ from ultron.tools import ALL_TOOLS, ToolRegistry
 class ScriptedProvider(LLMProvider):
     name = "scripted_pipeline"
 
-    def __init__(self, script: Optional[List[ProviderResult]] = None) -> None:
+    def __init__(self, script: list[ProviderResult] | None = None) -> None:
         self._script = list(script) if script else []
 
     def complete(self, text, tools):
@@ -66,8 +63,10 @@ def test_pipeline_tool_route(tmp_path):
 
 
 def test_pipeline_unsupported_route(tmp_path):
+    # Mouse control is a registered tool, so it routes to a tool rather than
+    # being refused. Only a genuinely absent capability takes this path.
     pipeline = make_pipeline(tmp_path)
-    result = pipeline.execute("move mouse to 100,200")
+    result = pipeline.execute("fine-tune ollama on my dataset")
     assert "cannot perform this action" in result.text.lower()
     assert result.context.route_type == RouteType.UNSUPPORTED.value
 

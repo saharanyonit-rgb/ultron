@@ -57,8 +57,7 @@ body::after {
     var(--dock-height);       /* Bottom Dock */
   grid-template-columns:
     var(--left-panel-width)   /* Left Panel */
-    1fr                       /* Center */
-    var(--right-panel-width); /* Right Panel */
+    1fr;                      /* Center */
   height: 100vh;
   width: 100vw;
   min-height: 0;
@@ -69,7 +68,6 @@ body::after {
   --topbar-height: 48px;
   --status-strip-height: 28px;
   --left-panel-width: 280px;
-  --right-panel-width: 280px;
   --dock-height: 90px;
 }
 
@@ -177,31 +175,6 @@ body[data-ui="orb"] .center-area {
   pointer-events: none;
 }
 
-/* ── Right Panel ─────────────────────────────────────────────── */
-.right-panel {
-  grid-row: 3;
-  grid-column: 3;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  overflow-y: auto;
-  border-left: 1px solid var(--border-primary);
-  background: rgba(10, 18, 21, 0.5);
-  min-width: 0;
-}
-
-.right-panel::-webkit-scrollbar {
-  width: 4px;
-}
-.right-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-.right-panel::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
-  border-radius: 2px;
-}
-
 /* ── Bottom Dock ─────────────────────────────────────────────── */
 .bottom-dock {
   grid-row: 4;
@@ -234,19 +207,16 @@ body[data-ui="orb"] .center-area {
 @media (max-width: 1600px) {
   :root {
     --left-panel-width: 240px;
-    --right-panel-width: 240px;
   }
 }
 
 @media (max-width: 1280px) {
   :root {
     --left-panel-width: 0;
-    --right-panel-width: 0;
     --dock-height: 72px;
   }
 
-  .left-panel,
-  .right-panel {
+  .left-panel {
     display: none;
   }
 

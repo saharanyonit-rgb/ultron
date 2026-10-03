@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import subprocess
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.platform import is_windows, is_android, is_posix
+import subprocess
+from typing import Any, cast
+
+from ultron.platform import is_android, is_posix, is_windows
 from ultron.tools.base import Tool
 
 # Windows known apps
-KNOWN_APPS_WINDOWS: Dict[str, str] = {
+KNOWN_APPS_WINDOWS: dict[str, str] = {
     "notepad": "notepad",
     "calc": "calc",
     "calculator": "calc",
@@ -33,7 +35,7 @@ KNOWN_APPS_WINDOWS: Dict[str, str] = {
 }
 
 # Android/Termux known apps (via am start)
-KNOWN_APPS_ANDROID: Dict[str, str] = {
+KNOWN_APPS_ANDROID: dict[str, str] = {
     "chrome": "com.android.chrome",
     "google chrome": "com.android.chrome",
     "firefox": "org.mozilla.firefox",
@@ -47,7 +49,7 @@ KNOWN_APPS_ANDROID: Dict[str, str] = {
 }
 
 # Linux known apps (via xdg-open or direct)
-KNOWN_APPS_LINUX: Dict[str, str] = {
+KNOWN_APPS_LINUX: dict[str, str] = {
     "chrome": "google-chrome",
     "google chrome": "google-chrome",
     "firefox": "firefox",
@@ -55,12 +57,18 @@ KNOWN_APPS_LINUX: Dict[str, str] = {
     "settings": "xdg-open",
 }
 
-HELP_TEXT = "Known apps: " + ", ".join(sorted(
-    set(list(KNOWN_APPS_WINDOWS.keys()) + list(KNOWN_APPS_ANDROID.keys()) + list(KNOWN_APPS_LINUX.keys()))
-))
+HELP_TEXT = "Known apps: " + ", ".join(
+    sorted(
+        set(
+            list(KNOWN_APPS_WINDOWS.keys())
+            + list(KNOWN_APPS_ANDROID.keys())
+            + list(KNOWN_APPS_LINUX.keys())
+        )
+    )
+)
 
 
-def _get_known_apps() -> Dict[str, str]:
+def _get_known_apps() -> dict[str, str]:
     if is_android():
         return KNOWN_APPS_ANDROID
     if is_windows():
@@ -83,6 +91,24 @@ def _resolve_app(name: str) -> tuple[str | None, str | None]:
 
 class OpenApp(Tool):
     name = "open_app"
+    risk = RiskLevel.LOW
+    keywords = (
+        "open app",
+        "launch app",
+        "run app",
+        "start notepad",
+        "open notepad",
+        "open calc",
+        "open calculator",
+        "open explorer",
+        "open file explorer",
+        "open chrome",
+        "open google chrome",
+        "open vscode",
+        "open visual studio code",
+        "launch chrome",
+        "launch vscode",
+    )
     description = (
         "Launch a known application (e.g. notepad, calc, explorer, settings) "
         "or an executable path. Returns the launched process id."
@@ -108,13 +134,17 @@ class OpenApp(Tool):
     }
     mutates = True
 
-    def run(self, app_name: str = "", **kwargs: Any) -> Dict[str, Any]:
-        target_name = app_name or kwargs.get("name") or kwargs.get("app") or kwargs.get("target") or ""
+    def run(self, app_name: str = "", **kwargs: Any) -> dict[str, Any]:
+        target_name = (
+            app_name or kwargs.get("name") or kwargs.get("app") or kwargs.get("target") or ""
+        )
         if not target_name:
             return {"error": "Missing 'app_name' parameter", "launched": False}
         target, error = _resolve_app(target_name)
         if error:
             return {"error": error, "launched": False}
+        # `_resolve_app` only omits the target on the error path, so it is a str here.
+        target = cast(str, target)
 
         if is_android():
             return self._open_android(target_name, target)
@@ -122,13 +152,10 @@ class OpenApp(Tool):
             return self._open_windows(target_name, target)
         return self._open_linux(target_name, target)
 
-    def _open_windows(self, target_name: str, target: str) -> Dict[str, Any]:
+    def _open_windows(self, target_name: str, target: str) -> dict[str, Any]:
         from ultron.tools._windows import ps_error, ps_ok, ps_quote, ps_stdout, run_powershell
 
-        script = (
-            f"$p = Start-Process -FilePath {ps_quote(target)} -PassThru; "
-            f"Write-Output $p.Id"
-        )
+        script = f"$p = Start-Process -FilePath {ps_quote(target)} -PassThru; Write-Output $p.Id"
         proc = run_powershell(script, timeout=30)
         if not ps_ok(proc):
             return {"error": f"failed to start {target!r}: {ps_error(proc)}", "launched": False}
@@ -139,38 +166,52 @@ class OpenApp(Tool):
         launched = pid is not None
         return {"app": target_name, "target": target, "pid": pid, "launched": launched}
 
-    def _open_android(self, target_name: str, target: str) -> Dict[str, Any]:
+    def _open_android(self, target_name: str, target: str) -> dict[str, Any]:
         """Open app on Android via Termux am command."""
         try:
             # For intent-based launches (contains a dot and no spaces = package name)
             if "." in target and " " not in target:
                 proc = subprocess.run(
                     ["am", "start", "-n", f"{target}/.MainActivity"],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 if proc.returncode != 0:
                     # Try without .MainActivity
                     proc = subprocess.run(
-                        ["am", "start", "-a", "android.intent.action.MAIN",
-                         "-c", "android.intent.category.LAUNCHER", target],
-                        capture_output=True, text=True, timeout=10,
+                        [
+                            "am",
+                            "start",
+                            "-a",
+                            "android.intent.action.MAIN",
+                            "-c",
+                            "android.intent.category.LAUNCHER",
+                            target,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
             else:
                 # Try xdg-open for URLs or file paths
                 proc = subprocess.run(
                     ["xdg-open", target],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
             return {"app": target_name, "target": target, "launched": proc.returncode == 0}
         except Exception as e:
             return {"error": f"failed to start {target!r}: {e}", "launched": False}
 
-    def _open_linux(self, target_name: str, target: str) -> Dict[str, Any]:
+    def _open_linux(self, target_name: str, target: str) -> dict[str, Any]:
         """Open app on Linux via subprocess."""
         try:
             proc = subprocess.Popen(
                 [target],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
             return {"app": target_name, "target": target, "pid": proc.pid, "launched": True}
         except FileNotFoundError:
@@ -178,7 +219,8 @@ class OpenApp(Tool):
             try:
                 proc = subprocess.Popen(
                     ["xdg-open", target],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 return {"app": target_name, "target": target, "pid": proc.pid, "launched": True}
             except Exception as e:
@@ -187,6 +229,15 @@ class OpenApp(Tool):
 
 class CloseApp(Tool):
     name = "close_app"
+    risk = RiskLevel.HIGH
+    keywords = (
+        "close app",
+        "stop app",
+        "kill process",
+        "close notepad",
+        "close calc",
+        "end task",
+    )
     description = (
         "Close a running application by process name (with or without .exe). "
         "Only affects the named process; nothing else is touched."
@@ -207,8 +258,10 @@ class CloseApp(Tool):
     }
     mutates = True
 
-    def run(self, app_name: str = "", **kwargs: Any) -> Dict[str, Any]:
-        target_name = app_name or kwargs.get("name") or kwargs.get("app") or kwargs.get("process") or ""
+    def run(self, app_name: str = "", **kwargs: Any) -> dict[str, Any]:
+        target_name = (
+            app_name or kwargs.get("name") or kwargs.get("app") or kwargs.get("process") or ""
+        )
         proc_name = target_name.strip().removesuffix(".exe")
         if not proc_name:
             return {"error": "app_name is empty"}
@@ -217,7 +270,7 @@ class CloseApp(Tool):
             return self._close_windows(proc_name)
         return self._close_posix(proc_name)
 
-    def _close_windows(self, proc_name: str) -> Dict[str, Any]:
+    def _close_windows(self, proc_name: str) -> dict[str, Any]:
         from ultron.tools._windows import ps_error, ps_ok, ps_quote, ps_stdout, run_powershell
 
         script = (
@@ -233,12 +286,14 @@ class CloseApp(Tool):
             return {"closed": [], "count": 0, "note": f"{proc_name} was not running"}
         return {"closed": closed, "count": len(closed)}
 
-    def _close_posix(self, proc_name: str) -> Dict[str, Any]:
+    def _close_posix(self, proc_name: str) -> dict[str, Any]:
         """Close app on Linux/Android via pkill."""
         try:
             proc = subprocess.run(
                 ["pkill", "-f", proc_name],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             # pkill returns 0 if at least one process was killed
             if proc.returncode == 0:

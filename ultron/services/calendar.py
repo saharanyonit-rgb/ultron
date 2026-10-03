@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from ultron.services.base import BaseService
 
@@ -21,12 +21,12 @@ class CalendarService(BaseService):
         self,
         title: str,
         start_time: str,
-        end_time: Optional[str] = None,
+        end_time: str | None = None,
         description: str = "",
         timezone: str = "UTC",
-        recurrence: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        recurrence: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Create a new calendar event."""
         now = self._now_iso()
         event_id = self._generate_id()
@@ -47,7 +47,7 @@ class CalendarService(BaseService):
         logger.info("Calendar event created: %s", event_id)
         return event
 
-    def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+    def get_event(self, event_id: str) -> dict[str, Any] | None:
         """Retrieve a single event by ID."""
         for item in self._items():
             if item.get("id") == event_id:
@@ -56,10 +56,10 @@ class CalendarService(BaseService):
 
     def list_events(
         self,
-        from_time: Optional[str] = None,
-        to_time: Optional[str] = None,
+        from_time: str | None = None,
+        to_time: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List events, optionally filtered by time range."""
         events = self._items()
 
@@ -83,14 +83,14 @@ class CalendarService(BaseService):
     def update_event(
         self,
         event_id: str,
-        title: Optional[str] = None,
-        description: Optional[str] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        timezone: Optional[str] = None,
-        recurrence: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        title: str | None = None,
+        description: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        timezone: str | None = None,
+        recurrence: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """Update an existing event."""
         for item in self._data["items"]:
             if item.get("id") == event_id:
@@ -111,7 +111,7 @@ class CalendarService(BaseService):
                 item["updated_at"] = self._now_iso()
                 self._persist()
                 logger.info("Calendar event updated: %s", event_id)
-                return item
+                return cast("dict[str, Any]", item)
         return None
 
     def delete_event(self, event_id: str) -> bool:
@@ -125,31 +125,29 @@ class CalendarService(BaseService):
                 return True
         return False
 
-    def search_events(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def search_events(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Search events by title or description."""
         q = query.lower()
         events = [
-            e for e in self._items()
+            e
+            for e in self._items()
             if q in e.get("title", "").lower() or q in e.get("description", "").lower()
         ]
         events.sort(key=lambda e: e.get("start_time", ""))
         return events[:limit]
 
-    def get_upcoming(self, count: int = 5) -> List[Dict[str, Any]]:
+    def get_upcoming(self, count: int = 5) -> list[dict[str, Any]]:
         """Get the next N upcoming events."""
-        now = datetime.now(timezone.utc).isoformat()
-        upcoming = [
-            e for e in self._items()
-            if e.get("start_time", "") >= now
-        ]
+        now = datetime.now(UTC).isoformat()
+        upcoming = [e for e in self._items() if e.get("start_time", "") >= now]
         upcoming.sort(key=lambda e: e.get("start_time", ""))
         return upcoming[:count]
 
 
-_calendar_service: Optional[CalendarService] = None
+_calendar_service: CalendarService | None = None
 
 
-def get_calendar_service(data_dir: Optional[Path] = None) -> CalendarService:
+def get_calendar_service(data_dir: Path | None = None) -> CalendarService:
     global _calendar_service
     if _calendar_service is None:
         _calendar_service = CalendarService(data_dir)

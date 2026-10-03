@@ -10,14 +10,16 @@ several disconnected instances.
 
 from __future__ import annotations
 
-import urllib.parse
-from typing import Any, Dict, Optional
+from ultron.risk import RiskLevel
 
-from ultron.browser import BrowserAction, BrowserResult, BrowserTool
+import urllib.parse
+from typing import Any
+
+from ultron.browser import BrowserAction, BrowserPage, BrowserResult, BrowserTool
 from ultron.network_security import BrowserSecurityGuard, NetworkSecurityGuard
 from ultron.tools.base import Tool
 
-_shared_browser: Optional[BrowserTool] = None
+_shared_browser: BrowserTool | None = None
 
 
 def get_shared_browser() -> BrowserTool:
@@ -30,7 +32,15 @@ def get_shared_browser() -> BrowserTool:
 
 class NavigateUrl(Tool):
     """Navigate the browser to a URL."""
+
     name = "navigate_url"
+    keywords = (
+        "navigate to",
+        "go to url",
+        "browse to page",
+        "open page",
+    )
+    risk = RiskLevel.LOW
     description = "Navigate the browser to a URL. Security-validated."
     parameters = {
         "type": "object",
@@ -49,10 +59,10 @@ class NavigateUrl(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, url: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, url: str = "", **kwargs: Any) -> dict[str, Any]:
         target_url = url or kwargs.get("link") or kwargs.get("uri") or kwargs.get("target") or ""
         if target_url and not target_url.startswith(("http://", "https://")):
             target_url = "https://" + target_url
@@ -62,7 +72,15 @@ class NavigateUrl(Tool):
 
 class ReadPage(Tool):
     """Read the current browser page content."""
+
     name = "read_page"
+    keywords = (
+        "read page",
+        "read the page",
+        "what does this page say",
+        "page content",
+    )
+    risk = RiskLevel.READ
     description = "Read the current browser page content (title, text, URL)."
     parameters = {
         "type": "object",
@@ -78,17 +96,19 @@ class ReadPage(Tool):
     }
     mutates = False
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         result = self._browser.read_page()
         return result.to_dict()
 
 
 class ClickElement(Tool):
     """Click an element on the browser page."""
+
     name = "click_element"
+    risk = RiskLevel.MEDIUM
     description = "Click an element on the current browser page by CSS selector."
     parameters = {
         "type": "object",
@@ -106,18 +126,22 @@ class ClickElement(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, selector: str = "", **kwargs: Any) -> Dict[str, Any]:
-        target_selector = selector or kwargs.get("element") or kwargs.get("target") or kwargs.get("query") or ""
+    def run(self, selector: str = "", **kwargs: Any) -> dict[str, Any]:
+        target_selector = (
+            selector or kwargs.get("element") or kwargs.get("target") or kwargs.get("query") or ""
+        )
         result = self._browser.click_element(target_selector)
         return result.to_dict()
 
 
 class FillFormField(Tool):
     """Fill a form field on the browser page."""
+
     name = "fill_form"
+    risk = RiskLevel.MEDIUM
     description = "Fill a form field on the current browser page."
     parameters = {
         "type": "object",
@@ -136,19 +160,25 @@ class FillFormField(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, selector: str = "", value: str = "", **kwargs: Any) -> Dict[str, Any]:
-        target_selector = selector or kwargs.get("element") or kwargs.get("field") or kwargs.get("query") or ""
-        target_value = value or kwargs.get("text") or kwargs.get("input") or kwargs.get("content") or ""
+    def run(self, selector: str = "", value: str = "", **kwargs: Any) -> dict[str, Any]:
+        target_selector = (
+            selector or kwargs.get("element") or kwargs.get("field") or kwargs.get("query") or ""
+        )
+        target_value = (
+            value or kwargs.get("text") or kwargs.get("input") or kwargs.get("content") or ""
+        )
         result = self._browser.fill_form(target_selector, target_value)
         return result.to_dict()
 
 
 class TakeBrowserScreenshot(Tool):
     """Take a screenshot of the browser page."""
+
     name = "browser_screenshot"
+    risk = RiskLevel.READ
     description = "Take a screenshot of the current browser page."
     parameters = {
         "type": "object",
@@ -164,18 +194,22 @@ class TakeBrowserScreenshot(Tool):
     }
     mutates = False
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         result = self._browser.take_screenshot()
         return result.to_dict()
 
 
 class ScrollPage(Tool):
     """Scroll the browser page up or down."""
+
     name = "scroll_page"
-    description = "Scroll the browser page. Use 'down' or 'up' direction, and optional amount (pixels)."
+    risk = RiskLevel.LOW
+    description = (
+        "Scroll the browser page. Use 'down' or 'up' direction, and optional amount (pixels)."
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -192,10 +226,10 @@ class ScrollPage(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, direction: str = "down", amount: int = 500, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, direction: str = "down", amount: int = 500, **kwargs: Any) -> dict[str, Any]:
         direction = direction or kwargs.get("dir") or "down"
         amount = amount or kwargs.get("pixels") or 500
         page = self._browser.session.get_page()
@@ -211,12 +245,17 @@ class ScrollPage(Tool):
 
 class PressKey(Tool):
     """Press a keyboard key in the browser."""
+
     name = "browser_press_key"
+    risk = RiskLevel.MEDIUM
     description = "Press a keyboard key in the browser (Enter, Tab, Escape, ArrowDown, etc.)."
     parameters = {
         "type": "object",
         "properties": {
-            "key": {"type": "string", "description": "Key to press (e.g. Enter, Tab, Escape, ArrowDown)"},
+            "key": {
+                "type": "string",
+                "description": "Key to press (e.g. Enter, Tab, Escape, ArrowDown)",
+            },
         },
         "required": ["key"],
     }
@@ -229,10 +268,10 @@ class PressKey(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, key: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, key: str = "", **kwargs: Any) -> dict[str, Any]:
         key = key or kwargs.get("key_name") or ""
         if not key:
             return {"error": "Missing 'key' parameter"}
@@ -248,13 +287,18 @@ class PressKey(Tool):
 
 class TypeText(Tool):
     """Type text into the browser (active element)."""
+
     name = "browser_type"
+    risk = RiskLevel.MEDIUM
     description = "Type text into the currently focused element in the browser."
     parameters = {
         "type": "object",
         "properties": {
             "text": {"type": "string", "description": "Text to type"},
-            "delay": {"type": "integer", "description": "Delay between keystrokes in ms (default 0)"},
+            "delay": {
+                "type": "integer",
+                "description": "Delay between keystrokes in ms (default 0)",
+            },
         },
         "required": ["text"],
     }
@@ -267,10 +311,10 @@ class TypeText(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, text: str = "", delay: int = 0, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, text: str = "", delay: int = 0, **kwargs: Any) -> dict[str, Any]:
         text = text or kwargs.get("content") or ""
         delay = delay or kwargs.get("delay_ms") or 0
         if not text:
@@ -287,7 +331,9 @@ class TypeText(Tool):
 
 class HoverElement(Tool):
     """Hover over an element on the browser page."""
+
     name = "hover_element"
+    risk = RiskLevel.LOW
     description = "Hover the mouse over an element identified by CSS selector."
     parameters = {
         "type": "object",
@@ -305,10 +351,10 @@ class HoverElement(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, selector: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, selector: str = "", **kwargs: Any) -> dict[str, Any]:
         selector = selector or kwargs.get("element") or ""
         if not selector:
             return {"error": "Missing 'selector' parameter"}
@@ -324,7 +370,9 @@ class HoverElement(Tool):
 
 class WaitForElement(Tool):
     """Wait for an element to appear on the page."""
+
     name = "wait_element"
+    risk = RiskLevel.READ
     description = "Wait for an element to appear on the page (by CSS selector or text)."
     parameters = {
         "type": "object",
@@ -342,10 +390,10 @@ class WaitForElement(Tool):
     }
     mutates = False
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, selector: str = "", timeout: int = 10000, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, selector: str = "", timeout: int = 10000, **kwargs: Any) -> dict[str, Any]:
         selector = selector or kwargs.get("element") or ""
         timeout = timeout or kwargs.get("timeout_ms") or 10000
         if not selector:
@@ -362,7 +410,9 @@ class WaitForElement(Tool):
 
 class GetPageLinks(Tool):
     """Get all links from the current page."""
+
     name = "get_page_links"
+    risk = RiskLevel.READ
     description = "Extract all links (href) from the current browser page."
     parameters = {
         "type": "object",
@@ -378,10 +428,10 @@ class GetPageLinks(Tool):
     }
     mutates = False
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         page = self._browser.session.get_page()
         if page is None:
             return {"error": "No page loaded"}
@@ -396,8 +446,8 @@ class GetPageLinks(Tool):
 
 
 def get_browser_tools(
-    network_guard: Optional[NetworkSecurityGuard] = None,
-    browser_guard: Optional[BrowserSecurityGuard] = None,
+    network_guard: NetworkSecurityGuard | None = None,
+    browser_guard: BrowserSecurityGuard | None = None,
 ) -> list[Tool]:
     """Create all browser tools with shared security guards."""
     bt = BrowserTool(
@@ -424,6 +474,18 @@ class PlaySongTool(Tool):
     """Search YouTube and start playing the first matching result."""
 
     name = "play_song"
+    keywords = (
+        "play the song",
+        "play a song",
+        "play that song",
+        "play songs",
+        "play some music",
+        "play music",
+        "i want to hear",
+        "turn on music",
+        "start the song",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Play a song or music video on YouTube automatically. "
         "Provide the song name (and artist if known). The first matching result is "
@@ -454,10 +516,10 @@ class PlaySongTool(Tool):
     }
     mutates = True
 
-    def __init__(self, browser_tool: Optional[BrowserTool] = None) -> None:
+    def __init__(self, browser_tool: BrowserTool | None = None) -> None:
         self._browser = browser_tool or get_shared_browser()
 
-    def run(self, song: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, song: str = "", **kwargs: Any) -> dict[str, Any]:
         song = song or kwargs.get("title") or kwargs.get("query") or kwargs.get("name") or ""
         if not song:
             return {"success": False, "error": "Missing 'song' parameter."}
@@ -490,7 +552,7 @@ class PlaySongTool(Tool):
         }
 
     @staticmethod
-    def _click_first_result(page: Any) -> BrowserResult:
+    def _click_first_result(page: BrowserPage) -> BrowserResult:
         """Click the first YouTube search result, waiting for it to render."""
         raw = getattr(page, "_page", None)
         selectors = [
@@ -513,7 +575,9 @@ class PlaySongTool(Tool):
                     except Exception:
                         pass
                 return result
-        return BrowserResult(action=BrowserAction.CLICK, success=False, error="no video results found")
+        return BrowserResult(
+            action=BrowserAction.CLICK, success=False, error="no video results found"
+        )
 
     @staticmethod
     def _clean_title(title: str) -> str:

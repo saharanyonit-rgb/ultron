@@ -24,9 +24,9 @@ from ultron.errors import (  # noqa: F401
     InvalidToolError,
     JarvisError,
     MalformedResponseError,
+    PermissionDeniedError,
     ProviderError,
     RateLimitError,
-    PermissionDeniedError,
     TimeoutError,
     ToolAlreadyExistsError,
     ToolError,
@@ -50,7 +50,7 @@ class PermissionGate:
     -> record.
     """
 
-    def check(self, tool: "Tool", arguments: dict[str, Any]) -> PermissionDecision:
+    def check(self, tool: Tool, arguments: dict[str, Any]) -> PermissionDecision:
         if getattr(tool, "mutates", False):
             return PermissionDecision(allowed=True, reason="v1 pass-through (mutating action)")
         return PermissionDecision(allowed=True, reason="read-only action")

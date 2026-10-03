@@ -12,11 +12,8 @@ Security:
 
 from __future__ import annotations
 
-import os
-import shutil
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.risk import RiskLevel
 
@@ -38,11 +35,11 @@ class FilesystemTool:
 
     def __init__(
         self,
-        allowed_roots: List[str | Path] | None = None,
+        allowed_roots: list[str | Path] | None = None,
         workspace: str | Path | None = None,
     ) -> None:
         self._workspace = Path(workspace) if workspace else Path.cwd()
-        self._allowed_roots: List[Path] = []
+        self._allowed_roots: list[Path] = []
 
         if allowed_roots:
             for root in allowed_roots:
@@ -59,7 +56,7 @@ class FilesystemTool:
         return self._workspace
 
     @property
-    def allowed_roots(self) -> List[Path]:
+    def allowed_roots(self) -> list[Path]:
         return list(self._allowed_roots)
 
     def validate_path(self, path: str | Path) -> Path:
@@ -86,7 +83,7 @@ class FilesystemTool:
                 continue
         return False
 
-    def require_access(self, path: Path) -> Path:
+    def require_access(self, path: str | Path) -> Path:
         """Validate path and check access. Raises on denial."""
         resolved = self.validate_path(path)
         if not self.check_access(resolved):
@@ -96,7 +93,7 @@ class FilesystemTool:
             )
         return resolved
 
-    def list_directory(self, path: str | Path = ".") -> Dict[str, Any]:
+    def list_directory(self, path: str | Path = ".") -> dict[str, Any]:
         """List directory contents with metadata."""
         resolved = self.require_access(path)
         if not resolved.is_dir():
@@ -104,15 +101,17 @@ class FilesystemTool:
 
         entries = []
         for entry in sorted(resolved.iterdir()):
-            entries.append({
-                "name": entry.name,
-                "type": "directory" if entry.is_dir() else "file",
-                "size": entry.stat().st_size if entry.is_file() else 0,
-            })
+            entries.append(
+                {
+                    "name": entry.name,
+                    "type": "directory" if entry.is_dir() else "file",
+                    "size": entry.stat().st_size if entry.is_file() else 0,
+                }
+            )
 
         return {"path": str(resolved), "entries": entries, "count": len(entries)}
 
-    def read_file(self, path: str | Path, encoding: str = "utf-8") -> Dict[str, Any]:
+    def read_file(self, path: str | Path, encoding: str = "utf-8") -> dict[str, Any]:
         """Read a text file."""
         resolved = self.require_access(path)
         if not resolved.is_file():
@@ -138,7 +137,7 @@ class FilesystemTool:
         content: str,
         overwrite: bool = False,
         encoding: str = "utf-8",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create or overwrite a text file."""
         resolved = self.require_access(path)
 
@@ -161,7 +160,7 @@ class FilesystemTool:
         path: str | Path,
         content: str,
         encoding: str = "utf-8",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Modify an existing file (must exist)."""
         resolved = self.require_access(path)
         if not resolved.exists():
@@ -177,7 +176,7 @@ class FilesystemTool:
         except OSError as exc:
             return {"error": f"Modify error: {exc}"}
 
-    def rename_file(self, old_path: str | Path, new_path: str | Path) -> Dict[str, Any]:
+    def rename_file(self, old_path: str | Path, new_path: str | Path) -> dict[str, Any]:
         """Rename/move a file."""
         old_resolved = self.require_access(old_path)
         new_resolved = self.require_access(new_path)
@@ -197,7 +196,7 @@ class FilesystemTool:
         except OSError as exc:
             return {"error": f"Rename error: {exc}"}
 
-    def delete_file(self, path: str | Path) -> Dict[str, Any]:
+    def delete_file(self, path: str | Path) -> dict[str, Any]:
         """Delete a file (not directories)."""
         resolved = self.require_access(path)
         if not resolved.is_file():
@@ -209,7 +208,7 @@ class FilesystemTool:
         except OSError as exc:
             return {"error": f"Delete error: {exc}"}
 
-    def get_metadata(self, path: str | Path) -> Dict[str, Any]:
+    def get_metadata(self, path: str | Path) -> dict[str, Any]:
         """Get file/directory metadata."""
         resolved = self.require_access(path)
         if not resolved.exists():

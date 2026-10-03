@@ -13,10 +13,7 @@ import shutil
 import socket
 import subprocess
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.platform import is_windows
 
@@ -24,6 +21,7 @@ logger = logging.getLogger("ultron.web_api")
 
 
 # ── System Metrics ──────────────────────────────────────────────
+
 
 def _get_ram_info_windows() -> tuple[int, int, int]:
     """Get RAM info via Windows ctypes."""
@@ -69,24 +67,26 @@ def _get_ram_info_posix() -> tuple[int, int, int]:
         return 0, 0, 0
 
 
-def _get_cpu_percent_windows() -> Optional[int]:
+def _get_cpu_percent_windows() -> int | None:
     try:
         result = subprocess.run(
-            ["powershell", "-Command",
-             "(Get-CimInstance Win32_Processor).LoadPercentage"],
-            capture_output=True, text=True, timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            ["powershell", "-Command", "(Get-CimInstance Win32_Processor).LoadPercentage"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if result.returncode == 0 and result.stdout.strip():
-            return int(result.stdout.strip().split('\n')[0].strip())
+            return int(result.stdout.strip().split("\n")[0].strip())
     except Exception:
         pass
     return None
 
 
-def _get_cpu_percent_posix() -> Optional[int]:
+def _get_cpu_percent_posix() -> int | None:
     """Read CPU usage from /proc/stat."""
     try:
+
         def read_cpu():
             with open("/proc/stat") as f:
                 line = f.readline()
@@ -107,15 +107,20 @@ def _get_cpu_percent_posix() -> Optional[int]:
         return None
 
 
-def _get_temperature_windows() -> Optional[float]:
+def _get_temperature_windows() -> float | None:
     try:
         result = subprocess.run(
-            ["powershell", "-Command",
-             "$t = Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' -ErrorAction SilentlyContinue | "
-             "Select-Object -First 1 -ExpandProperty CurrentTemperature; "
-             "if ($t) { [math]::Round(($t - 2732) / 10, 1) }"],
-            capture_output=True, text=True, timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            [
+                "powershell",
+                "-Command",
+                "$t = Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' -ErrorAction SilentlyContinue | "
+                "Select-Object -First 1 -ExpandProperty CurrentTemperature; "
+                "if ($t) { [math]::Round(($t - 2732) / 10, 1) }",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if result.returncode == 0 and result.stdout.strip():
             return float(result.stdout.strip())
@@ -124,7 +129,7 @@ def _get_temperature_windows() -> Optional[float]:
     return None
 
 
-def _get_temperature_posix() -> Optional[float]:
+def _get_temperature_posix() -> float | None:
     """Read CPU temperature from thermal zones."""
     thermal_paths = [
         "/sys/class/thermal/thermal_zone0/temp",
@@ -140,7 +145,7 @@ def _get_temperature_posix() -> Optional[float]:
     return None
 
 
-def _get_drives() -> list[Dict[str, Any]]:
+def _get_drives() -> list[dict[str, Any]]:
     drives = []
     if is_windows():
         for letter in "CDEFGHIJKL":
@@ -148,25 +153,29 @@ def _get_drives() -> list[Dict[str, Any]]:
             if os.path.exists(path):
                 try:
                     usage = shutil.disk_usage(path)
-                    drives.append({
-                        "drive": f"{letter}:",
-                        "total_gb": round(usage.total / 1e9, 1),
-                        "used_gb": round((usage.total - usage.free) / 1e9, 1),
-                        "free_gb": round(usage.free / 1e9, 1),
-                        "percent": round((usage.total - usage.free) / usage.total * 100, 1),
-                    })
+                    drives.append(
+                        {
+                            "drive": f"{letter}:",
+                            "total_gb": round(usage.total / 1e9, 1),
+                            "used_gb": round((usage.total - usage.free) / 1e9, 1),
+                            "free_gb": round(usage.free / 1e9, 1),
+                            "percent": round((usage.total - usage.free) / usage.total * 100, 1),
+                        }
+                    )
                 except OSError:
                     continue
     else:
         try:
             usage = shutil.disk_usage("/")
-            drives.append({
-                "drive": "/",
-                "total_gb": round(usage.total / 1e9, 1),
-                "used_gb": round((usage.total - usage.free) / 1e9, 1),
-                "free_gb": round(usage.free / 1e9, 1),
-                "percent": round((usage.total - usage.free) / usage.total * 100, 1),
-            })
+            drives.append(
+                {
+                    "drive": "/",
+                    "total_gb": round(usage.total / 1e9, 1),
+                    "used_gb": round((usage.total - usage.free) / 1e9, 1),
+                    "free_gb": round(usage.free / 1e9, 1),
+                    "percent": round((usage.total - usage.free) / usage.total * 100, 1),
+                }
+            )
         except OSError:
             pass
     return drives
@@ -176,6 +185,7 @@ def _get_uptime() -> int:
     if is_windows():
         try:
             import ctypes
+
             return int(ctypes.windll.kernel32.GetTickCount64() // 1000)
         except Exception:
             return 0
@@ -186,7 +196,7 @@ def _get_uptime() -> int:
         return 0
 
 
-def get_system_metrics() -> Dict[str, Any]:
+def get_system_metrics() -> dict[str, Any]:
     """Get real system metrics — cross-platform."""
     if is_windows():
         ram_total, ram_used, ram_percent = _get_ram_info_windows()
@@ -212,7 +222,8 @@ def get_system_metrics() -> Dict[str, Any]:
 
 # ── Network Status ──────────────────────────────────────────────
 
-def get_network_status() -> Dict[str, Any]:
+
+def get_network_status() -> dict[str, Any]:
     """Get network connectivity status — cross-platform."""
     connected = False
     latency_ms = None
@@ -265,7 +276,8 @@ def get_network_status() -> Dict[str, Any]:
 
 # ── OS / Version Info ───────────────────────────────────────────
 
-def get_system_info() -> Dict[str, Any]:
+
+def get_system_info() -> dict[str, Any]:
     """Get system identification info — cross-platform."""
     os_name = f"{platform.system()} {platform.release()}"
     return {
@@ -281,16 +293,45 @@ def get_system_info() -> Dict[str, Any]:
 
 # ── Agent Status ────────────────────────────────────────────────
 
-def get_agent_status() -> List[Dict[str, Any]]:
+
+def get_agent_status() -> list[dict[str, Any]]:
     """Get status of all registered agents."""
-    agents = [
-        {"name": "ORCHESTRATOR", "type": "orchestrator", "description": "Central execution coordinator"},
-        {"name": "CODING AGENT", "type": "coding", "description": "Code analysis, generation, and debugging"},
-        {"name": "RESEARCH AGENT", "type": "research", "description": "Web research and information gathering"},
-        {"name": "BROWSER AGENT", "type": "browser", "description": "Web navigation and interaction"},
-        {"name": "VISION AGENT", "type": "vision", "description": "Screen capture and visual analysis"},
-        {"name": "WRITING AGENT", "type": "writing", "description": "Document creation and editing"},
-        {"name": "COMMUNICATION AGENT", "type": "communication", "description": "Email, messaging, notifications"},
+    agents: list[dict[str, Any]] = [
+        {
+            "name": "ORCHESTRATOR",
+            "type": "orchestrator",
+            "description": "Central execution coordinator",
+        },
+        {
+            "name": "CODING AGENT",
+            "type": "coding",
+            "description": "Code analysis, generation, and debugging",
+        },
+        {
+            "name": "RESEARCH AGENT",
+            "type": "research",
+            "description": "Web research and information gathering",
+        },
+        {
+            "name": "BROWSER AGENT",
+            "type": "browser",
+            "description": "Web navigation and interaction",
+        },
+        {
+            "name": "VISION AGENT",
+            "type": "vision",
+            "description": "Screen capture and visual analysis",
+        },
+        {
+            "name": "WRITING AGENT",
+            "type": "writing",
+            "description": "Document creation and editing",
+        },
+        {
+            "name": "COMMUNICATION AGENT",
+            "type": "communication",
+            "description": "Email, messaging, notifications",
+        },
     ]
 
     for agent in agents:
@@ -303,7 +344,8 @@ def get_agent_status() -> List[Dict[str, Any]]:
 
 # ── Memory Status ───────────────────────────────────────────────
 
-def get_memory_status() -> Dict[str, Any]:
+
+def get_memory_status() -> dict[str, Any]:
     """Get memory subsystem status."""
     return {
         "working_memory": {"status": "inactive", "entries": 0},
@@ -315,7 +357,8 @@ def get_memory_status() -> Dict[str, Any]:
 
 # ── Security Status ─────────────────────────────────────────────
 
-def get_security_status() -> Dict[str, Any]:
+
+def get_security_status() -> dict[str, Any]:
     """Get security/permission status."""
     return {
         "risk_level": "low",
@@ -334,7 +377,8 @@ def get_security_status() -> Dict[str, Any]:
 
 # ── Computer State ──────────────────────────────────────────────
 
-def get_computer_state() -> Dict[str, Any]:
+
+def get_computer_state() -> dict[str, Any]:
     """Get computer/desktop state — cross-platform."""
     active_window = None
     running_apps = []
@@ -342,27 +386,39 @@ def get_computer_state() -> Dict[str, Any]:
     if is_windows():
         try:
             result = subprocess.run(
-                ["powershell", "-Command",
-                 "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | "
-                 "Select-Object -First 1 MainWindowTitle | ForEach-Object { $_.MainWindowTitle }"],
-                capture_output=True, text=True, timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                [
+                    "powershell",
+                    "-Command",
+                    "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | "
+                    "Select-Object -First 1 MainWindowTitle | ForEach-Object { $_.MainWindowTitle }",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             if result.returncode == 0 and result.stdout.strip():
-                active_window = result.stdout.strip().split('\n')[0].strip()
+                active_window = result.stdout.strip().split("\n")[0].strip()
         except Exception:
             pass
 
         try:
             result = subprocess.run(
-                ["powershell", "-Command",
-                 "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | "
-                 "Select-Object -Unique ProcessName | ForEach-Object { $_.ProcessName }"],
-                capture_output=True, text=True, timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW
+                [
+                    "powershell",
+                    "-Command",
+                    "Get-Process | Where-Object {$_.MainWindowTitle -ne ''} | "
+                    "Select-Object -Unique ProcessName | ForEach-Object { $_.ProcessName }",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             if result.returncode == 0:
-                running_apps = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()][:10]
+                running_apps = [
+                    line.strip() for line in result.stdout.strip().split("\n") if line.strip()
+                ][:10]
         except Exception:
             pass
     else:
@@ -370,10 +426,12 @@ def get_computer_state() -> Dict[str, Any]:
         try:
             result = subprocess.run(
                 ["ps", "aux", "--sort=-pcpu"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')[1:11]  # skip header, top 10
+                lines = result.stdout.strip().split("\n")[1:11]  # skip header, top 10
                 running_apps = [line.split()[10] for line in lines if len(line.split()) > 10]
         except Exception:
             pass
@@ -388,7 +446,8 @@ def get_computer_state() -> Dict[str, Any]:
 
 # ── Orchestrator State ──────────────────────────────────────────
 
-def get_orchestrator_state(orchestrator: Any = None) -> Dict[str, Any]:
+
+def get_orchestrator_state(orchestrator: Any = None) -> dict[str, Any]:
     """Get current orchestrator state for the core visualization."""
     if orchestrator is None:
         return {
@@ -408,10 +467,12 @@ def get_orchestrator_state(orchestrator: Any = None) -> Dict[str, Any]:
 
     goal_info = None
     if goal and hasattr(goal, "description"):
+        # status is an enum for real goals, a plain string for ad-hoc objects.
+        status: Any = getattr(goal, "status", "unknown")
         goal_info = {
             "id": getattr(goal, "id", ""),
             "description": getattr(goal, "description", ""),
-            "status": getattr(goal, "status", "unknown").value if hasattr(getattr(goal, "status", ""), "value") else str(getattr(goal, "status", "unknown")),
+            "status": status.value if hasattr(status, "value") else str(status),
         }
 
     return {
@@ -424,10 +485,12 @@ def get_orchestrator_state(orchestrator: Any = None) -> Dict[str, Any]:
 
 # ── Voice State ────────────────────────────────────────────────
 
-def get_voice_state() -> Dict[str, Any]:
+
+def get_voice_state() -> dict[str, Any]:
     """Get current voice engine state."""
     try:
         from ultron.tools.voice import get_voice_engine
+
         engine = get_voice_engine()
         return {
             "state": engine.state.value,

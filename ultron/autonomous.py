@@ -23,21 +23,21 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
-from ultron.agents.llm_agent import AgentDecisionType, AgentTrace, LLMAgent
+from ultron.agents.llm_agent import LLMAgent
 from ultron.audit import AuditEvent, AuditLogger, EventType
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider
 from ultron.models import ExecutionResult, ExecutionStatus
-from ultron.task import Task, TaskStatus
-from ultron.tools import Tool, ToolExecutor, ToolExecutionResult, ToolExecutionStatus
+from ultron.task import Task
+from ultron.tools import Tool, ToolExecutionResult, ToolExecutionStatus, ToolExecutor
 
 logger = logging.getLogger("ultron.autonomous")
 
 
-class AutonomousState(str, Enum):
+class AutonomousState(StrEnum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
@@ -48,6 +48,7 @@ class AutonomousState(str, Enum):
 @dataclass
 class AutonomousConfig:
     """Configuration for the autonomous executor."""
+
     max_iterations_per_task: int = 10
     max_tool_calls_per_task: int = 20
     task_timeout_seconds: int = 120
@@ -56,18 +57,19 @@ class AutonomousConfig:
 @dataclass
 class TaskExecutionRecord:
     """Record of a single task's autonomous execution."""
+
     task_id: str = ""
     agent_name: str = ""
     iterations: int = 0
     tool_calls: int = 0
-    decisions: List[Dict[str, Any]] = field(default_factory=list)
-    final_answer: Optional[str] = None
+    decisions: list[dict[str, Any]] = field(default_factory=list)
+    final_answer: str | None = None
     status: str = "pending"
-    error: Optional[str] = None
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "agent_name": self.agent_name,
@@ -97,10 +99,10 @@ class AutonomousExecutor:
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         tool_executor: ToolExecutor,
-        audit_logger: Optional[AuditLogger] = None,
-        config: Optional[AutonomousConfig] = None,
+        audit_logger: AuditLogger | None = None,
+        config: AutonomousConfig | None = None,
     ) -> None:
         self._provider = provider
         self._tools = tools
@@ -108,20 +110,20 @@ class AutonomousExecutor:
         self._audit = audit_logger or AuditLogger()
         self._config = config or AutonomousConfig()
         self._state = AutonomousState.IDLE
-        self._records: Dict[str, TaskExecutionRecord] = {}
+        self._records: dict[str, TaskExecutionRecord] = {}
 
     @property
     def state(self) -> AutonomousState:
         return self._state
 
-    def get_record(self, task_id: str) -> Optional[TaskExecutionRecord]:
+    def get_record(self, task_id: str) -> TaskExecutionRecord | None:
         return self._records.get(task_id)
 
     def execute_task(
         self,
         task: Task,
-        goal_context: Optional[str] = None,
-        previous_results: Optional[Dict[str, Any]] = None,
+        goal_context: str | None = None,
+        previous_results: dict[str, Any] | None = None,
     ) -> ExecutionResult:
         """Execute a single task using the autonomous decision loop.
 
@@ -129,7 +131,7 @@ class AutonomousExecutor:
         """
         record = TaskExecutionRecord(
             task_id=task.id,
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=datetime.now(UTC).isoformat(),
         )
         self._records[task.id] = record
         self._state = AutonomousState.RUNNING
@@ -144,7 +146,7 @@ class AutonomousExecutor:
         record.agent_name = agent.spec.name
 
         # Build context
-        context = {}
+        context: dict[str, Any] = {}
         if goal_context:
             context["goal"] = goal_context
         if previous_results:
@@ -166,7 +168,7 @@ class AutonomousExecutor:
             if trace.error:
                 record.status = "failed"
                 record.error = trace.error
-                record.completed_at = datetime.now(timezone.utc).isoformat()
+                record.completed_at = datetime.now(UTC).isoformat()
                 self._state = AutonomousState.IDLE
                 return ExecutionResult(
                     tool_name=task.assigned_agent or "autonomous",
@@ -177,7 +179,7 @@ class AutonomousExecutor:
 
             if trace.completed:
                 record.status = "completed"
-                record.completed_at = datetime.now(timezone.utc).isoformat()
+                record.completed_at = datetime.now(UTC).isoformat()
                 self._state = AutonomousState.IDLE
 
                 # Parse output from final answer
@@ -189,7 +191,7 @@ class AutonomousExecutor:
                 )
             else:
                 record.status = "completed"
-                record.completed_at = datetime.now(timezone.utc).isoformat()
+                record.completed_at = datetime.now(UTC).isoformat()
                 self._state = AutonomousState.IDLE
 
                 return ExecutionResult(
@@ -201,7 +203,7 @@ class AutonomousExecutor:
         except Exception as exc:
             record.status = "failed"
             record.error = str(exc)
-            record.completed_at = datetime.now(timezone.utc).isoformat()
+            record.completed_at = datetime.now(UTC).isoformat()
             self._state = AutonomousState.IDLE
             logger.error("Autonomous execution failed for task %s: %s", task.id, exc)
             return ExecutionResult(
@@ -214,33 +216,37 @@ class AutonomousExecutor:
     def execute_tool_directly(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> ToolExecutionResult:
         """Execute a tool directly through the security boundary.
 
         Used when the agent needs to bypass the LLM and call a tool
         directly (e.g., for system operations).
         """
-        self._audit.log(AuditEvent(
-            event_type=EventType.TOOL_REQUESTED,
-            request_id=str(uuid.uuid4())[:12],
-            tool_name=tool_name,
-            metadata={"arguments": arguments, "source": "autonomous_direct"},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.TOOL_REQUESTED,
+                request_id=str(uuid.uuid4())[:12],
+                tool_name=tool_name,
+                metadata={"arguments": arguments, "source": "autonomous_direct"},
+            )
+        )
 
         result = self._tool_executor.execute(tool_name, arguments)
 
-        self._audit.log(AuditEvent(
-            event_type=EventType.TOOL_RESULT,
-            request_id=str(uuid.uuid4())[:12],
-            tool_name=tool_name,
-            success=result.status == ToolExecutionStatus.SUCCESS,
-            metadata={"status": result.status.value},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.TOOL_RESULT,
+                request_id=str(uuid.uuid4())[:12],
+                tool_name=tool_name,
+                success=result.status == ToolExecutionStatus.SUCCESS,
+                metadata={"status": result.status.value},
+            )
+        )
 
         return result
 
-    def _build_task_prompt(self, task: Task, goal_context: Optional[str] = None) -> str:
+    def _build_task_prompt(self, task: Task, goal_context: str | None = None) -> str:
         """Build a detailed prompt for the agent to execute a task."""
         parts = [f"Task: {task.description}"]
 
@@ -261,7 +267,7 @@ class AutonomousExecutor:
 
         return "\n".join(parts)
 
-    def _parse_task_output(self, answer: str) -> Dict[str, Any]:
+    def _parse_task_output(self, answer: str) -> dict[str, Any]:
         """Parse the agent's final answer into structured output."""
         # Try to parse as JSON
         cleaned = answer.strip()

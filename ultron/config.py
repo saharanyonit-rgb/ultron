@@ -11,13 +11,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict
+from typing import Any
 
 SUPPORTED_PROVIDERS = (
     "gemini",
     "nvidia",
     "openrouter",
     "grok",
+    "groq",
     "openai",
     "azure_openai",
     "anthropic",
@@ -33,6 +34,7 @@ _DEFAULT_MODELS: dict[str, str] = {
     "nvidia": "nvidia/nemotron-3-ultra-550b-a55b:free",
     "openrouter": "nvidia/nemotron-3-ultra-550b-a55b:free",
     "grok": "grok-3",
+    "groq": "qwen/qwen3.8-27b",
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-4-20250514",
     "cohere": "command-r",
@@ -71,9 +73,9 @@ class ConfigError(RuntimeError):
     """Raised when the environment is unusable (missing key, bad provider, etc.)."""
 
 
-def _parse_env_text(text: str) -> Dict[str, str]:
+def _parse_env_text(text: str) -> dict[str, str]:
     """Minimal .env parser: KEY=VALUE lines, # comments, quote stripping."""
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -138,7 +140,7 @@ def _find_env_file() -> Path:
     return Path.cwd() / ".env"
 
 
-def load_dotenv(env_file: str | Path | None = None) -> Dict[str, str]:
+def load_dotenv(env_file: str | Path | None = None) -> dict[str, str]:
     """Load KEY=VALUE pairs from an .env file (does not touch os.environ)."""
     path = Path(env_file) if env_file else _find_env_file()
     if not path.is_file():
@@ -156,6 +158,7 @@ class LLMConfig:
     nvidia_api_key: str = ""
     openrouter_api_key: str = ""
     grok_api_key: str = ""
+    groq_api_key: str = ""
     openai_api_key: str = ""
     azure_openai_api_key: str = ""
     azure_openai_endpoint: str = ""
@@ -273,10 +276,16 @@ class Config:
         self.memory = memory if memory is not None else MemoryConfig(**memory_args)
         self.security = security if security is not None else SecurityConfig(**security_args)
         self.execution = execution if execution is not None else ExecutionConfig(**execution_args)
-        self.brain = brain if brain is not None else (
-            brain_args.get("brain") if "brain" in brain_args else
-            brain_args.get("brain_config") if "brain_config" in brain_args else
-            BrainConfig()
+        self.brain = (
+            brain
+            if brain is not None
+            else (
+                brain_args.get("brain")
+                if "brain" in brain_args
+                else brain_args.get("brain_config")
+                if "brain_config" in brain_args
+                else BrainConfig()
+            )
         )
         self.log_level = log_level
         self.debug_mode = debug_mode
@@ -301,6 +310,10 @@ class Config:
     @property
     def grok_api_key(self) -> str:
         return self.llm.grok_api_key
+
+    @property
+    def groq_api_key(self) -> str:
+        return self.llm.groq_api_key
 
     @property
     def openai_api_key(self) -> str:
@@ -463,17 +476,23 @@ def _as_int(name: str, value: str, default: int) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise ConfigError(f"Environmental variable {name} must be an integer, got: {value!r}") from None
+        raise ConfigError(
+            f"Environmental variable {name} must be an integer, got: {value!r}"
+        ) from None
 
 
 def _as_float(name: str, value: str, default: float) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
-        raise ConfigError(f"Environmental variable {name} must be a number, got: {value!r}") from None
+        raise ConfigError(
+            f"Environmental variable {name} must be a number, got: {value!r}"
+        ) from None
 
 
-def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | None = None) -> Config:
+def load_config(
+    env_file: str | Path | None = None, environ: dict[str, str] | None = None
+) -> Config:
     """Build a Config from `.env` (project root by default) + os.environ.
 
     Resolution order per key: real environment variable > .env > default.
@@ -499,6 +518,7 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
     nvidia_api_key = get("ULTRON_NVIDIA_API_KEY", "").strip()
     openrouter_api_key = get("ULTRON_OPENROUTER_API_KEY", "").strip()
     grok_api_key = get("ULTRON_GROK_API_KEY", "").strip()
+    groq_api_key = get("ULTRON_GROQ_API_KEY", "").strip()
     if provider == "gemini" and not api_key:
         raise ConfigError(
             "GEMINI_API_KEY is not set. Copy .env.example to .env and add your key, "
@@ -518,6 +538,11 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
         raise ConfigError(
             "ULTRON_GROK_API_KEY is not set. Copy .env.example to .env and add your key, "
             "or export ULTRON_GROK_API_KEY."
+        )
+    if provider == "groq" and not groq_api_key:
+        raise ConfigError(
+            "ULTRON_GROQ_API_KEY is not set. Copy .env.example to .env and add your key, "
+            "or export ULTRON_GROQ_API_KEY."
         )
 
     openai_api_key = get("OPENAI_API_KEY", "").strip()
@@ -582,6 +607,7 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
         nvidia_api_key=nvidia_api_key,
         openrouter_api_key=openrouter_api_key,
         grok_api_key=grok_api_key,
+        groq_api_key=groq_api_key,
         openai_api_key=openai_api_key,
         azure_openai_api_key=azure_openai_api_key,
         azure_openai_endpoint=azure_openai_endpoint,
@@ -611,70 +637,124 @@ def load_config(env_file: str | Path | None = None, environ: Dict[str, str] | No
     memory = MemoryConfig(
         file=memory_file,
         enabled=get("ULTRON_MEMORY_ENABLED", "true").strip().lower() in ("1", "true", "yes"),
-        retrieval_limit=_as_int("ULTRON_MEMORY_RETRIEVAL_LIMIT", get("ULTRON_MEMORY_RETRIEVAL_LIMIT", "10"), 10),
-        relevance_threshold=_as_float("ULTRON_MEMORY_RELEVANCE_THRESHOLD", get("ULTRON_MEMORY_RELEVANCE_THRESHOLD", "0.1"), 0.1),
+        retrieval_limit=_as_int(
+            "ULTRON_MEMORY_RETRIEVAL_LIMIT", get("ULTRON_MEMORY_RETRIEVAL_LIMIT", "10"), 10
+        ),
+        relevance_threshold=_as_float(
+            "ULTRON_MEMORY_RELEVANCE_THRESHOLD",
+            get("ULTRON_MEMORY_RELEVANCE_THRESHOLD", "0.1"),
+            0.1,
+        ),
     )
 
     security = SecurityConfig(
-        require_permission=get("ULTRON_REQUIRE_PERMISSION", "").strip().lower() in ("1", "true", "yes"),
+        require_permission=get("ULTRON_REQUIRE_PERMISSION", "").strip().lower()
+        in ("1", "true", "yes"),
         allowed_filesystem_roots=get("ULTRON_ALLOWED_FILESYSTEM_ROOTS", "").strip(),
         sandbox_directory=get("ULTRON_SANDBOX_DIRECTORY", "").strip(),
         permission_policy=get("ULTRON_PERMISSION_POLICY", "default").strip(),
         command_timeout=_as_int("ULTRON_COMMAND_TIMEOUT", get("ULTRON_COMMAND_TIMEOUT", "30"), 30),
-        max_execution_time=_as_int("ULTRON_MAX_EXECUTION_TIME", get("ULTRON_MAX_EXECUTION_TIME", "300"), 300),
+        max_execution_time=_as_int(
+            "ULTRON_MAX_EXECUTION_TIME", get("ULTRON_MAX_EXECUTION_TIME", "300"), 300
+        ),
         audit_log_path=audit_path,
-        audit_log_enabled=get("ULTRON_AUDIT_LOG_ENABLED", "true").strip().lower() in ("1", "true", "yes"),
+        audit_log_enabled=get("ULTRON_AUDIT_LOG_ENABLED", "true").strip().lower()
+        in ("1", "true", "yes"),
     )
 
     execution = ExecutionConfig(
-        max_tool_iterations=_as_int("ULTRON_MAX_TOOL_ITERATIONS", get("ULTRON_MAX_TOOL_ITERATIONS", "8"), 8),
+        max_tool_iterations=_as_int(
+            "ULTRON_MAX_TOOL_ITERATIONS", get("ULTRON_MAX_TOOL_ITERATIONS", "8"), 8
+        ),
         tool_timeout=_as_int("ULTRON_TOOL_TIMEOUT", get("ULTRON_TOOL_TIMEOUT", "60"), 60),
         max_plan_steps=_as_int("ULTRON_MAX_PLAN_STEPS", get("ULTRON_MAX_PLAN_STEPS", "20"), 20),
         max_retries=_as_int("ULTRON_MAX_RETRIES", get("ULTRON_MAX_RETRIES", "3"), 3),
-        semantic_verification_enabled=get("ULTRON_SEMANTIC_VERIFICATION", "true").strip().lower() in ("1", "true", "yes"),
-        agent_execution_limit=_as_int("ULTRON_AGENT_EXECUTION_LIMIT", get("ULTRON_AGENT_EXECUTION_LIMIT", "8"), 8),
-        browser_enabled=get("ULTRON_BROWSER_ENABLED", "true").strip().lower() in ("1", "true", "yes"),
-        execution_state_enabled=get("ULTRON_EXECUTION_STATE_ENABLED", "true").strip().lower() in ("1", "true", "yes"),
+        semantic_verification_enabled=get("ULTRON_SEMANTIC_VERIFICATION", "true").strip().lower()
+        in ("1", "true", "yes"),
+        agent_execution_limit=_as_int(
+            "ULTRON_AGENT_EXECUTION_LIMIT", get("ULTRON_AGENT_EXECUTION_LIMIT", "8"), 8
+        ),
+        browser_enabled=get("ULTRON_BROWSER_ENABLED", "true").strip().lower()
+        in ("1", "true", "yes"),
+        execution_state_enabled=get("ULTRON_EXECUTION_STATE_ENABLED", "true").strip().lower()
+        in ("1", "true", "yes"),
         execution_state_file=get("ULTRON_EXECUTION_STATE_FILE", "").strip(),
-        max_concurrent_tasks=_as_int("ULTRON_MAX_CONCURRENT_TASKS", get("ULTRON_MAX_CONCURRENT_TASKS", "5"), 5),
+        max_concurrent_tasks=_as_int(
+            "ULTRON_MAX_CONCURRENT_TASKS", get("ULTRON_MAX_CONCURRENT_TASKS", "5"), 5
+        ),
     )
 
     brain = BrainConfig(
         planning=BrainModelConfig(
             provider=get("JARVIS_PLANNER_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_PLANNER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free").strip() or "nvidia/nemotron-3-ultra-550b-a55b:free",
-            temperature=_as_float("JARVIS_PLANNER_TEMPERATURE", get("JARVIS_PLANNER_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_PLANNER_MAX_TOKENS", get("JARVIS_PLANNER_MAX_TOKENS", "16384"), 16384),
+            model=get("JARVIS_PLANNER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free").strip()
+            or "nvidia/nemotron-3-ultra-550b-a55b:free",
+            temperature=_as_float(
+                "JARVIS_PLANNER_TEMPERATURE", get("JARVIS_PLANNER_TEMPERATURE", "0.3"), 0.3
+            ),
+            max_tokens=_as_int(
+                "JARVIS_PLANNER_MAX_TOKENS", get("JARVIS_PLANNER_MAX_TOKENS", "16384"), 16384
+            ),
         ),
         research=BrainModelConfig(
             provider=get("JARVIS_RESEARCH_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_RESEARCH_MODEL", "nvidia/nemotron-3-super-120b-a12b:free").strip() or "nvidia/nemotron-3-super-120b-a12b:free",
-            temperature=_as_float("JARVIS_RESEARCH_TEMPERATURE", get("JARVIS_RESEARCH_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_RESEARCH_MAX_TOKENS", get("JARVIS_RESEARCH_MAX_TOKENS", "16384"), 16384),
+            model=get("JARVIS_RESEARCH_MODEL", "nvidia/nemotron-3-super-120b-a12b:free").strip()
+            or "nvidia/nemotron-3-super-120b-a12b:free",
+            temperature=_as_float(
+                "JARVIS_RESEARCH_TEMPERATURE", get("JARVIS_RESEARCH_TEMPERATURE", "0.3"), 0.3
+            ),
+            max_tokens=_as_int(
+                "JARVIS_RESEARCH_MAX_TOKENS", get("JARVIS_RESEARCH_MAX_TOKENS", "16384"), 16384
+            ),
         ),
         coding=BrainModelConfig(
             provider=get("JARVIS_CODING_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_CODING_MODEL", "poolside/laguna-s-2.1:free").strip() or "poolside/laguna-s-2.1:free",
-            temperature=_as_float("JARVIS_CODING_TEMPERATURE", get("JARVIS_CODING_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_CODING_MAX_TOKENS", get("JARVIS_CODING_MAX_TOKENS", "16384"), 16384),
+            model=get("JARVIS_CODING_MODEL", "poolside/laguna-s-2.1:free").strip()
+            or "poolside/laguna-s-2.1:free",
+            temperature=_as_float(
+                "JARVIS_CODING_TEMPERATURE", get("JARVIS_CODING_TEMPERATURE", "0.3"), 0.3
+            ),
+            max_tokens=_as_int(
+                "JARVIS_CODING_MAX_TOKENS", get("JARVIS_CODING_MAX_TOKENS", "16384"), 16384
+            ),
         ),
         computer=BrainModelConfig(
             provider=get("JARVIS_COMPUTER_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_COMPUTER_MODEL", "thinkingmachines/inkling:free").strip() or "thinkingmachines/inkling:free",
-            temperature=_as_float("JARVIS_COMPUTER_TEMPERATURE", get("JARVIS_COMPUTER_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_COMPUTER_MAX_TOKENS", get("JARVIS_COMPUTER_MAX_TOKENS", "16384"), 16384),
+            model=get("JARVIS_COMPUTER_MODEL", "thinkingmachines/inkling:free").strip()
+            or "thinkingmachines/inkling:free",
+            temperature=_as_float(
+                "JARVIS_COMPUTER_TEMPERATURE", get("JARVIS_COMPUTER_TEMPERATURE", "0.3"), 0.3
+            ),
+            max_tokens=_as_int(
+                "JARVIS_COMPUTER_MAX_TOKENS", get("JARVIS_COMPUTER_MAX_TOKENS", "16384"), 16384
+            ),
         ),
         verification=BrainModelConfig(
-            provider=get("JARVIS_VERIFICATION_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_VERIFICATION_MODEL", "nvidia/nemotron-3.5-lightning:free").strip() or "nvidia/nemotron-3.5-lightning:free",
-            temperature=_as_float("JARVIS_VERIFICATION_TEMPERATURE", get("JARVIS_VERIFICATION_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_VERIFICATION_MAX_TOKENS", get("JARVIS_VERIFICATION_MAX_TOKENS", "8192"), 8192),
+            provider=get("JARVIS_VERIFICATION_PROVIDER", "openrouter").strip().lower()
+            or "openrouter",
+            model=get("JARVIS_VERIFICATION_MODEL", "nvidia/nemotron-3.5-lightning:free").strip()
+            or "nvidia/nemotron-3.5-lightning:free",
+            temperature=_as_float(
+                "JARVIS_VERIFICATION_TEMPERATURE",
+                get("JARVIS_VERIFICATION_TEMPERATURE", "0.3"),
+                0.3,
+            ),
+            max_tokens=_as_int(
+                "JARVIS_VERIFICATION_MAX_TOKENS",
+                get("JARVIS_VERIFICATION_MAX_TOKENS", "8192"),
+                8192,
+            ),
         ),
         fast=BrainModelConfig(
             provider=get("JARVIS_FAST_PROVIDER", "openrouter").strip().lower() or "openrouter",
-            model=get("JARVIS_FAST_MODEL", "cohere/north-mini-code:free").strip() or "cohere/north-mini-code:free",
-            temperature=_as_float("JARVIS_FAST_TEMPERATURE", get("JARVIS_FAST_TEMPERATURE", "0.3"), 0.3),
-            max_tokens=_as_int("JARVIS_FAST_MAX_TOKENS", get("JARVIS_FAST_MAX_TOKENS", "4096"), 4096),
+            model=get("JARVIS_FAST_MODEL", "cohere/north-mini-code:free").strip()
+            or "cohere/north-mini-code:free",
+            temperature=_as_float(
+                "JARVIS_FAST_TEMPERATURE", get("JARVIS_FAST_TEMPERATURE", "0.3"), 0.3
+            ),
+            max_tokens=_as_int(
+                "JARVIS_FAST_MAX_TOKENS", get("JARVIS_FAST_MAX_TOKENS", "4096"), 4096
+            ),
         ),
     )
 

@@ -8,33 +8,134 @@ from __future__ import annotations
 import json
 import math
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
-from ultron.memory import Memory, Turn
+from ultron.memory import Turn
 from ultron.memory.persistent import PersistentMemory
 from ultron.models import MemoryRecord, MemoryType
 
 
-def _extract_keywords(text: str) -> List[str]:
+def _extract_keywords(text: str) -> list[str]:
     """Extract meaningful keywords from text (simple tokenization)."""
     stop_words = {
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "need", "dare", "ought",
-        "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
-        "up", "about", "into", "through", "during", "before", "after",
-        "and", "but", "or", "nor", "not", "so", "yet", "both", "either",
-        "neither", "each", "every", "all", "any", "few", "more", "most",
-        "other", "some", "such", "no", "only", "own", "same", "than",
-        "too", "very", "just", "because", "as", "until", "while",
-        "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
-        "you", "your", "yours", "yourself", "yourselves",
-        "he", "him", "his", "himself", "she", "her", "hers", "herself",
-        "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
-        "what", "which", "who", "whom", "this", "that", "these", "those",
-        "how", "when", "where", "why",
+        "the",
+        "a",
+        "an",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "shall",
+        "can",
+        "need",
+        "dare",
+        "ought",
+        "used",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "up",
+        "about",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "not",
+        "so",
+        "yet",
+        "both",
+        "either",
+        "neither",
+        "each",
+        "every",
+        "all",
+        "any",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "only",
+        "own",
+        "same",
+        "than",
+        "too",
+        "very",
+        "just",
+        "because",
+        "as",
+        "until",
+        "while",
+        "i",
+        "me",
+        "my",
+        "myself",
+        "we",
+        "our",
+        "ours",
+        "ourselves",
+        "you",
+        "your",
+        "yours",
+        "yourself",
+        "yourselves",
+        "he",
+        "him",
+        "his",
+        "himself",
+        "she",
+        "her",
+        "hers",
+        "herself",
+        "it",
+        "its",
+        "itself",
+        "they",
+        "them",
+        "their",
+        "theirs",
+        "themselves",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "this",
+        "that",
+        "these",
+        "those",
+        "how",
+        "when",
+        "where",
+        "why",
     }
     words = re.findall(r"[a-z0-9]+", text.lower())
     return [w for w in words if w not in stop_words and len(w) > 2]
@@ -44,10 +145,10 @@ def _stable_id(role: str, content: str) -> str:
     """Deterministic record ID so deletions survive restarts."""
     import hashlib
 
-    return hashlib.sha1(f"{role}|{content}".encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha1(f"{role}|{content}".encode()).hexdigest()[:12]
 
 
-def _compute_relevance(keywords: List[str], record_keywords: List[str]) -> float:
+def _compute_relevance(keywords: list[str], record_keywords: list[str]) -> float:
     """Compute relevance score between query keywords and record keywords."""
     if not keywords or not record_keywords:
         return 0.0
@@ -68,8 +169,8 @@ class SemanticMemory(PersistentMemory):
 
     def __init__(self, path: str | Path) -> None:
         super().__init__(path)
-        self._records: List[MemoryRecord] = []
-        self._keyword_index: Dict[str, List[int]] = {}
+        self._records: list[MemoryRecord] = []
+        self._keyword_index: dict[str, list[int]] = {}
         self._load_records()
 
     def add(self, role: str, content: str) -> None:
@@ -82,7 +183,7 @@ class SemanticMemory(PersistentMemory):
                 content=content,
                 role=role,
                 record_id=_stable_id(role, content),
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 keywords=_extract_keywords(content),
             )
             self._records.append(record)
@@ -91,7 +192,7 @@ class SemanticMemory(PersistentMemory):
     def add_record(self, record: MemoryRecord) -> None:
         """Add a memory record with metadata."""
         if not record.timestamp:
-            record.timestamp = datetime.now(timezone.utc).isoformat()
+            record.timestamp = datetime.now(UTC).isoformat()
         self._records.append(record)
         self._index_record(record)
         if record.content:
@@ -101,7 +202,7 @@ class SemanticMemory(PersistentMemory):
     def _append_record_file(self, record: MemoryRecord) -> None:
         """Append a record to the JSON-lines file, including its record_id."""
         entry = {
-            "ts": record.timestamp or datetime.now(timezone.utc).isoformat(),
+            "ts": record.timestamp or datetime.now(UTC).isoformat(),
             "role": record.role,
             "content": record.content,
             "record_id": record.record_id,
@@ -120,8 +221,8 @@ class SemanticMemory(PersistentMemory):
         record_type: MemoryType = MemoryType.CONVERSATION,
         importance: float = 0.5,
         source: str = "",
-        metadata: Optional[Dict] = None,
-        keywords: Optional[List[str]] = None,
+        metadata: dict | None = None,
+        keywords: list[str] | None = None,
     ) -> MemoryRecord:
         """Convenience method to add a record with metadata."""
         record = MemoryRecord(
@@ -141,8 +242,8 @@ class SemanticMemory(PersistentMemory):
         query: str,
         limit: int = 10,
         min_relevance: float = 0.1,
-        record_type: Optional[MemoryType] = None,
-    ) -> List[MemoryRecord]:
+        record_type: MemoryType | None = None,
+    ) -> list[MemoryRecord]:
         """Search memory by keyword relevance using inverted index lookup (O(K) candidates)."""
         query_keywords = _extract_keywords(query)
         if not query_keywords:
@@ -157,7 +258,7 @@ class SemanticMemory(PersistentMemory):
         if not candidate_indices:
             return []
 
-        scored: List[tuple[float, MemoryRecord]] = []
+        scored: list[tuple[float, MemoryRecord]] = []
         for idx in candidate_indices:
             record = self._records[idx]
             if record_type and record.record_type != record_type:
@@ -171,14 +272,14 @@ class SemanticMemory(PersistentMemory):
         scored.sort(key=lambda x: x[0], reverse=True)
         return [record for _, record in scored[:limit]]
 
-    def get_by_id(self, record_id: str) -> Optional[MemoryRecord]:
+    def get_by_id(self, record_id: str) -> MemoryRecord | None:
         """Retrieve a record by its ID."""
         for record in self._records:
             if record.record_id == record_id:
                 return record
         return None
 
-    def recent(self, limit: int = 10) -> List[MemoryRecord]:
+    def recent(self, limit: int = 10) -> list[MemoryRecord]:
         """Return the most recent records."""
         return list(reversed(self._records[-limit:]))
 
@@ -253,7 +354,7 @@ class SemanticMemory(PersistentMemory):
         lines = []
         for record in self._records:
             entry = {
-                "ts": record.timestamp or datetime.now(timezone.utc).isoformat(),
+                "ts": record.timestamp or datetime.now(UTC).isoformat(),
                 "role": record.role,
                 "content": record.content,
                 "record_id": record.record_id,

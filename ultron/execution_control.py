@@ -9,14 +9,15 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.execution_control")
 
 
-class ExecutionState(str, Enum):
+class ExecutionState(StrEnum):
     RUNNING = "running"
     PAUSED = "paused"
     STOPPED = "stopped"
@@ -26,10 +27,11 @@ class ExecutionState(str, Enum):
 @dataclass
 class ExecutionGate:
     """Gate that controls whether execution can proceed."""
+
     name: str = ""
     enabled: bool = True
     reason: str = ""
-    check_fn: Optional[Callable[[], bool]] = None
+    check_fn: Callable[[], bool] | None = None
 
     def can_proceed(self) -> bool:
         if not self.enabled:
@@ -42,11 +44,12 @@ class ExecutionGate:
 @dataclass
 class RateLimitConfig:
     """Rate limiting configuration."""
+
     max_per_minute: int = 30
     max_per_hour: int = 500
     burst_limit: int = 10
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "max_per_minute": self.max_per_minute,
             "max_per_hour": self.max_per_hour,
@@ -66,16 +69,16 @@ class ExecutionController:
 
     def __init__(
         self,
-        rate_limit: Optional[RateLimitConfig] = None,
+        rate_limit: RateLimitConfig | None = None,
     ) -> None:
         self._state = ExecutionState.RUNNING
         self._rate_config = rate_limit or RateLimitConfig()
-        self._gates: Dict[str, ExecutionGate] = {}
-        self._call_times: List[float] = []
+        self._gates: dict[str, ExecutionGate] = {}
+        self._call_times: list[float] = []
         self._lock = threading.Lock()
         self._pause_event = threading.Event()
         self._pause_event.set()
-        self._listeners: List[Callable[[ExecutionState], None]] = []
+        self._listeners: list[Callable[[ExecutionState], None]] = []
 
     @property
     def state(self) -> ExecutionState:
@@ -135,9 +138,7 @@ class ExecutionController:
         now = time.time()
         with self._lock:
             self._call_times.append(now)
-            self._call_times = [
-                t for t in self._call_times if now - t < 3600
-            ]
+            self._call_times = [t for t in self._call_times if now - t < 3600]
 
     def add_gate(self, gate: ExecutionGate) -> None:
         """Add an execution gate."""
@@ -147,16 +148,12 @@ class ExecutionController:
         """Remove an execution gate."""
         self._gates.pop(name, None)
 
-    def get_rate_status(self) -> Dict[str, Any]:
+    def get_rate_status(self) -> dict[str, Any]:
         """Get current rate limiting status."""
         now = time.time()
         with self._lock:
-            recent_minute = sum(
-                1 for t in self._call_times if now - t < 60
-            )
-            recent_hour = sum(
-                1 for t in self._call_times if now - t < 3600
-            )
+            recent_minute = sum(1 for t in self._call_times if now - t < 60)
+            recent_hour = sum(1 for t in self._call_times if now - t < 3600)
         return {
             "per_minute": recent_minute,
             "per_hour": recent_hour,
@@ -174,17 +171,13 @@ class ExecutionController:
         """Check if rate limits allow another execution."""
         now = time.time()
         with self._lock:
-            recent_minute = sum(
-                1 for t in self._call_times if now - t < 60
-            )
+            recent_minute = sum(1 for t in self._call_times if now - t < 60)
             if recent_minute >= self._rate_config.max_per_minute:
                 self._set_state(ExecutionState.RATE_LIMITED)
                 logger.warning("Rate limit hit: %d/min", recent_minute)
                 return False
 
-            recent_burst = sum(
-                1 for t in self._call_times if now - t < 10
-            )
+            recent_burst = sum(1 for t in self._call_times if now - t < 10)
             if recent_burst >= self._rate_config.burst_limit:
                 logger.warning("Burst limit hit: %d/10s", recent_burst)
                 return False

@@ -2,17 +2,29 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-from ultron.platform import is_windows, is_posix
+from ultron.platform import is_windows
 from ultron.tools.base import Tool
 
 
 class TakeScreenshot(Tool):
     name = "take_screenshot"
+    keywords = (
+        "screenshot",
+        "capture screen",
+        "screen shot",
+        "grab the screen",
+    )
+    # Writes a PNG to disk (and creates ~/Pictures if absent), so this mutates.
+    # It is still only LOW: the file lands in a user-owned folder and is
+    # trivially removable.
+    risk = RiskLevel.LOW
     description = (
         "Capture the primary screen to a PNG file and report the saved path. "
         "Defaults to ~/Pictures when no path is given."
@@ -38,7 +50,7 @@ class TakeScreenshot(Tool):
     }
     mutates = True
 
-    def run(self, path: str | None = None, **_: Any) -> Dict[str, Any]:
+    def run(self, path: str | None = None, **_: Any) -> dict[str, Any]:
         if path:
             target = Path(path).expanduser()
             if target.suffix.lower() != ".png":
@@ -55,7 +67,7 @@ class TakeScreenshot(Tool):
             return self._screenshot_windows(target)
         return self._screenshot_posix(target)
 
-    def _screenshot_windows(self, target: Path) -> Dict[str, Any]:
+    def _screenshot_windows(self, target: Path) -> dict[str, Any]:
         from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
 
         script = (
@@ -85,7 +97,7 @@ class TakeScreenshot(Tool):
             "bytes": target.stat().st_size,
         }
 
-    def _screenshot_posix(self, target: Path) -> Dict[str, Any]:
+    def _screenshot_posix(self, target: Path) -> dict[str, Any]:
         """Take screenshot on Linux/Android using available tools."""
         # Try common screenshot tools in order
         tools = [
@@ -104,7 +116,10 @@ class TakeScreenshot(Tool):
         for cmd, _ in tools:
             try:
                 proc = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=15,
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
                 )
                 if proc.returncode == 0 and target.is_file():
                     return {

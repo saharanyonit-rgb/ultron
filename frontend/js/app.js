@@ -27,7 +27,7 @@ import { initVoice, speak } from './features/voice.js';
 import { initChat, setRenderer as setChatRenderer } from './features/chat.js';
 import { initPermissions } from './features/permissions.js';
 
-import { MODULES, openModule, initModuleRouter, initExecutionControls } from './modules/index.js';
+import { MODULES, openModule, initModuleRouter } from './modules/index.js';
 
 const BOOT_START = performance.now();
 
@@ -51,7 +51,6 @@ function boot() {
   setChatRenderer(chatRenderer);
   initVoice($('#btn-mic'));
   initPermissions();
-  initExecutionControls(document);
 
   initSSE();
   initTelemetry();
@@ -71,6 +70,11 @@ function wireGlobalChrome() {
     let holdTimer = null;
     let longPressed = false;
 
+    // The mic is a control nested inside the core, so its press bubbles up
+    // here. Without this guard, starting a voice command would also count as
+    // a core press and pop the chat drawer open over the transcript.
+    const fromMic = (event) => Boolean(event.target?.closest?.('.core-mic'));
+
     const release = (openChat) => {
       if (holdTimer) clearTimeout(holdTimer);
       holdTimer = null;
@@ -78,18 +82,23 @@ function wireGlobalChrome() {
       longPressed = false;
     };
 
-    core.addEventListener('pointerdown', () => {
+    core.addEventListener('pointerdown', (event) => {
+      if (fromMic(event)) return;
       longPressed = false;
       holdTimer = setTimeout(() => {
         longPressed = true;
         speakStatus();
       }, 700);
     });
-    core.addEventListener('pointerup', () => release(true));
+    // On a mic release the hold timer still has to be cleared, but the chat
+    // drawer must stay closed.
+    core.addEventListener('pointerup', (event) => release(!fromMic(event)));
     core.addEventListener('pointerleave', () => release(false));
     core.addEventListener('pointercancel', () => release(false));
 
     core.addEventListener('keydown', (e) => {
+      // Same for keyboard: Enter/Space on the focused mic belongs to the mic.
+      if (fromMic(e)) return;
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         openModule('chat');

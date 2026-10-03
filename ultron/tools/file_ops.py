@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from ultron.risk import RiskLevel
+
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ultron.tools.base import Tool
 
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
+
 
 def _iso(mtime_seconds: float) -> str:
-    return datetime.fromtimestamp(mtime_seconds, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(mtime_seconds, tz=UTC).isoformat()
 
 
 class ReadFile(Tool):
     name = "read_file"
+    keywords = (
+        "read file",
+        "cat file",
+        "file content",
+        "show me the file",
+    )
+    risk = RiskLevel.READ
     description = "Read a text file and return its contents, size and last-modified time."
     parameters = {
         "type": "object",
@@ -36,7 +47,7 @@ class ReadFile(Tool):
         },
     }
 
-    def run(self, path: str, **_: Any) -> Dict[str, Any]:
+    def run(self, path: str, **_: Any) -> dict[str, Any]:
         target = Path(path).expanduser()
         if not target.is_file():
             return {"error": f"file not found: {target}"}
@@ -64,6 +75,13 @@ class ReadFile(Tool):
 
 class CreateFile(Tool):
     name = "create_file"
+    keywords = (
+        "create file",
+        "write file",
+        "make file",
+        "save file",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Create a text file. Fails (without writing) if the file already exists "
         "unless overwrite=true."
@@ -90,7 +108,9 @@ class CreateFile(Tool):
     }
     mutates = True
 
-    def run(self, path: str, content: str = "", overwrite: bool = False, **_: Any) -> Dict[str, Any]:
+    def run(
+        self, path: str, content: str = "", overwrite: bool = False, **_: Any
+    ) -> dict[str, Any]:
         target = Path(path).expanduser()
         if target.exists() and not overwrite:
             return {"error": f"file already exists (use overwrite=true to replace): {target}"}
@@ -104,6 +124,13 @@ class CreateFile(Tool):
 
 class SearchFiles(Tool):
     name = "search_files"
+    keywords = (
+        "search files",
+        "find files",
+        "glob files",
+        "list files",
+    )
+    risk = RiskLevel.READ
     description = (
         "Search a directory for files matching a glob pattern "
         "(e.g. '**/*.py', '*.md'). Case-insensitive on Windows."
@@ -129,11 +156,11 @@ class SearchFiles(Tool):
         },
     }
 
-    def run(self, directory: str, pattern: str, max_results: int = 100, **_: Any) -> Dict[str, Any]:
+    def run(self, directory: str, pattern: str, max_results: int = 100, **_: Any) -> dict[str, Any]:
         base = Path(directory).expanduser()
         if not base.is_dir():
             return {"error": f"directory not found: {base}"}
-        matches: List[str] = []
+        matches: list[str] = []
         try:
             for entry in base.glob(pattern):
                 if entry.is_file():

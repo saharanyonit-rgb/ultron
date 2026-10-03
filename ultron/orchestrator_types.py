@@ -6,13 +6,13 @@ Decouples dataclasses and state Enums from main execution loop.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List
+from enum import StrEnum
+from typing import Any
 
 from ultron.response import GoalResult
 
 
-class OrchestratorState(str, Enum):
+class OrchestratorState(StrEnum):
     IDLE = "idle"
     PLANNING = "planning"
     EXECUTING = "executing"
@@ -20,6 +20,7 @@ class OrchestratorState(str, Enum):
     RECOVERING = "recovering"
     COMPLETED = "completed"
     FAILED = "failed"
+    SHUTTING_DOWN = "shutting_down"
 
 
 @dataclass
@@ -40,9 +41,9 @@ class OrchestratorResult:
 
     goal_result: GoalResult
     state: OrchestratorState = OrchestratorState.COMPLETED
-    events: List[Dict[str, Any]] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_result": self.goal_result.to_dict(),
             "state": self.state.value,

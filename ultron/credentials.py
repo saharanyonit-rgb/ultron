@@ -11,7 +11,8 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
 
 logger = logging.getLogger("ultron.credentials")
 
@@ -19,26 +20,28 @@ logger = logging.getLogger("ultron.credentials")
 @dataclass
 class Credential:
     """A stored credential."""
+
     name: str = ""
     credential_type: str = "api_key"
     value_hash: str = ""
     service: str = ""
-    scopes: List[str] = field(default_factory=list)
-    expires_at: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    scopes: list[str] = field(default_factory=list)
+    expires_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_expired(self) -> bool:
         if not self.expires_at:
             return False
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         try:
             exp = datetime.fromisoformat(self.expires_at)
-            return datetime.now(timezone.utc) > exp
+            return datetime.now(UTC) > exp
         except ValueError:
             return False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "credential_type": self.credential_type,
@@ -62,15 +65,18 @@ class CredentialManager:
 
     SECRET_PATTERNS = [
         (r'(?i)(api[_-]?key|apikey)\s*[=:]\s*["\']?([A-Za-z0-9_\-]{20,})', "API Key"),
-        (r'(?i)(token|access[_-]?token|auth[_-]?token)\s*[=:]\s*["\']?([A-Za-z0-9_\-\.]{20,})', "Token"),
+        (
+            r'(?i)(token|access[_-]?token|auth[_-]?token)\s*[=:]\s*["\']?([A-Za-z0-9_\-\.]{20,})',
+            "Token",
+        ),
         (r'(?i)(secret|client[_-]?secret)\s*[=:]\s*["\']?([A-Za-z0-9_\-]{20,})', "Secret"),
         (r'(?i)(password|passwd|pwd)\s*[=:]\s*["\']?([^\s"\']{8,})', "Password"),
-        (r'-----BEGIN (?:RSA |EC )?PRIVATE KEY-----', "Private Key"),
+        (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private Key"),
     ]
 
     def __init__(self) -> None:
-        self._credentials: Dict[str, Credential] = {}
-        self._known_values: Dict[str, str] = {}
+        self._credentials: dict[str, Credential] = {}
+        self._known_values: dict[str, str] = {}
 
     def store(
         self,
@@ -93,18 +99,18 @@ class CredentialManager:
         self._known_values[value_hash] = value
         return cred
 
-    def retrieve(self, name: str) -> Optional[str]:
+    def retrieve(self, name: str) -> str | None:
         """Retrieve a credential value by name."""
         cred = self._credentials.get(name)
         if not cred:
             return None
         return self._known_values.get(cred.value_hash)
 
-    def get_credential(self, name: str) -> Optional[Credential]:
+    def get_credential(self, name: str) -> Credential | None:
         """Get credential metadata (without value)."""
         return self._credentials.get(name)
 
-    def list_credentials(self, service: Optional[str] = None) -> List[Credential]:
+    def list_credentials(self, service: str | None = None) -> list[Credential]:
         """List stored credentials."""
         creds = list(self._credentials.values())
         if service:
@@ -127,17 +133,23 @@ class CredentialManager:
                 sanitized = sanitized.replace(value, "[REDACTED]")
         return sanitized
 
-    def detect_secrets(self, text: str) -> List[Dict[str, str]]:
-        """Scan text for potential secret leakage."""
-        findings = []
+    def detect_secrets(self, text: str) -> list[dict[str, Any]]:
+        """Scan text for potential secret leakage.
+
+        Each finding maps ``type`` and ``match`` to ``str`` and ``position``
+        to the ``(start, end)`` span reported by the regex match.
+        """
+        findings: list[dict[str, Any]] = []
         for pattern, label in self.SECRET_PATTERNS:
             matches = re.finditer(pattern, text)
             for match in matches:
-                findings.append({
-                    "type": label,
-                    "match": match.group(0)[:50] + "...",
-                    "position": match.span(),
-                })
+                findings.append(
+                    {
+                        "type": label,
+                        "match": match.group(0)[:50] + "...",
+                        "position": match.span(),
+                    }
+                )
         return findings
 
     def load_from_env(self, prefix: str = "ULTRON_") -> int:
@@ -145,17 +157,14 @@ class CredentialManager:
         loaded = 0
         for key, value in os.environ.items():
             if key.startswith(prefix) and value:
-                name = key[len(prefix):].lower()
+                name = key[len(prefix) :].lower()
                 self.store(name, value, service="env")
                 loaded += 1
         return loaded
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Export credential metadata (no values)."""
-        return {
-            name: cred.to_dict()
-            for name, cred in self._credentials.items()
-        }
+        return {name: cred.to_dict() for name, cred in self._credentials.items()}
 
 
 __all__ = [

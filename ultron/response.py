@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
-from ultron.goal import Goal, GoalStatus
+from ultron.goal import Goal
 from ultron.task import Task, TaskGraph, TaskStatus
 
 logger = logging.getLogger("ultron.response")
 
 
-class ResponseOutcome(str, Enum):
+class ResponseOutcome(StrEnum):
     SUCCESS = "success"
     PARTIAL_SUCCESS = "partial_success"
     FAILED = "failed"
@@ -34,12 +34,12 @@ class TaskSummary:
     task_id: str = ""
     description: str = ""
     status: str = ""
-    assigned_agent: Optional[str] = None
-    error: Optional[str] = None
-    verification_passed: Optional[bool] = None
-    duration_seconds: Optional[float] = None
+    assigned_agent: str | None = None
+    error: str | None = None
+    verification_passed: bool | None = None
+    duration_seconds: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "description": self.description,
@@ -67,19 +67,19 @@ class GoalResult:
     failed_tasks: int = 0
     blocked_tasks: int = 0
 
-    task_summaries: List[TaskSummary] = field(default_factory=list)
-    verification_results: Dict[str, bool] = field(default_factory=dict)
+    task_summaries: list[TaskSummary] = field(default_factory=list)
+    verification_results: dict[str, bool] = field(default_factory=dict)
 
-    important_outputs: Dict[str, Any] = field(default_factory=dict)
-    limitations: List[str] = field(default_factory=list)
+    important_outputs: dict[str, Any] = field(default_factory=dict)
+    limitations: list[str] = field(default_factory=list)
 
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    completed_at: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    completed_at: str | None = None
+    duration_seconds: float | None = None
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "outcome": self.outcome.value,
@@ -109,9 +109,9 @@ class ResponseEngine:
         self,
         goal: Goal,
         graph: TaskGraph,
-        verification_results: Optional[Dict[str, bool]] = None,
-        outputs: Optional[Dict[str, Any]] = None,
-        limitations: Optional[List[str]] = None,
+        verification_results: dict[str, bool] | None = None,
+        outputs: dict[str, Any] | None = None,
+        limitations: list[str] | None = None,
     ) -> GoalResult:
         """Generate a GoalResult from the current execution state."""
         result = GoalResult(
@@ -125,8 +125,7 @@ class ResponseEngine:
         result.limitations = limitations or []
 
         result.executed_tasks = sum(
-            1 for t in graph.tasks
-            if t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+            1 for t in graph.tasks if t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
         )
         result.successful_tasks = graph.completed_count
         result.failed_tasks = graph.failed_count
@@ -139,7 +138,7 @@ class ResponseEngine:
         result.summary = self._generate_summary(result)
         result.detailed_report = self._generate_report(result, goal, graph)
 
-        result.completed_at = datetime.now(timezone.utc).isoformat()
+        result.completed_at = datetime.now(UTC).isoformat()
 
         if goal.created_at:
             try:
@@ -178,7 +177,7 @@ class ResponseEngine:
 
         return ResponseOutcome.PARTIAL_SUCCESS
 
-    def _summarize_tasks(self, tasks: List[Task]) -> List[TaskSummary]:
+    def _summarize_tasks(self, tasks: list[Task]) -> list[TaskSummary]:
         """Create summaries for all tasks."""
         summaries = []
         for task in tasks:
@@ -214,46 +213,48 @@ class ResponseEngine:
             )
 
         if result.outcome == ResponseOutcome.FAILED:
-            return (
-                f"Goal failed. "
-                f"{result.failed_tasks}/{result.planned_tasks} tasks failed."
-            )
+            return f"Goal failed. {result.failed_tasks}/{result.planned_tasks} tasks failed."
 
         if result.outcome == ResponseOutcome.BLOCKED:
-            return (
-                f"Goal blocked. "
-                f"{result.blocked_tasks} tasks blocked, none completed."
-            )
+            return f"Goal blocked. {result.blocked_tasks} tasks blocked, none completed."
 
         return "Goal execution completed with unknown outcome."
 
     def _generate_report(self, result: GoalResult, goal: Goal, graph: TaskGraph) -> str:
         """Generate a detailed report."""
         lines = [
-            f"## Goal Execution Report",
-            f"",
+            "## Goal Execution Report",
+            "",
             f"**Request:** {result.original_request}",
             f"**Outcome:** {result.outcome.value.upper()}",
             f"**Duration:** {result.duration_seconds:.1f}s" if result.duration_seconds else "",
-            f"",
-            f"### Task Summary",
+            "",
+            "### Task Summary",
             f"- Planned: {result.planned_tasks}",
             f"- Executed: {result.executed_tasks}",
             f"- Successful: {result.successful_tasks}",
             f"- Failed: {result.failed_tasks}",
             f"- Blocked: {result.blocked_tasks}",
-            f"",
+            "",
         ]
 
         if result.task_summaries:
             lines.append("### Task Details")
             for ts in result.task_summaries:
-                status_icon = "OK" if ts.status == "completed" else "FAIL" if ts.status == "failed" else "BLOCK"
+                status_icon = (
+                    "OK"
+                    if ts.status == "completed"
+                    else "FAIL"
+                    if ts.status == "failed"
+                    else "BLOCK"
+                )
                 lines.append(f"- [{status_icon}] {ts.description}")
                 if ts.error:
                     lines.append(f"  Error: {ts.error}")
                 if ts.verification_passed is not None:
-                    lines.append(f"  Verification: {'passed' if ts.verification_passed else 'failed'}")
+                    lines.append(
+                        f"  Verification: {'passed' if ts.verification_passed else 'failed'}"
+                    )
             lines.append("")
 
         if result.verification_results:

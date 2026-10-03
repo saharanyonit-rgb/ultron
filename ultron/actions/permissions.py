@@ -10,7 +10,8 @@ Phase 1 PermissionGate is preserved and used as the base class.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from ultron.actions import PermissionDecision, PermissionGate
 
@@ -30,10 +31,10 @@ class SecurePermissionGate(PermissionGate):
     Mutating tools invoke the confirmation callback.
     """
 
-    def __init__(self, confirm: Optional[ConfirmCallback] = None) -> None:
+    def __init__(self, confirm: ConfirmCallback | None = None) -> None:
         self._confirm = confirm or self._default_confirm
 
-    def check(self, tool: "Tool", arguments: dict[str, Any]) -> PermissionDecision:
+    def check(self, tool: Tool, arguments: dict[str, Any]) -> PermissionDecision:
         """Check permissions with confirmation for mutating tools."""
         if not getattr(tool, "mutates", False):
             return PermissionDecision(allowed=True, reason="read-only action")
@@ -73,7 +74,9 @@ class CLIPermissionGate(SecurePermissionGate):
     @staticmethod
     def _cli_confirm(tool_name: str, arguments: dict[str, Any]) -> bool:
         """Ask the user via terminal input."""
-        args_str = ", ".join(f"{k}={v!r}" for k, v in arguments.items()) if arguments else "(no args)"
+        args_str = (
+            ", ".join(f"{k}={v!r}" for k, v in arguments.items()) if arguments else "(no args)"
+        )
         prompt = f"\n  [permission] Allow '{tool_name}' ({args_str})? [y/N]: "
         try:
             response = input(prompt).strip().lower()

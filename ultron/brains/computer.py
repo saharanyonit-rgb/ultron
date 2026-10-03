@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, cast
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider, ToolResult
 from ultron.tools import Tool
 
 logger = logging.getLogger("ultron.brains.computer")
@@ -56,9 +56,9 @@ class ComputerAction:
     target: str
     result: str = ""
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "action_type": self.action_type,
             "target": self.target,
@@ -73,10 +73,10 @@ class ComputerResult:
     """Result of a computer control task."""
 
     task: str
-    actions: List[ComputerAction]
+    actions: list[ComputerAction]
     summary: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task": self.task,
             "actions": [a.to_dict() for a in self.actions],
@@ -90,9 +90,9 @@ class ComputerBrain(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 8,
-        tool_executor: Optional[Any] = None,
+        tool_executor: Any | None = None,
     ) -> None:
         spec = AgentSpec(
             name="computer",
@@ -104,7 +104,7 @@ class ComputerBrain(BaseAgent):
         super().__init__(provider, tools, spec)
         self._tool_executor = tool_executor
 
-    def execute(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> ComputerResult:
+    def execute(self, user_text: str, context: dict[str, Any] | None = None) -> ComputerResult:
         """Execute a computer control task.
 
         Args:
@@ -118,7 +118,7 @@ class ComputerBrain(BaseAgent):
         tool_specs = [t.spec for t in available_tools]
         tool_names = {t.name for t in available_tools}
 
-        actions: List[ComputerAction] = []
+        actions: list[ComputerAction] = []
 
         for iteration in range(self._spec.max_iterations):
             result = self._provider.complete(
@@ -128,12 +128,14 @@ class ComputerBrain(BaseAgent):
 
             if not result.tool_calls:
                 if result.text:
-                    actions.append(ComputerAction(
-                        action_type="response",
-                        target="",
-                        result=result.text,
-                        success=True,
-                    ))
+                    actions.append(
+                        ComputerAction(
+                            action_type="response",
+                            target="",
+                            result=result.text,
+                            success=True,
+                        )
+                    )
                 break
 
             tool_results = []
@@ -200,16 +202,17 @@ class ComputerBrain(BaseAgent):
             return "info"
         return "unknown"
 
-    def _get_target(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+    def _get_target(self, tool_name: str, arguments: dict[str, Any]) -> str:
+        # Model-supplied tool arguments: path/url/app are strings by contract.
         if "path" in arguments:
-            return arguments["path"]
+            return cast(str, arguments["path"])
         if "url" in arguments:
-            return arguments["url"]
+            return cast(str, arguments["url"])
         if "app" in arguments:
-            return arguments["app"]
+            return cast(str, arguments["app"])
         return tool_name
 
-    def _generate_summary(self, actions: List[ComputerAction]) -> str:
+    def _generate_summary(self, actions: list[ComputerAction]) -> str:
         successful = [a for a in actions if a.success]
         failed = [a for a in actions if not a.success]
 
@@ -221,7 +224,7 @@ class ComputerBrain(BaseAgent):
 
         return "; ".join(parts) if parts else "No actions performed"
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute computer control task - returns JSON result as string."""
         result = self.execute(user_text, context)
         return json.dumps(result.to_dict(), ensure_ascii=False, default=str)

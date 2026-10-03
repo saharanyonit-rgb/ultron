@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.tools._termux import run_termux
 from ultron.tools.base import Tool
@@ -12,6 +14,7 @@ class ListContacts(Tool):
     """List all contacts on the phone."""
 
     name = "list_contacts"
+    risk = RiskLevel.READ
     description = "List all contacts stored on the Android device."
     parameters = {
         "type": "object",
@@ -26,7 +29,7 @@ class ListContacts(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("contact-list", parse_json=True)
         if not result.ok:
             return {"contacts": [], "count": 0, "error": result.stderr}
@@ -39,6 +42,7 @@ class SearchContact(Tool):
     """Search contacts by name."""
 
     name = "search_contact"
+    risk = RiskLevel.READ
     description = "Search contacts by name or number."
     parameters = {
         "type": "object",
@@ -58,7 +62,7 @@ class SearchContact(Tool):
         },
     }
 
-    def run(self, query: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, query: str = "", **kwargs: Any) -> dict[str, Any]:
         q = query or kwargs.get("name") or kwargs.get("search") or ""
         if not q:
             return {"contacts": [], "count": 0, "error": "No search query provided"}
@@ -70,7 +74,8 @@ class SearchContact(Tool):
         contacts = result.data if isinstance(result.data, list) else []
         q_lower = q.lower()
         matched = [
-            c for c in contacts
+            c
+            for c in contacts
             if q_lower in c.get("name", "").lower() or q_lower in c.get("number", "").lower()
         ]
         return {"contacts": matched, "count": len(matched)}
@@ -80,6 +85,7 @@ class AddContact(Tool):
     """Add a new contact to the phone."""
 
     name = "add_contact"
+    risk = RiskLevel.MEDIUM
     description = "Add a new contact with name and phone number."
     parameters = {
         "type": "object",
@@ -105,7 +111,7 @@ class AddContact(Tool):
     }
     mutates = True
 
-    def run(self, name: str = "", number: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, name: str = "", number: str = "", **kwargs: Any) -> dict[str, Any]:
         n = name or kwargs.get("contact_name") or ""
         num = number or kwargs.get("phone") or kwargs.get("number") or ""
         if not n or not num:
@@ -124,6 +130,7 @@ class DeleteContact(Tool):
     """Delete a contact from the phone."""
 
     name = "delete_contact"
+    risk = RiskLevel.HIGH
     description = "Delete a contact by name or number."
     parameters = {
         "type": "object",
@@ -144,7 +151,7 @@ class DeleteContact(Tool):
     }
     mutates = True
 
-    def run(self, query: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, query: str = "", **kwargs: Any) -> dict[str, Any]:
         q = query or kwargs.get("name") or kwargs.get("contact") or ""
         if not q:
             return {"error": "No contact specified", "success": False}
@@ -156,7 +163,8 @@ class DeleteContact(Tool):
 
         contacts = search_result.data if isinstance(search_result.data, list) else []
         matched = [
-            c for c in contacts
+            c
+            for c in contacts
             if q.lower() in c.get("name", "").lower() or q in c.get("number", "")
         ]
 

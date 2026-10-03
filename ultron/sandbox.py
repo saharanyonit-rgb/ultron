@@ -26,17 +26,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ultron.sandbox")
 
 
-class SandboxStatus(str, Enum):
+class SandboxStatus(StrEnum):
     CREATED = "created"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -57,7 +56,7 @@ class SandboxResult:
     working_directory: str = ""
     error: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status.value,
             "stdout": self.stdout,
@@ -82,7 +81,7 @@ class Sandbox(ABC):
         self,
         command: str,
         timeout: int = 30,
-        env: Dict[str, str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> SandboxResult:
         """Execute a command in the sandbox."""
         ...
@@ -127,7 +126,7 @@ class LocalSandbox(Sandbox):
         self,
         command: str,
         timeout: int = 30,
-        env: Dict[str, str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> SandboxResult:
         """Execute a command in the sandbox."""
         if self._workspace is None:
@@ -135,6 +134,7 @@ class LocalSandbox(Sandbox):
 
         self._status = SandboxStatus.RUNNING
         import time
+
         start_time = time.time()
 
         # Build environment: inherit current + sandbox additions
@@ -175,7 +175,9 @@ class LocalSandbox(Sandbox):
                 )
 
             duration = (time.time() - start_time) * 1000
-            self._status = SandboxStatus.COMPLETED if process.returncode == 0 else SandboxStatus.FAILED
+            self._status = (
+                SandboxStatus.COMPLETED if process.returncode == 0 else SandboxStatus.FAILED
+            )
 
             return SandboxResult(
                 status=self._status,
@@ -210,9 +212,14 @@ class LocalSandbox(Sandbox):
     def get_workspace(self) -> Path:
         if self._workspace is None:
             self.create()
-        return self._workspace
+        workspace = self._workspace
+        if workspace is None:
+            # create() either assigns a workspace or raises, so this is
+            # unreachable; keep the declared Path return type honest.
+            raise RuntimeError("Sandbox workspace was not created")
+        return workspace
 
-    def __enter__(self) -> "LocalSandbox":
+    def __enter__(self) -> LocalSandbox:
         self.create()
         return self
 
@@ -230,7 +237,9 @@ class RestrictedSandbox(Sandbox):
     def create(self) -> None:
         self._local.create()
 
-    def execute(self, command: str, timeout: int = 30, env: Dict[str, str] | None = None) -> SandboxResult:
+    def execute(
+        self, command: str, timeout: int = 30, env: dict[str, str] | None = None
+    ) -> SandboxResult:
         return self._local.execute(command, timeout, env)
 
     def cleanup(self) -> None:

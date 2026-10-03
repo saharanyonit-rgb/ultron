@@ -22,36 +22,34 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.llm.base import LLMProvider
 from ultron.models import ExecutionResult, ExecutionStatus
+from ultron.semantic_verification_types import (
+    EvidenceItem,
+    SemanticCheckResult,
+    SemanticVerificationResult,
+)
 from ultron.verification_v5 import (
     TaskVerificationResult,
     VerificationCheck,
-    VerificationCheckType,
     VerificationEngine,
 )
 
 logger = logging.getLogger("ultron.semantic_verification")
 
 
-from ultron.semantic_verification_types import (
-    EvidenceItem,
-    SemanticCheckResult,
-    SemanticVerificationResult,
-)
-
-
 @dataclass
 class CrossTaskCheck:
     """Result of cross-task consistency verification."""
+
     task_a: str = ""
     task_b: str = ""
     consistent: bool = False
     reasoning: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_a": self.task_a,
             "task_b": self.task_b,
@@ -63,14 +61,15 @@ class CrossTaskCheck:
 @dataclass
 class MultiStepVerificationResult:
     """Result of the full multi-step verification pipeline."""
+
     overall_passed: bool = False
     confidence: float = 0.0
-    evidence: List[EvidenceItem] = field(default_factory=list)
-    criteria_checks: List[SemanticCheckResult] = field(default_factory=list)
-    cross_task_checks: List[CrossTaskCheck] = field(default_factory=list)
+    evidence: list[EvidenceItem] = field(default_factory=list)
+    criteria_checks: list[SemanticCheckResult] = field(default_factory=list)
+    cross_task_checks: list[CrossTaskCheck] = field(default_factory=list)
     summary: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "overall_passed": self.overall_passed,
             "confidence": self.confidence,
@@ -90,8 +89,8 @@ class SemanticVerifier:
 
     def __init__(
         self,
-        provider: Optional[LLMProvider] = None,
-        fallback: Optional[VerificationEngine] = None,
+        provider: LLMProvider | None = None,
+        fallback: VerificationEngine | None = None,
     ) -> None:
         self._provider = provider
         self._fallback = fallback or VerificationEngine()
@@ -101,8 +100,8 @@ class SemanticVerifier:
         task_id: str,
         execution_result: ExecutionResult,
         objective: str = "",
-        success_criteria: Optional[List[str]] = None,
-        checks: Optional[List[VerificationCheck]] = None,
+        success_criteria: list[str] | None = None,
+        checks: list[VerificationCheck] | None = None,
     ) -> TaskVerificationResult:
         """Verify a task result using semantic analysis.
 
@@ -121,7 +120,10 @@ class SemanticVerifier:
         # Run semantic verification
         if self._provider and success_criteria:
             semantic = self._semantic_verify(
-                task_id, execution_result, objective, success_criteria,
+                task_id,
+                execution_result,
+                objective,
+                success_criteria,
             )
 
             # Combine results: deterministic AND semantic must pass
@@ -181,7 +183,7 @@ class SemanticVerifier:
         task_id: str,
         execution_result: ExecutionResult,
         objective: str,
-        criteria: List[str],
+        criteria: list[str],
     ) -> SemanticVerificationResult:
         """Run LLM semantic verification against success criteria."""
         output_text = json.dumps(execution_result.output, default=str)[:2000]
@@ -199,8 +201,11 @@ class SemanticVerifier:
         )
 
         try:
-            result = self._provider.complete(prompt, [])
-            if result.text:
+            # Callers only reach this with a provider, but stay defensive: a
+            # missing provider falls through to the status-based fallback below.
+            provider = self._provider
+            result = provider.complete(prompt, []) if provider is not None else None
+            if result is not None and result.text:
                 return self._parse_semantic_result(result.text, criteria)
         except Exception as exc:
             logger.warning("LLM semantic verification failed: %s", exc)
@@ -217,7 +222,7 @@ class SemanticVerifier:
         self,
         execution_result: ExecutionResult,
         objective: str,
-    ) -> List[EvidenceItem]:
+    ) -> list[EvidenceItem]:
         """Step 1: Extract evidence from task output.
 
         Uses the LLM to identify key pieces of evidence that support
@@ -226,11 +231,13 @@ class SemanticVerifier:
         if not self._provider:
             # Fallback: treat entire output as evidence
             output_text = json.dumps(execution_result.output, default=str)[:2000]
-            return [EvidenceItem(
-                source="output",
-                content=output_text,
-                relevance=0.5,
-            )]
+            return [
+                EvidenceItem(
+                    source="output",
+                    content=output_text,
+                    relevance=0.5,
+                )
+            ]
 
         output_text = json.dumps(execution_result.output, default=str)[:3000]
         prompt = (
@@ -251,32 +258,39 @@ class SemanticVerifier:
             logger.warning("Evidence extraction failed: %s", exc)
 
         # Fallback
-        return [EvidenceItem(
-            source="output",
-            content=output_text[:500],
-            relevance=0.5,
-        )]
+        return [
+            EvidenceItem(
+                source="output",
+                content=output_text[:500],
+                relevance=0.5,
+            )
+        ]
 
     def verify_criteria(
         self,
-        evidence: List[EvidenceItem],
-        criteria: List[str],
+        evidence: list[EvidenceItem],
+        criteria: list[str],
         objective: str,
-    ) -> Tuple[List[SemanticCheckResult], float]:
+    ) -> tuple[list[SemanticCheckResult], float]:
         """Step 2: Verify each criterion against extracted evidence.
 
         Returns (checks, confidence).
         """
         if not self._provider:
             return (
-                [SemanticCheckResult(criterion=c, passed=False, confidence=0.0,
-                    reasoning="No LLM provider available") for c in criteria],
+                [
+                    SemanticCheckResult(
+                        criterion=c,
+                        passed=False,
+                        confidence=0.0,
+                        reasoning="No LLM provider available",
+                    )
+                    for c in criteria
+                ],
                 0.0,
             )
 
-        evidence_text = "\n".join(
-            f"- [{e.source}] {e.content}" for e in evidence
-        )
+        evidence_text = "\n".join(f"- [{e.source}] {e.content}" for e in evidence)
         criteria_text = "\n".join(f"- {c}" for c in criteria)
 
         prompt = (
@@ -297,15 +311,19 @@ class SemanticVerifier:
             logger.warning("Criteria verification failed: %s", exc)
 
         return (
-            [SemanticCheckResult(criterion=c, passed=False, confidence=0.3,
-                reasoning="LLM verification failed") for c in criteria],
+            [
+                SemanticCheckResult(
+                    criterion=c, passed=False, confidence=0.3, reasoning="LLM verification failed"
+                )
+                for c in criteria
+            ],
             0.3,
         )
 
     def cross_task_verify(
         self,
-        results: List[Tuple[str, ExecutionResult]],
-    ) -> List[CrossTaskCheck]:
+        results: list[tuple[str, ExecutionResult]],
+    ) -> list[CrossTaskCheck]:
         """Step 3: Cross-task consistency verification.
 
         Takes a list of (task_id, execution_result) pairs and checks
@@ -315,10 +333,15 @@ class SemanticVerifier:
             return []
 
         if not self._provider:
-            return [CrossTaskCheck(
-                task_a=r[0], task_b=results[i+1][0],
-                consistent=True, reasoning="No LLM provider available",
-            ) for i, r in enumerate(results[:-1])]
+            return [
+                CrossTaskCheck(
+                    task_a=r[0],
+                    task_b=results[i + 1][0],
+                    consistent=True,
+                    reasoning="No LLM provider available",
+                )
+                for i, r in enumerate(results[:-1])
+            ]
 
         summaries = []
         for task_id, er in results:
@@ -340,18 +363,23 @@ class SemanticVerifier:
         except Exception as exc:
             logger.warning("Cross-task verification failed: %s", exc)
 
-        return [CrossTaskCheck(
-            task_a=results[i][0], task_b=results[i+1][0],
-            consistent=True, reasoning="LLM verification failed",
-        ) for i in range(len(results) - 1)]
+        return [
+            CrossTaskCheck(
+                task_a=results[i][0],
+                task_b=results[i + 1][0],
+                consistent=True,
+                reasoning="LLM verification failed",
+            )
+            for i in range(len(results) - 1)
+        ]
 
     def verify_multi_step(
         self,
         task_id: str,
         execution_result: ExecutionResult,
         objective: str,
-        criteria: List[str],
-        prior_results: Optional[List[Tuple[str, ExecutionResult]]] = None,
+        criteria: list[str],
+        prior_results: list[tuple[str, ExecutionResult]] | None = None,
     ) -> MultiStepVerificationResult:
         """Full multi-step verification pipeline.
 
@@ -366,18 +394,22 @@ class SemanticVerifier:
 
         # Step 2: Per-criterion verification
         criteria_checks, criteria_confidence = self.verify_criteria(
-            evidence, criteria, objective,
+            evidence,
+            criteria,
+            objective,
         )
 
         # Step 3: Cross-task verification (optional)
-        cross_task_checks: List[CrossTaskCheck] = []
+        cross_task_checks: list[CrossTaskCheck] = []
         if prior_results and len(prior_results) >= 1:
             all_results = prior_results + [(task_id, execution_result)]
             cross_task_checks = self.cross_task_verify(all_results)
 
         # Step 4: Combine results
         all_passed = all(c.passed for c in criteria_checks) if criteria_checks else False
-        cross_consistent = all(c.consistent for c in cross_task_checks) if cross_task_checks else True
+        cross_consistent = (
+            all(c.consistent for c in cross_task_checks) if cross_task_checks else True
+        )
 
         overall_passed = all_passed and cross_consistent
 
@@ -395,7 +427,9 @@ class SemanticVerifier:
         summary_parts.append(f"{passed_count}/{len(criteria_checks)} criteria passed")
         if cross_task_checks:
             consistent_count = sum(1 for c in cross_task_checks if c.consistent)
-            summary_parts.append(f"{consistent_count}/{len(cross_task_checks)} cross-task checks consistent")
+            summary_parts.append(
+                f"{consistent_count}/{len(cross_task_checks)} cross-task checks consistent"
+            )
 
         return MultiStepVerificationResult(
             overall_passed=overall_passed,
@@ -408,7 +442,7 @@ class SemanticVerifier:
 
     # ── Evidence Parsing ────────────────────────────────────────────
 
-    def _parse_evidence(self, text: str) -> List[EvidenceItem]:
+    def _parse_evidence(self, text: str) -> list[EvidenceItem]:
         """Parse LLM evidence extraction response."""
         cleaned = text.strip()
         if cleaned.startswith("```"):
@@ -425,20 +459,28 @@ class SemanticVerifier:
                 items = []
                 for item in data:
                     if isinstance(item, dict):
-                        items.append(EvidenceItem(
-                            source=str(item.get("source", "")),
-                            content=str(item.get("content", "")),
-                            relevance=float(item.get("relevance", 0.5)),
-                        ))
-                return items if items else [EvidenceItem(source="output", content=cleaned[:500], relevance=0.5)]
+                        items.append(
+                            EvidenceItem(
+                                source=str(item.get("source", "")),
+                                content=str(item.get("content", "")),
+                                relevance=float(item.get("relevance", 0.5)),
+                            )
+                        )
+                return (
+                    items
+                    if items
+                    else [EvidenceItem(source="output", content=cleaned[:500], relevance=0.5)]
+                )
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
         return [EvidenceItem(source="output", content=cleaned[:500], relevance=0.5)]
 
     def _parse_criteria_checks(
-        self, text: str, expected_criteria: List[str],
-    ) -> Tuple[List[SemanticCheckResult], float]:
+        self,
+        text: str,
+        expected_criteria: list[str],
+    ) -> tuple[list[SemanticCheckResult], float]:
         """Parse LLM criteria verification response."""
         cleaned = text.strip()
         if cleaned.startswith("```"):
@@ -455,24 +497,33 @@ class SemanticVerifier:
                 checks = []
                 for c in data.get("checks", []):
                     if isinstance(c, dict):
-                        checks.append(SemanticCheckResult(
-                            criterion=str(c.get("criterion", "")),
-                            passed=bool(c.get("passed", False)),
-                            confidence=float(c.get("confidence", 0.5)),
-                            reasoning=str(c.get("reasoning", "")),
-                        ))
+                        checks.append(
+                            SemanticCheckResult(
+                                criterion=str(c.get("criterion", "")),
+                                passed=bool(c.get("passed", False)),
+                                confidence=float(c.get("confidence", 0.5)),
+                                reasoning=str(c.get("reasoning", "")),
+                            )
+                        )
                 overall_confidence = float(data.get("overall_confidence", 0.5))
                 return checks, overall_confidence
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
 
         return (
-            [SemanticCheckResult(criterion=c, passed=False, confidence=0.2,
-                reasoning="Failed to parse LLM response") for c in expected_criteria],
+            [
+                SemanticCheckResult(
+                    criterion=c,
+                    passed=False,
+                    confidence=0.2,
+                    reasoning="Failed to parse LLM response",
+                )
+                for c in expected_criteria
+            ],
             0.2,
         )
 
-    def _parse_cross_task_checks(self, text: str) -> List[CrossTaskCheck]:
+    def _parse_cross_task_checks(self, text: str) -> list[CrossTaskCheck]:
         """Parse LLM cross-task verification response."""
         cleaned = text.strip()
         if cleaned.startswith("```"):
@@ -489,12 +540,14 @@ class SemanticVerifier:
                 checks = []
                 for c in data.get("checks", []):
                     if isinstance(c, dict):
-                        checks.append(CrossTaskCheck(
-                            task_a=str(c.get("task_a", "")),
-                            task_b=str(c.get("task_b", "")),
-                            consistent=bool(c.get("consistent", True)),
-                            reasoning=str(c.get("reasoning", "")),
-                        ))
+                        checks.append(
+                            CrossTaskCheck(
+                                task_a=str(c.get("task_a", "")),
+                                task_b=str(c.get("task_b", "")),
+                                consistent=bool(c.get("consistent", True)),
+                                reasoning=str(c.get("reasoning", "")),
+                            )
+                        )
                 return checks
         except (json.JSONDecodeError, TypeError, ValueError):
             pass
@@ -504,7 +557,7 @@ class SemanticVerifier:
     def _parse_semantic_result(
         self,
         text: str,
-        expected_criteria: Optional[List[str]] = None,
+        expected_criteria: list[str] | None = None,
     ) -> SemanticVerificationResult:
         """Parse LLM semantic verification response."""
         cleaned = text.strip()
@@ -522,12 +575,14 @@ class SemanticVerifier:
                 checks = []
                 for c in data.get("checks", []):
                     if isinstance(c, dict):
-                        checks.append(SemanticCheckResult(
-                            criterion=str(c.get("criterion", "")),
-                            passed=bool(c.get("passed", False)),
-                            confidence=float(c.get("confidence", 0.5)),
-                            reasoning=str(c.get("reasoning", "")),
-                        ))
+                        checks.append(
+                            SemanticCheckResult(
+                                criterion=str(c.get("criterion", "")),
+                                passed=bool(c.get("passed", False)),
+                                confidence=float(c.get("confidence", 0.5)),
+                                reasoning=str(c.get("reasoning", "")),
+                            )
+                        )
 
                 return SemanticVerificationResult(
                     overall_passed=bool(data.get("overall", data.get("passed", False))),

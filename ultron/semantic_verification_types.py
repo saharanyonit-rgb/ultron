@@ -6,18 +6,19 @@ Defines result schema objects: SemanticCheckResult, SemanticVerificationResult, 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
 class SemanticCheckResult:
     """Result of a single semantic verification check."""
+
     criterion: str = ""
     passed: bool = False
     confidence: float = 0.0
     reasoning: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "criterion": self.criterion,
             "passed": self.passed,
@@ -29,12 +30,13 @@ class SemanticCheckResult:
 @dataclass
 class SemanticVerificationResult:
     """Complete semantic verification result."""
+
     overall_passed: bool = False
     confidence: float = 0.0
-    checks: List[SemanticCheckResult] = field(default_factory=list)
+    checks: list[SemanticCheckResult] = field(default_factory=list)
     summary: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "overall_passed": self.overall_passed,
             "confidence": self.confidence,
@@ -46,11 +48,12 @@ class SemanticVerificationResult:
 @dataclass
 class EvidenceItem:
     """A piece of evidence extracted from task output."""
+
     source: str = ""
     content: str = ""
     relevance: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "source": self.source,
             "content": self.content,

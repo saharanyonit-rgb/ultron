@@ -9,14 +9,14 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.resource_manager")
 
 
-class ResourceType(str, Enum):
+class ResourceType(StrEnum):
     API_CALLS = "api_calls"
     TOKENS = "tokens"
     TIME_SECONDS = "time_seconds"
@@ -26,12 +26,13 @@ class ResourceType(str, Enum):
 @dataclass
 class BudgetConfig:
     """Budget limits for resource consumption."""
+
     max_api_calls: int = 100
     max_tokens: int = 100000
     max_time_seconds: float = 600.0
     max_cost_usd: float = 10.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "max_api_calls": self.max_api_calls,
             "max_tokens": self.max_tokens,
@@ -43,13 +44,14 @@ class BudgetConfig:
 @dataclass
 class ResourceUsage:
     """Current resource consumption."""
+
     api_calls: int = 0
     tokens: int = 0
     time_seconds: float = 0.0
     cost_usd: float = 0.0
     start_time: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "api_calls": self.api_calls,
             "tokens": self.tokens,
@@ -61,6 +63,7 @@ class ResourceUsage:
 @dataclass
 class BudgetExceeded(Exception):
     """Raised when a budget limit is exceeded."""
+
     resource: str = ""
     limit: float = 0.0
     current: float = 0.0
@@ -76,11 +79,11 @@ class ResourceManager:
     - Cost estimation for LLM calls
     """
 
-    def __init__(self, config: Optional[BudgetConfig] = None) -> None:
+    def __init__(self, config: BudgetConfig | None = None) -> None:
         self._config = config or BudgetConfig()
         self._usage = ResourceUsage()
-        self._checkpoints: List[Dict[str, Any]] = []
-        self._warnings: List[str] = []
+        self._checkpoints: list[dict[str, Any]] = []
+        self._warnings: list[str] = []
 
     @property
     def config(self) -> BudgetConfig:
@@ -126,58 +129,61 @@ class ResourceManager:
         rate = rates.get(model, rates["default"])
         return (input_tokens * rate["input"] + output_tokens * rate["output"]) / 1000
 
-    def get_remaining_budget(self) -> Dict[str, float]:
+    def get_remaining_budget(self) -> dict[str, float]:
         """Get remaining budget for each resource type."""
         return {
             ResourceType.API_CALLS.value: max(
                 0, self._config.max_api_calls - self._usage.api_calls
             ),
-            ResourceType.TOKENS.value: max(
-                0, self._config.max_tokens - self._usage.tokens
-            ),
+            ResourceType.TOKENS.value: max(0, self._config.max_tokens - self._usage.tokens),
             ResourceType.TIME_SECONDS.value: max(
                 0, self._config.max_time_seconds - self._usage.time_seconds
             ),
             ResourceType.COST.value: max(
-                0, self._config.max_cost_usd - self._usage.cost_usd,
+                0,
+                self._config.max_cost_usd - self._usage.cost_usd,
             ),
         }
 
-    def get_usage_percentage(self) -> Dict[str, float]:
+    def get_usage_percentage(self) -> dict[str, float]:
         """Get usage as percentage of limits."""
         return {
             ResourceType.API_CALLS.value: (
                 self._usage.api_calls / self._config.max_api_calls * 100
-                if self._config.max_api_calls > 0 else 0
+                if self._config.max_api_calls > 0
+                else 0
             ),
             ResourceType.TOKENS.value: (
                 self._usage.tokens / self._config.max_tokens * 100
-                if self._config.max_tokens > 0 else 0
+                if self._config.max_tokens > 0
+                else 0
             ),
             ResourceType.TIME_SECONDS.value: (
                 self._usage.time_seconds / self._config.max_time_seconds * 100
-                if self._config.max_time_seconds > 0 else 0
+                if self._config.max_time_seconds > 0
+                else 0
             ),
             ResourceType.COST.value: (
                 self._usage.cost_usd / self._config.max_cost_usd * 100
-                if self._config.max_cost_usd > 0 else 0
+                if self._config.max_cost_usd > 0
+                else 0
             ),
         }
 
-    def checkpoint(self, label: str = "") -> Dict[str, Any]:
+    def checkpoint(self, label: str = "") -> dict[str, Any]:
         """Take a usage checkpoint."""
         cp = {
             "label": label or f"checkpoint_{len(self._checkpoints)}",
             "usage": self._usage.to_dict(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._checkpoints.append(cp)
         return cp
 
-    def get_checkpoints(self) -> List[Dict[str, Any]]:
+    def get_checkpoints(self) -> list[dict[str, Any]]:
         return list(self._checkpoints)
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         return list(self._warnings)
 
     def reset(self) -> None:
@@ -192,15 +198,11 @@ class ResourceManager:
 
         for resource, usage_pct in pct.items():
             if usage_pct >= 90:
-                self._warnings.append(
-                    f"BUDGET WARNING: {resource} at {usage_pct:.0f}%"
-                )
+                self._warnings.append(f"BUDGET WARNING: {resource} at {usage_pct:.0f}%")
                 logger.warning("Budget %s at %.0f%%", resource, usage_pct)
 
             if usage_pct >= 100:
-                self._warnings.append(
-                    f"BUDGET EXCEEDED: {resource}"
-                )
+                self._warnings.append(f"BUDGET EXCEEDED: {resource}")
                 logger.error("Budget exceeded: %s", resource)
 
 

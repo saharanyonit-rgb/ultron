@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.services import get_calendar_service
 from ultron.tools.base import Tool
@@ -12,6 +14,13 @@ class CalendarTool(Tool):
     """Tool for creating and managing calendar events."""
 
     name = "create_calendar_event"
+    keywords = (
+        "create calendar event",
+        "schedule a meeting",
+        "add to calendar",
+        "book a meeting",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Create a new calendar event. Use this when the user asks to schedule a meeting, "
         "set up an appointment, add a calendar entry, or block time. "
@@ -62,7 +71,7 @@ class CalendarTool(Tool):
         description: str = "",
         timezone: str = "UTC",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             service = get_calendar_service()
             event = service.create_event(
@@ -81,6 +90,13 @@ class ListCalendarEventsTool(Tool):
     """List upcoming calendar events."""
 
     name = "list_calendar_events"
+    keywords = (
+        "list calendar events",
+        "what is on my calendar",
+        "show my schedule",
+        "my calendar",
+    )
+    risk = RiskLevel.READ
     description = (
         "List upcoming calendar events. Use when the user asks to see their calendar, "
         "list meetings, or check their schedule."
@@ -117,7 +133,7 @@ class ListCalendarEventsTool(Tool):
         to_time: str | None = None,
         limit: int = 10,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         try:
             service = get_calendar_service()
             events = service.list_events(from_time=from_time, to_time=to_time, limit=limit)

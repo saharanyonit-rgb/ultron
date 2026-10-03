@@ -13,24 +13,24 @@ Handles execution failures with controlled recovery:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from ultron.execution_state import StepState, TaskState, TaskStatus
-from ultron.models import ExecutionResult, ExecutionStatus
 
 logger = logging.getLogger("ultron.recovery")
 
 
-class RecoveryAction(str, Enum):
+class RecoveryAction(StrEnum):
     RETRY = "retry"
     REPLAN = "replan"
     SKIP = "skip"
     ABORT = "abort"
 
 
-class ErrorClass(str, Enum):
+class ErrorClass(StrEnum):
     TRANSIENT = "transient"  # Network timeout, temporary resource issue
     PERMANENT = "permanent"  # Invalid input, missing resource
     RECOVERABLE = "recoverable"  # Can be retried or replanned
@@ -38,7 +38,7 @@ class ErrorClass(str, Enum):
 
 
 # Map error types to error classes
-ERROR_CLASS_MAP: Dict[str, ErrorClass] = {
+ERROR_CLASS_MAP: dict[str, ErrorClass] = {
     "TimeoutError": ErrorClass.TRANSIENT,
     "ConnectionError": ErrorClass.TRANSIENT,
     "RateLimitError": ErrorClass.TRANSIENT,
@@ -59,9 +59,9 @@ class RecoveryDecision:
     error_class: ErrorClass
     retry_count: int
     max_retries: int
-    previous_results: List[Dict[str, Any]] = field(default_factory=list)
+    previous_results: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "action": self.action.value,
             "reason": self.reason,
@@ -77,7 +77,7 @@ class RecoveryEngine:
     def __init__(
         self,
         max_retries: int = 3,
-        retryable_errors: List[str] | None = None,
+        retryable_errors: list[str] | None = None,
     ) -> None:
         self._max_retries = max_retries
         self._retryable_errors = retryable_errors or [
@@ -86,10 +86,10 @@ class RecoveryEngine:
             "RateLimitError",
             "ToolExecutionError",
         ]
-        self._decisions: List[RecoveryDecision] = []
+        self._decisions: list[RecoveryDecision] = []
 
     @property
-    def decisions(self) -> List[RecoveryDecision]:
+    def decisions(self) -> list[RecoveryDecision]:
         return list(self._decisions)
 
     def classify_error(self, error: Exception | str) -> ErrorClass:
@@ -110,7 +110,7 @@ class RecoveryEngine:
         self,
         step: StepState,
         error: Exception | str,
-        previous_results: List[Dict[str, Any]] | None = None,
+        previous_results: list[dict[str, Any]] | None = None,
     ) -> RecoveryDecision:
         """Decide how to recover from a step failure."""
         error_class = self.classify_error(error)
@@ -169,15 +169,17 @@ class RecoveryEngine:
         task: TaskState,
         failed_step: StepState,
         error: Exception | str,
-        replan_callback: Callable[[TaskState, StepState], Optional[TaskState]] | None = None,
-    ) -> Optional[TaskState]:
+        replan_callback: Callable[[TaskState, StepState], TaskState | None] | None = None,
+    ) -> TaskState | None:
         """Execute a recovery action. Returns new task if replanned."""
         decision = self.decide_recovery(failed_step, error)
 
         if decision.action == RecoveryAction.RETRY:
             failed_step.retry_count += 1
             failed_step.status = "pending"
-            logger.info("Retrying step %s (attempt %d)", failed_step.step_id, failed_step.retry_count)
+            logger.info(
+                "Retrying step %s (attempt %d)", failed_step.step_id, failed_step.retry_count
+            )
             return task
 
         elif decision.action == RecoveryAction.REPLAN:

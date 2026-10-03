@@ -8,7 +8,6 @@ NOT V2 PowerShell/CMD execution — keep V1 lean.
 from __future__ import annotations
 
 import platform
-from typing import Any
 
 
 def is_windows() -> bool:
@@ -23,8 +22,9 @@ def get_os_version() -> str:
 
 def format_bytes(size: int) -> str:
     """Format bytes into human-readable string."""
+    value: float = float(size)
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size < 1024:
-            return f"{size:.2f} {unit}"
-        size /= 1024
-    return f"{size:.2f} TB"
+        if value < 1024:
+            return f"{value:.2f} {unit}"
+        value /= 1024
+    return f"{value:.2f} TB"

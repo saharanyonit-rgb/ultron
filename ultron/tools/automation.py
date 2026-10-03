@@ -9,10 +9,14 @@ Provides:
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 logger = logging.getLogger("ultron.tools.automation")
 
@@ -25,14 +29,15 @@ def _get_pyautogui():
     if _pyautogui is None:
         try:
             import pyautogui
+
             pyautogui.FAILSAFE = True
             pyautogui.PAUSE = 0.05
             _pyautogui = pyautogui
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "pyautogui is required for mouse/keyboard control. "
                 "Install it: pip install pyautogui"
-            )
+            ) from exc
     return _pyautogui
 
 
@@ -40,13 +45,18 @@ class MouseMove(Tool):
     """Move the mouse cursor to absolute screen coordinates."""
 
     name = "mouse_move"
+    risk = RiskLevel.MEDIUM
     description = "Move the mouse cursor to absolute screen coordinates (x, y)."
     parameters = {
         "type": "object",
         "properties": {
             "x": {"type": "integer", "description": "X coordinate in pixels."},
             "y": {"type": "integer", "description": "Y coordinate in pixels."},
-            "duration": {"type": "number", "description": "Time in seconds for the move. Default 0.2.", "default": 0.2},
+            "duration": {
+                "type": "number",
+                "description": "Time in seconds for the move. Default 0.2.",
+                "default": 0.2,
+            },
         },
         "required": ["x", "y"],
     }
@@ -59,7 +69,7 @@ class MouseMove(Tool):
     }
     mutates = True
 
-    def run(self, x: int, y: int, duration: float = 0.2, **_: Any) -> Dict[str, Any]:
+    def run(self, x: int, y: int, duration: float = 0.2, **_: Any) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             ag.moveTo(x, y, duration=duration)
@@ -72,11 +82,24 @@ class MouseClick(Tool):
     """Click at the current mouse position or at given coordinates."""
 
     name = "mouse_click"
-    description = "Click the mouse. Optionally at specific coordinates. Supports left, right, middle buttons."
+    keywords = (
+        "click the mouse",
+        "click at",
+        "left click",
+        "right click",
+        "double click",
+    )
+    risk = RiskLevel.MEDIUM
+    description = (
+        "Click the mouse. Optionally at specific coordinates. Supports left, right, middle buttons."
+    )
     parameters = {
         "type": "object",
         "properties": {
-            "x": {"type": "integer", "description": "X coordinate (optional, clicks current position if omitted)."},
+            "x": {
+                "type": "integer",
+                "description": "X coordinate (optional, clicks current position if omitted).",
+            },
             "y": {"type": "integer", "description": "Y coordinate (optional)."},
             "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"},
             "clicks": {"type": "integer", "default": 1, "description": "Number of clicks."},
@@ -94,7 +117,14 @@ class MouseClick(Tool):
     }
     mutates = True
 
-    def run(self, x: int | None = None, y: int | None = None, button: str = "left", clicks: int = 1, **_: Any) -> Dict[str, Any]:
+    def run(
+        self,
+        x: int | None = None,
+        y: int | None = None,
+        button: str = "left",
+        clicks: int = 1,
+        **_: Any,
+    ) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             if x is not None and y is not None:
@@ -112,11 +142,15 @@ class MouseScroll(Tool):
     """Scroll the mouse wheel."""
 
     name = "mouse_scroll"
+    risk = RiskLevel.LOW
     description = "Scroll the mouse wheel up or down."
     parameters = {
         "type": "object",
         "properties": {
-            "amount": {"type": "integer", "description": "Scroll amount. Positive = up, negative = down."},
+            "amount": {
+                "type": "integer",
+                "description": "Scroll amount. Positive = up, negative = down.",
+            },
         },
         "required": ["amount"],
     }
@@ -128,7 +162,7 @@ class MouseScroll(Tool):
     }
     mutates = True
 
-    def run(self, amount: int = 3, **_: Any) -> Dict[str, Any]:
+    def run(self, amount: int = 3, **_: Any) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             ag.scroll(amount)
@@ -141,13 +175,18 @@ class MouseDrag(Tool):
     """Drag from current position to target, or from one point to another."""
 
     name = "mouse_drag"
+    risk = RiskLevel.MEDIUM
     description = "Drag the mouse from one position to another."
     parameters = {
         "type": "object",
         "properties": {
             "x": {"type": "integer", "description": "Target X coordinate."},
             "y": {"type": "integer", "description": "Target Y coordinate."},
-            "duration": {"type": "number", "description": "Drag duration in seconds.", "default": 0.5},
+            "duration": {
+                "type": "number",
+                "description": "Drag duration in seconds.",
+                "default": 0.5,
+            },
             "button": {"type": "string", "enum": ["left", "right", "middle"], "default": "left"},
         },
         "required": ["x", "y"],
@@ -163,7 +202,9 @@ class MouseDrag(Tool):
     }
     mutates = True
 
-    def run(self, x: int, y: int, duration: float = 0.5, button: str = "left", **_: Any) -> Dict[str, Any]:
+    def run(
+        self, x: int, y: int, duration: float = 0.5, button: str = "left", **_: Any
+    ) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             start = ag.position()
@@ -177,12 +218,23 @@ class TypeText(Tool):
     """Type text as if keyboard input."""
 
     name = "type_text"
+    keywords = (
+        "type text",
+        "type this",
+        "write on screen",
+        "keyboard input",
+    )
+    risk = RiskLevel.MEDIUM
     description = "Type text as keyboard input. Supports special characters and newlines."
     parameters = {
         "type": "object",
         "properties": {
             "text": {"type": "string", "description": "Text to type."},
-            "interval": {"type": "number", "description": "Interval between keystrokes in seconds.", "default": 0.02},
+            "interval": {
+                "type": "number",
+                "description": "Interval between keystrokes in seconds.",
+                "default": 0.02,
+            },
         },
         "required": ["text"],
     }
@@ -195,11 +247,15 @@ class TypeText(Tool):
     }
     mutates = True
 
-    def run(self, text: str = "", interval: float = 0.02, **kwargs: Any) -> Dict[str, Any]:
-        target_text = text or kwargs.get("content") or kwargs.get("value") or kwargs.get("string") or ""
+    def run(self, text: str = "", interval: float = 0.02, **kwargs: Any) -> dict[str, Any]:
+        target_text = (
+            text or kwargs.get("content") or kwargs.get("value") or kwargs.get("string") or ""
+        )
         try:
             ag = _get_pyautogui()
-            ag.typewrite(target_text, interval=interval) if target_text.isascii() else ag.write(target_text, interval=interval)
+            ag.typewrite(target_text, interval=interval) if target_text.isascii() else ag.write(
+                target_text, interval=interval
+            )
             return {"typed": target_text, "length": len(target_text)}
         except Exception as e:
             return {"error": str(e)}
@@ -209,6 +265,13 @@ class PressKey(Tool):
     """Press one or more keyboard keys or hotkey combinations."""
 
     name = "press_key"
+    keywords = (
+        "press key",
+        "hit key",
+        "press enter",
+        "keyboard shortcut",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Press a key or hotkey combination. "
         "Examples: 'enter', 'ctrl+c', 'alt+tab', 'win+d', 'ctrl+shift+esc'."
@@ -220,7 +283,11 @@ class PressKey(Tool):
                 "type": "string",
                 "description": "Key or hotkey combo. Use + to combine: 'ctrl+c', 'alt+tab', 'win+r'.",
             },
-            "presses": {"type": "integer", "default": 1, "description": "Number of times to press."},
+            "presses": {
+                "type": "integer",
+                "default": 1,
+                "description": "Number of times to press.",
+            },
         },
         "required": ["keys"],
     }
@@ -233,13 +300,13 @@ class PressKey(Tool):
     }
     mutates = True
 
-    def run(self, keys: str, presses: int = 1, **_: Any) -> Dict[str, Any]:
+    def run(self, keys: str, presses: int = 1, **_: Any) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             presses = max(1, int(presses))
             if "+" in keys:
                 # pyautogui.hotkey() has no `presses` argument; repeat the combo.
-                for _ in range(presses):
+                for _press in range(presses):
                     ag.hotkey(*keys.split("+"))
             else:
                 ag.press(keys, presses=presses)
@@ -252,6 +319,7 @@ class GetScreenInfo(Tool):
     """Get screen size and mouse position."""
 
     name = "get_screen_info"
+    risk = RiskLevel.READ
     description = "Get screen size, mouse position, and display info."
     parameters = {
         "type": "object",
@@ -268,7 +336,7 @@ class GetScreenInfo(Tool):
         },
     }
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         try:
             ag = _get_pyautogui()
             size = ag.size()

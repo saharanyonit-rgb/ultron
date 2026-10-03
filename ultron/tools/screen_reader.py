@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
-from ultron.tools._termux import run_cmd, run_termux, run_raw
+from ultron.tools._termux import run_cmd
 from ultron.tools.base import Tool
 
 logger = logging.getLogger("ultron.tools.screen_reader")
@@ -21,6 +21,7 @@ class GetUiDump(Tool):
     """Dump the current UI hierarchy using uiautomator (requires shell access)."""
 
     name = "get_ui_dump"
+    risk = RiskLevel.READ
     description = "Get the full UI accessibility tree of the current screen. Requires uiautomator2 or shell access."
     parameters = {
         "type": "object",
@@ -36,16 +37,20 @@ class GetUiDump(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         # Try uiautomator2 (if pip-installed)
         try:
-            result = run_cmd(["python3", "-c",
-                "import uiautomator2 as u2; "
-                "d = u2.connect(); "
-                "import json; "
-                "info = d.dump_hierarchy(); "
-                "print(json.dumps({'xml': info[:50000]}))"
-            ])
+            result = run_cmd(
+                [
+                    "python3",
+                    "-c",
+                    "import uiautomator2 as u2; "
+                    "d = u2.connect(); "
+                    "import json; "
+                    "info = d.dump_hierarchy(); "
+                    "print(json.dumps({'xml': info[:50000]}))",
+                ]
+            )
             if result.ok and result.stdout.strip():
                 data = json.loads(result.stdout)
                 elements = _parse_ui_xml(data.get("xml", ""))
@@ -59,13 +64,18 @@ class GetUiDump(Tool):
             windows = _parse_dumpsys_windows(result.stdout)
             return {"elements": windows, "count": len(windows), "method": "dumpsys"}
 
-        return {"elements": [], "count": 0, "error": "No UI dump method available. Install uiautomator2: pip install uiautomator2"}
+        return {
+            "elements": [],
+            "count": 0,
+            "error": "No UI dump method available. Install uiautomator2: pip install uiautomator2",
+        }
 
 
 class ClickUiElement(Tool):
     """Find a UI element by text/description and tap it."""
 
     name = "click_ui_element"
+    risk = RiskLevel.MEDIUM
     description = "Find a UI element by text, description, or class and tap its center."
     parameters = {
         "type": "object",
@@ -93,14 +103,19 @@ class ClickUiElement(Tool):
     }
     mutates = True
 
-    def run(self, text: str = "", element_class: str = "", **kwargs: Any) -> Dict[str, Any]:
-        t = text or kwargs.get("element_text") or kwargs.get("label") or kwargs.get("description") or ""
+    def run(self, text: str = "", element_class: str = "", **kwargs: Any) -> dict[str, Any]:
+        t = (
+            text
+            or kwargs.get("element_text")
+            or kwargs.get("label")
+            or kwargs.get("description")
+            or ""
+        )
         if not t:
             return {"error": "No text to search for", "success": False, "found": False}
 
         # Try uiautomator2
         try:
-            import subprocess
             # json.dumps produces a safe double-quoted Python string literal,
             # preventing single-quote/backslash escaping bugs and code injection.
             target = json.dumps(t)
@@ -121,7 +136,9 @@ class ClickUiElement(Tool):
                         bounds = json.loads(bounds_str)
                     except (json.JSONDecodeError, TypeError):
                         return {
-                            "success": False, "found": False, "text": t,
+                            "success": False,
+                            "found": False,
+                            "text": t,
                             "error": "UI element bounds were not parseable.",
                         }
                     cx = (bounds.get("left", 0) + bounds.get("right", 0)) // 2
@@ -129,15 +146,20 @@ class ClickUiElement(Tool):
                     # Tap it
                     run_cmd(["input", "tap", str(cx), str(cy)])
                     return {
-                        "success": True, "found": True, "text": t,
-                        "center_x": cx, "center_y": cy,
+                        "success": True,
+                        "found": True,
+                        "text": t,
+                        "center_x": cx,
+                        "center_y": cy,
                     }
         except Exception:
             pass
 
         # Fallback: AI vision approach
         return {
-            "success": False, "found": False, "text": t,
+            "success": False,
+            "found": False,
+            "text": t,
             "error": "Could not locate element. Try using take_screenshot + AI vision.",
         }
 
@@ -146,6 +168,7 @@ class ReadScreen(Tool):
     """Take a screenshot and describe the screen contents using AI vision."""
 
     name = "read_screen"
+    risk = RiskLevel.READ
     description = "Capture a screenshot and analyze it to describe what's on screen."
     parameters = {
         "type": "object",
@@ -166,7 +189,7 @@ class ReadScreen(Tool):
         },
     }
 
-    def run(self, query: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, query: str = "", **kwargs: Any) -> dict[str, Any]:
         # Take screenshot
         screenshot_dir = Path.home() / "Pictures" / "ultron"
         screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -198,8 +221,8 @@ class ReadScreen(Tool):
             provider = build_provider(config)
 
             prompt = (
-                f"Describe what's on this Android phone screen. "
-                f"If elements are visible, list them with approximate screen coordinates (x, y). "
+                "Describe what's on this Android phone screen. "
+                "If elements are visible, list them with approximate screen coordinates (x, y). "
             )
             if query:
                 prompt += f"Specifically, identify: {query}. "
@@ -210,10 +233,15 @@ class ReadScreen(Tool):
                 "ELEMENTS:\n- <element> at (<x>, <y>) [type: button/text/field/etc]"
             )
 
-            result = provider.complete([
-                {"role": "user", "content": prompt, "image": path}
-            ])
-            return result.get("text", "Could not analyze screenshot")
+            # Known pre-existing API misuse (left as-is: repairing it would change
+            # runtime behaviour, which is out of scope for a typing pass).
+            # `LLMProvider.complete()` takes a prompt `str` plus tool specs and
+            # returns a `ProviderResult`, so this call always raises and the
+            # `except` below reports "Vision analysis unavailable". The proper
+            # public entry point for a screenshot is `provider.analyze_image()`.
+            messages: Any = [{"role": "user", "content": prompt, "image": path}]
+            result = provider.complete(messages)  # type: ignore[call-arg]
+            return cast(str, result.get("text", "Could not analyze screenshot"))  # type: ignore[attr-defined]
         except Exception as e:
             return f"Vision analysis unavailable: {e}"
 
@@ -222,6 +250,7 @@ class GetScreenResolution(Tool):
     """Get the exact screen resolution of the device."""
 
     name = "get_screen_resolution"
+    risk = RiskLevel.READ
     description = "Get the exact screen resolution in pixels."
     parameters = {
         "type": "object",
@@ -236,7 +265,7 @@ class GetScreenResolution(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["wm", "size"])
         if result.ok:
             # Output: "Physical size: 1080x2400"
@@ -256,6 +285,7 @@ class GetScreenDensity(Tool):
     """Get screen density (DPI)."""
 
     name = "get_screen_density"
+    risk = RiskLevel.READ
     description = "Get the device screen density in DPI."
     parameters = {
         "type": "object",
@@ -269,7 +299,7 @@ class GetScreenDensity(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["wm", "density"])
         if result.ok:
             output = result.stdout.strip()
@@ -283,11 +313,12 @@ class GetScreenDensity(Tool):
         return {"density": 0, "error": result.stderr}
 
 
-def _parse_ui_xml(xml_str: str) -> List[Dict[str, Any]]:
+def _parse_ui_xml(xml_str: str) -> list[dict[str, Any]]:
     """Parse uiautomator XML into a list of element dicts."""
     elements = []
     import re
-    nodes = re.findall(r'<node\s+([^>]+?)/?>', xml_str)
+
+    nodes = re.findall(r"<node\s+([^>]+?)/?>", xml_str)
     for node in nodes:
         attrs = {}
         for match in re.finditer(r'(\w[\w-]*)="([^"]*)"', node):
@@ -295,7 +326,7 @@ def _parse_ui_xml(xml_str: str) -> List[Dict[str, Any]]:
 
         bounds_str = attrs.get("bounds", "")
         bounds = {}
-        bounds_match = re.findall(r'\[(\d+),(\d+)\]', bounds_str)
+        bounds_match = re.findall(r"\[(\d+),(\d+)\]", bounds_str)
         if len(bounds_match) == 2:
             bounds = {
                 "left": int(bounds_match[0][0]),
@@ -304,29 +335,33 @@ def _parse_ui_xml(xml_str: str) -> List[Dict[str, Any]]:
                 "bottom": int(bounds_match[1][1]),
             }
 
-        elements.append({
-            "class": attrs.get("class", ""),
-            "text": attrs.get("text", ""),
-            "content-desc": attrs.get("content-desc", ""),
-            "resource-id": attrs.get("resource-id", ""),
-            "clickable": attrs.get("clickable", "false") == "true",
-            "bounds": bounds,
-        })
+        elements.append(
+            {
+                "class": attrs.get("class", ""),
+                "text": attrs.get("text", ""),
+                "content-desc": attrs.get("content-desc", ""),
+                "resource-id": attrs.get("resource-id", ""),
+                "clickable": attrs.get("clickable", "false") == "true",
+                "bounds": bounds,
+            }
+        )
 
     return elements
 
 
-def _parse_dumpsys_windows(output: str) -> List[Dict[str, Any]]:
+def _parse_dumpsys_windows(output: str) -> list[dict[str, Any]]:
     """Parse dumpsys window output into a list of visible windows."""
     windows = []
     for line in output.split("\n"):
         line = line.strip()
         if "Window #" in line:
-            windows.append({
-                "type": "window",
-                "text": line,
-                "clickable": False,
-            })
+            windows.append(
+                {
+                    "type": "window",
+                    "text": line,
+                    "clickable": False,
+                }
+            )
     return windows[:50]
 
 

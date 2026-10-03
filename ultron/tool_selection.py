@@ -22,9 +22,9 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.llm.base import LLMProvider
 from ultron.risk import RiskClassifier, RiskLevel
 from ultron.tools import Tool, ToolRegistry
 
@@ -34,13 +34,14 @@ logger = logging.getLogger("ultron.tool_selection")
 @dataclass
 class ToolSelection:
     """A ranked tool selection with reasoning."""
+
     tool_name: str
     score: float
     reasoning: str = ""
     risk_level: str = ""
     available: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool_name": self.tool_name,
             "score": self.score,
@@ -53,12 +54,13 @@ class ToolSelection:
 @dataclass
 class ToolSelectionResult:
     """Result of intelligent tool selection."""
-    selected_tools: List[ToolSelection] = field(default_factory=list)
-    primary_tool: Optional[str] = None
+
+    selected_tools: list[ToolSelection] = field(default_factory=list)
+    primary_tool: str | None = None
     reasoning: str = ""
     confidence: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "selected_tools": [t.to_dict() for t in self.selected_tools],
             "primary_tool": self.primary_tool,
@@ -81,14 +83,14 @@ class ToolSelector:
     def __init__(
         self,
         registry: ToolRegistry,
-        risk_classifier: Optional[RiskClassifier] = None,
-        provider: Optional[LLMProvider] = None,
+        risk_classifier: RiskClassifier | None = None,
+        provider: LLMProvider | None = None,
     ) -> None:
         self._registry = registry
         self._risk_classifier = risk_classifier or RiskClassifier()
         self._provider = provider
-        self._failure_history: Dict[str, int] = {}  # tool_name -> failure count
-        self._success_history: Dict[str, int] = {}  # tool_name -> success count
+        self._failure_history: dict[str, int] = {}  # tool_name -> failure count
+        self._success_history: dict[str, int] = {}  # tool_name -> success count
 
     def record_failure(self, tool_name: str) -> None:
         """Record a tool failure for future selection."""
@@ -106,8 +108,8 @@ class ToolSelector:
     def select_tools(
         self,
         task_description: str,
-        required_tools: Optional[List[str]] = None,
-        required_capabilities: Optional[List[str]] = None,
+        required_tools: list[str] | None = None,
+        required_capabilities: list[str] | None = None,
         max_results: int = 5,
     ) -> ToolSelectionResult:
         """Select the best tools for a task.
@@ -143,12 +145,14 @@ class ToolSelector:
             tool = tool_names[name]
             score = self._score_tool(tool, task_description, required_capabilities)
             risk = self._risk_classifier.classify(name)
-            selections.append(ToolSelection(
-                tool_name=name,
-                score=score,
-                risk_level=risk.value,
-                available=True,
-            ))
+            selections.append(
+                ToolSelection(
+                    tool_name=name,
+                    score=score,
+                    risk_level=risk.value,
+                    available=True,
+                )
+            )
 
         # Sort by score descending
         selections.sort(key=lambda s: s.score, reverse=True)
@@ -170,7 +174,7 @@ class ToolSelector:
     def select_with_llm(
         self,
         task_description: str,
-        available_tools: Optional[List[str]] = None,
+        available_tools: list[str] | None = None,
     ) -> ToolSelectionResult:
         """Use LLM to select the best tool for an ambiguous task.
 
@@ -202,7 +206,7 @@ class ToolSelector:
         self,
         tool: Tool,
         task_description: str,
-        required_capabilities: Optional[List[str]] = None,
+        required_capabilities: list[str] | None = None,
     ) -> float:
         """Score a tool's suitability for a task."""
         score = 0.5  # base score
@@ -244,7 +248,7 @@ class ToolSelector:
     def _parse_llm_selection(
         self,
         text: str,
-        available_tools: Optional[List[str]] = None,
+        available_tools: list[str] | None = None,
     ) -> ToolSelectionResult:
         """Parse LLM tool selection response."""
         cleaned = text.strip()
@@ -272,12 +276,14 @@ class ToolSelector:
                 if tool_name:
                     risk = self._risk_classifier.classify(tool_name)
                     return ToolSelectionResult(
-                        selected_tools=[ToolSelection(
-                            tool_name=tool_name,
-                            score=confidence,
-                            reasoning=reasoning,
-                            risk_level=risk.value,
-                        )],
+                        selected_tools=[
+                            ToolSelection(
+                                tool_name=tool_name,
+                                score=confidence,
+                                reasoning=reasoning,
+                                risk_level=risk.value,
+                            )
+                        ],
                         primary_tool=tool_name,
                         reasoning=reasoning,
                         confidence=confidence,

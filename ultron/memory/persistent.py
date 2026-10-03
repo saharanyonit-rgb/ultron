@@ -10,9 +10,8 @@ adds disk persistence without changing the public interface.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 from ultron.memory import Memory, Turn
 
@@ -50,7 +49,7 @@ class PersistentMemory(Memory):
         except OSError:
             pass
 
-    def sessions(self) -> List[List[Turn]]:
+    def sessions(self) -> list[list[Turn]]:
         """Return turns grouped by session (separated by blank lines in file).
 
         Each session is a list of Turns.  A new session starts when a
@@ -58,9 +57,9 @@ class PersistentMemory(Memory):
         """
         if not self._path.is_file():
             return []
-        sessions: List[List[Turn]] = []
-        current: List[Turn] = []
-        prev_ts: Optional[str] = None
+        sessions: list[list[Turn]] = []
+        current: list[Turn] = []
+        prev_ts: str | None = None
         try:
             with self._path.open("r", encoding="utf-8") as fh:
                 for line in fh:
@@ -113,7 +112,7 @@ class PersistentMemory(Memory):
     def _append(self, role: str, content: str) -> None:
         """Append a single turn to the file."""
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "role": role,
             "content": content,
         }

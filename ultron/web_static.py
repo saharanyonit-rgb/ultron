@@ -5,7 +5,6 @@ Provides MIME types, path validation, ETag caching, and gzip compression.
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import logging
 import sys

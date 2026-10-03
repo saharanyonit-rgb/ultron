@@ -5,11 +5,13 @@ Uses NetworkSecurityGuard for consistent URL validation across the system.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import subprocess
 import sys
-from typing import Any, Dict
+from typing import Any
 
-from ultron.network_security import NetworkSecurityGuard, NetworkPolicy
+from ultron.network_security import NetworkSecurityGuard
 from ultron.platform import is_windows
 from ultron.tools.base import Tool
 
@@ -19,6 +21,16 @@ _default_guard = NetworkSecurityGuard()
 
 class OpenUrl(Tool):
     name = "open_url"
+    keywords = (
+        "open url",
+        "open website",
+        "browse to",
+        "open link",
+        "go to website",
+    )
+    # Launches a browser window, so this mutates (declared below). LOW because
+    # the effect is visible but trivially reversible (close the tab/window).
+    risk = RiskLevel.LOW
     description = "Open a web URL in the default browser. Only http/https is allowed."
     parameters = {
         "type": "object",
@@ -35,8 +47,15 @@ class OpenUrl(Tool):
     }
     mutates = True
 
-    def run(self, url: str = "", **kwargs: Any) -> Dict[str, Any]:
-        target_url = url or kwargs.get("link") or kwargs.get("uri") or kwargs.get("target") or kwargs.get("url_address") or ""
+    def run(self, url: str = "", **kwargs: Any) -> dict[str, Any]:
+        target_url = (
+            url
+            or kwargs.get("link")
+            or kwargs.get("uri")
+            or kwargs.get("target")
+            or kwargs.get("url_address")
+            or ""
+        )
         if not target_url:
             return {"error": "Missing 'url' parameter"}
 
@@ -57,18 +76,23 @@ class OpenUrl(Tool):
 
         if is_windows():
             from ultron.tools._windows import ps_error, ps_ok, ps_quote, run_powershell
+
             proc = run_powershell(f"Start-Process {ps_quote(target_url)}", timeout=30)
             if not ps_ok(proc):
                 return {"error": f"failed to open URL: {ps_error(proc)}"}
         else:
             # Linux/Android: use xdg-open or am
             try:
-                if sys.platform == "linux" and "/data/data/com.termux" in __import__("os").environ.get("PREFIX", ""):
-                    subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", "-d", target_url],
-                                   timeout=10, capture_output=True)
+                if sys.platform == "linux" and "/data/data/com.termux" in __import__(
+                    "os"
+                ).environ.get("PREFIX", ""):
+                    subprocess.run(
+                        ["am", "start", "-a", "android.intent.action.VIEW", "-d", target_url],
+                        timeout=10,
+                        capture_output=True,
+                    )
                 else:
-                    subprocess.run(["xdg-open", target_url],
-                                   timeout=10, capture_output=True)
+                    subprocess.run(["xdg-open", target_url], timeout=10, capture_output=True)
             except Exception as e:
                 return {"error": f"failed to open URL: {e}"}
 

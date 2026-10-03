@@ -15,14 +15,15 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.status")
 
 
-class StatusEvent(str, Enum):
+class StatusEvent(StrEnum):
     TASK_STARTED = "task_started"
     PLANNING = "planning"
     PLAN_CREATED = "plan_created"
@@ -49,9 +50,9 @@ class StatusUpdate:
     task_id: str = ""
     step_id: str = ""
     progress: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event": self.event.value,
             "message": self.message,
@@ -85,11 +86,11 @@ class StatusReporter:
     """Reports execution status to subscribers."""
 
     def __init__(self) -> None:
-        self._subscribers: List[StatusSubscriber] = []
-        self._history: List[StatusUpdate] = []
+        self._subscribers: list[StatusSubscriber] = []
+        self._history: list[StatusUpdate] = []
 
     @property
-    def history(self) -> List[StatusUpdate]:
+    def history(self) -> list[StatusUpdate]:
         return list(self._history)
 
     def subscribe(self, subscriber: StatusSubscriber) -> None:
@@ -107,7 +108,7 @@ class StatusReporter:
         task_id: str = "",
         step_id: str = "",
         progress: float = 0.0,
-        metadata: Dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Report a status update to all subscribers."""
         update = StatusUpdate(

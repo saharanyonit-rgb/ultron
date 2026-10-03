@@ -6,14 +6,18 @@ This tool gives JARVIS complete control over the PC.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import logging
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 logger = logging.getLogger("ultron.tools.execute")
 
@@ -21,6 +25,7 @@ logger = logging.getLogger("ultron.tools.execute")
 @dataclass
 class ExecuteResult:
     """Result of command execution."""
+
     command: str
     success: bool
     stdout: str = ""
@@ -28,7 +33,7 @@ class ExecuteResult:
     exit_code: int = -1
     duration_ms: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "command": self.command,
             "success": self.success,
@@ -43,6 +48,16 @@ class ExecuteCommand(Tool):
     """Execute any system command — full unrestricted access."""
 
     name = "execute_command"
+    risk = RiskLevel.CRITICAL
+    keywords = (
+        "execute command",
+        "run command",
+        "run a command",
+        "run in shell",
+        "run terminal command",
+        "run bash",
+        "shell command",
+    )
     description = (
         "Execute any system command with full access. "
         "Runs via cmd.exe on Windows. Returns stdout, stderr, and exit code. "
@@ -80,7 +95,9 @@ class ExecuteCommand(Tool):
     }
     mutates = True
 
-    def run(self, command: str, timeout: int = 60, working_directory: str | None = None, **_: Any) -> Dict[str, Any]:
+    def run(
+        self, command: str, timeout: int = 60, working_directory: str | None = None, **_: Any
+    ) -> dict[str, Any]:
         start = time.time()
         try:
             use_shell = sys.platform == "win32"
@@ -145,6 +162,14 @@ class ExecutePowerShell(Tool):
     """Execute PowerShell commands directly."""
 
     name = "execute_powershell"
+    risk = RiskLevel.CRITICAL
+    keywords = (
+        "execute powershell",
+        "run powershell",
+        "run powershell script",
+        "powershell script",
+        "run a powershell command",
+    )
     description = (
         "Execute a PowerShell command directly. "
         "Useful for Windows-specific operations, WMI queries, and system management."
@@ -177,7 +202,7 @@ class ExecutePowerShell(Tool):
     }
     mutates = True
 
-    def run(self, command: str, timeout: int = 60, **_: Any) -> Dict[str, Any]:
+    def run(self, command: str, timeout: int = 60, **_: Any) -> dict[str, Any]:
         start = time.time()
         try:
             if sys.platform == "win32":

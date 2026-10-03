@@ -17,10 +17,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider
 from ultron.tools import Tool
 
 logger = logging.getLogger("ultron.brains.planning")
@@ -63,11 +63,11 @@ class PlannedTask:
     id: str
     agent: str
     description: str
-    dependencies: List[str] = field(default_factory=list)
-    capabilities: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
     parallel: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "agent": self.agent,
@@ -83,23 +83,24 @@ class ExecutionPlan:
     """A complete execution plan from the Planning Brain."""
 
     goal: str
-    tasks: List[PlannedTask]
+    tasks: list[PlannedTask]
     reasoning: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal": self.goal,
             "tasks": [t.to_dict() for t in self.tasks],
             "reasoning": self.reasoning,
         }
 
-    def get_parallel_groups(self) -> List[List[PlannedTask]]:
-        groups: List[List[PlannedTask]] = []
+    def get_parallel_groups(self) -> list[list[PlannedTask]]:
+        groups: list[list[PlannedTask]] = []
         completed: set = set()
 
         while completed != {t.id for t in self.tasks}:
             ready = [
-                t for t in self.tasks
+                t
+                for t in self.tasks
                 if t.id not in completed and all(d in completed for d in t.dependencies)
             ]
             if not ready:
@@ -116,7 +117,7 @@ class PlanningBrain(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 5,
     ) -> None:
         spec = AgentSpec(
@@ -129,7 +130,7 @@ class PlanningBrain(BaseAgent):
         super().__init__(provider, tools, spec)
         self._system_prompt = PLANNING_SYSTEM_PROMPT
 
-    def plan(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> ExecutionPlan:
+    def plan(self, user_text: str, context: dict[str, Any] | None = None) -> ExecutionPlan:
         """Create an execution plan for the given goal.
 
         Args:
@@ -151,7 +152,7 @@ class PlanningBrain(BaseAgent):
             reasoning="Failed to generate plan",
         )
 
-    def _build_prompt(self, user_text: str, context: Optional[Dict[str, Any]]) -> str:
+    def _build_prompt(self, user_text: str, context: dict[str, Any] | None) -> str:
         parts = [self._system_prompt, f"\n\nUser Request:\n{user_text}"]
 
         if context:
@@ -178,14 +179,16 @@ class PlanningBrain(BaseAgent):
             data = json.loads(cleaned)
             tasks = []
             for t in data.get("tasks", []):
-                tasks.append(PlannedTask(
-                    id=t.get("id", ""),
-                    agent=t.get("agent", "fast"),
-                    description=t.get("description", ""),
-                    dependencies=t.get("dependencies", []),
-                    capabilities=t.get("capabilities", []),
-                    parallel=t.get("parallel", False),
-                ))
+                tasks.append(
+                    PlannedTask(
+                        id=t.get("id", ""),
+                        agent=t.get("agent", "fast"),
+                        description=t.get("description", ""),
+                        dependencies=t.get("dependencies", []),
+                        capabilities=t.get("capabilities", []),
+                        parallel=t.get("parallel", False),
+                    )
+                )
             return ExecutionPlan(
                 goal=data.get("goal", original_goal),
                 tasks=tasks,
@@ -199,7 +202,7 @@ class PlanningBrain(BaseAgent):
                 reasoning=f"Failed to parse plan: {cleaned[:100]}",
             )
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute the planning brain - returns JSON plan as string.
 
         This method is required by BaseAgent but prefer using plan() for

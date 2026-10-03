@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
-import pytest
-
 from ultron.actions import PermissionGate
 from ultron.actions.audit_log import AuditLog
 from ultron.core.agent import Agent
-from ultron.core.brain import Brain, ResponseStatus, UserRequest
-from ultron.core.router import IntentRouter, RouteDecision, RouteType
+from ultron.core.brain import Brain, ResponseStatus
+from ultron.core.router import IntentRouter, RouteType
 from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.risk import RiskLevel
 from ultron.tools import ALL_TOOLS, ToolRegistry
 from ultron.tools.base import Tool
 
@@ -19,11 +16,11 @@ from ultron.tools.base import Tool
 class ScriptedLLMProvider(LLMProvider):
     name = "scripted_router_provider"
 
-    def __init__(self, responses: Optional[List[str]] = None) -> None:
+    def __init__(self, responses: list[str] | None = None) -> None:
         self._responses = list(responses) if responses else []
         self.should_fail = False
 
-    def complete(self, text: Optional[str], tools) -> ProviderResult:
+    def complete(self, text: str | None, tools) -> ProviderResult:
         if self.should_fail:
             raise RuntimeError("LLM Service Unavailable")
         if not self._responses:
@@ -39,6 +36,9 @@ class SpyTool(Tool):
     description = "Spy tool for testing execution isolation."
     parameters = {"type": "object", "properties": {}}
     output_schema = {"type": "object", "properties": {}}
+    # Required: the catalog refuses to register an unclassified tool, because an
+    # unclassified tool is a security hole rather than a safe default.
+    risk = RiskLevel.READ
 
     def __init__(self) -> None:
         self.was_executed = False
@@ -76,14 +76,37 @@ def test_known_agent_request():
     assert decision.confidence >= 0.8
 
 
-# --- Test 4: Unsupported capability ---
-def test_unsupported_capability():
+# --- Test 4: Capability with a registered tool is routable, not "unsupported" ---
+def test_registered_capability_is_not_unsupported():
+    """Mouse control used to be hard-coded as UNSUPPORTED.
+
+    It is a registered tool, so the router refusing it was a self-contradiction:
+    the router claimed no such capability existed while `mouse_move` sat in the
+    registry. Routing now derives from tool metadata, so this must reach the tool.
+    """
     router = IntentRouter(tools=ALL_TOOLS)
     decision = router.route("move mouse cursor to coordinates 100, 200")
 
+    assert decision.route_type == RouteType.AGENT
+    assert decision.target == "mouse_move"
+
+
+# --- Test 4b: A genuinely absent capability is refused ---
+def test_genuinely_unsupported_capability():
+    router = IntentRouter(tools=ALL_TOOLS)
+    decision = router.route("fine-tune ollama on my dataset")
+
     assert decision.route_type == RouteType.UNSUPPORTED
-    assert "mouse" in decision.reasoning.lower()
     assert decision.confidence == 1.0
+
+
+# --- Test 4c: Routing never contradicts the registry ---
+def test_no_unsupported_pattern_is_actually_implemented():
+    """validate_out_of_scope raises if an out-of-scope entry has a tool."""
+    from ultron.core.router import validate_out_of_scope
+    from ultron.tools.catalog import default_catalog
+
+    validate_out_of_scope(default_catalog())
 
 
 # --- Test 5: Empty/invalid request ---
@@ -152,8 +175,9 @@ def test_brain_integration_with_router(tmp_path):
     )
     brain = Brain(agent=agent)
 
-    # Test unsupported route through Brain
-    resp = brain.process("drag mouse cursor to button")
+    # Test unsupported route through Brain. Mouse control is registered, so the
+    # unsupported path is exercised with a capability that genuinely has no tool.
+    resp = brain.process("fine-tune ollama on my dataset")
     assert resp.status == ResponseStatus.SUCCESS
     assert "cannot perform this action" in resp.response.lower()
     assert resp.metadata.get("route") == "unsupported"

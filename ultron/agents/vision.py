@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
 from ultron.llm.base import LLMProvider
@@ -15,7 +15,7 @@ class VisionAgent(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 5,
     ) -> None:
         spec = AgentSpec(
@@ -27,11 +27,10 @@ class VisionAgent(BaseAgent):
         )
         super().__init__(provider, tools, spec)
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Analyze the screen and provide visual understanding."""
         available_tools = self._get_tools()
         tool_map = {t.name: t for t in available_tools}
-        tool_specs = [t.spec for t in available_tools]
 
         vision_tool = tool_map.get("vision_analyze")
         if not vision_tool:
@@ -39,7 +38,8 @@ class VisionAgent(BaseAgent):
 
         prompt = user_text if user_text else "Describe what is currently displayed on the screen."
         result = vision_tool.run(prompt=prompt)
-        return result.get("analysis", result.get("error", "No analysis returned."))
+        # The tool contract returns {"analysis": str} / {"error": str}.
+        return cast("str", result.get("analysis", result.get("error", "No analysis returned.")))
 
 
 __all__ = ["VisionAgent"]

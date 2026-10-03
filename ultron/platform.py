@@ -8,19 +8,17 @@ from __future__ import annotations
 
 import os
 import platform
-import sys
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 
-class Platform(str, Enum):
+class Platform(StrEnum):
     WINDOWS = "windows"
     LINUX = "linux"
     MACOS = "macos"
     ANDROID = "android"
 
 
-_platform: Optional[Platform] = None
+_platform: Platform | None = None
 
 
 def detect_platform() -> Platform:

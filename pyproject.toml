@@ -37,6 +37,7 @@ dev = [
 desktop = [
     "pystray>=0.19.0",
     "Pillow>=10.0.0",
+    "pywebview>=5.0.0",
     "pyinstaller>=6.0.0",
 ]
 [project.urls]
@@ -60,6 +61,16 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+extend-exclude = [
+    "agenticSeek",
+    "Vane",
+    "ui-ux-pro-max-skill",
+    "ultron/skills",
+    "build",
+    "dist",
+    ".venv",
+]
+
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "UP"]
 ignore = ["E501", "B008"]
@@ -70,3 +81,13 @@ python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+exclude = [
+    "agenticSeek/",
+    "Vane/",
+    "ui-ux-pro-max-skill/",
+    "ultron/skills/",
+    "build/",
+    "dist/",
+    "\\.venv/",
+]
+

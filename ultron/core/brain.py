@@ -11,13 +11,13 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from ultron.core.agent import Agent, RunResult, ToolEvent
 from ultron.core.router import IntentRouter, RouteDecision, RouteType
 from ultron.memory import Memory
-from ultron.pipeline import Pipeline, PipelineResult
+from ultron.pipeline import Pipeline
 
 logger = logging.getLogger("ultron.brain")
 
@@ -35,7 +35,7 @@ def _sanitize_error(msg: str) -> str:
     return sanitized
 
 
-class ResponseStatus(str, Enum):
+class ResponseStatus(StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
     PARTIAL = "partial"
@@ -55,8 +55,8 @@ class UserRequest:
 
     user_input: str
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    conversation_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    conversation_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -66,9 +66,9 @@ class BrainResponse:
     request_id: str
     response: str
     status: ResponseStatus
-    error: Optional[str] = None
-    events: List[ToolEvent] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    events: list[ToolEvent] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class Brain:
@@ -81,9 +81,9 @@ class Brain:
     def __init__(
         self,
         agent: Agent,
-        memory: Optional[Memory] = None,
-        router: Optional[IntentRouter] = None,
-        pipeline: Optional[Pipeline] = None,
+        memory: Memory | None = None,
+        router: IntentRouter | None = None,
+        pipeline: Pipeline | None = None,
     ) -> None:
         self._agent = agent
         self._memory = memory
@@ -101,7 +101,7 @@ class Brain:
         return self._agent
 
     @property
-    def memory(self) -> Optional[Memory]:
+    def memory(self) -> Memory | None:
         return self._memory
 
     @property
@@ -112,7 +112,9 @@ class Brain:
     def pipeline(self) -> Pipeline:
         return self._pipeline
 
-    def _build_memory_context(self, user_input: str, max_recent: int = 6, max_search: int = 3) -> str:
+    def _build_memory_context(
+        self, user_input: str, max_recent: int = 6, max_search: int = 3
+    ) -> str:
         """Assemble a compact memory preamble from past conversations.
 
         Uses the last few turns plus keyword-based semantic recall (when the
@@ -122,7 +124,7 @@ class Brain:
         if self._memory is None or len(self._memory) == 0:
             return ""
 
-        parts: List[str] = []
+        parts: list[str] = []
         try:
             recent = [t for t in self._memory.all()[-max_recent:] if t.content]
             if recent:
@@ -156,7 +158,9 @@ class Brain:
             req = request
 
         request_id = req.request_id
-        logger.info("Request received [request_id=%s, input_len=%d]", request_id, len(req.user_input or ""))
+        logger.info(
+            "Request received [request_id=%s, input_len=%d]", request_id, len(req.user_input or "")
+        )
 
         # 1. Validate request
         if not req.user_input or not isinstance(req.user_input, str) or not req.user_input.strip():
@@ -208,12 +212,29 @@ class Brain:
         # 6. Route & Execute via Agent loop
         logger.info("Executing via agent pipeline [request_id=%s]", request_id)
         prompt = f"{memory_context}{sanitized_input}" if memory_context else sanitized_input
+
+        # Only offer the model tools that are relevant to this turn. The
+        # executor still resolves against the full registry, so this narrows
+        # the prompt without narrowing what can actually run.
+        visible_tools = self._agent.relevant_tools(prompt)
+        logger.debug(
+            "Scoped tools for turn [request_id=%s, visible=%d, total=%d]",
+            request_id,
+            len(visible_tools),
+            len(self._agent.registry.all()),
+        )
+
         try:
-            run_result: RunResult = self._agent.run(prompt)
+            run_result: RunResult = self._agent.run(prompt, tools=visible_tools)
         except Exception as exc:
             err_type = type(exc).__name__
             err_msg = str(exc)
-            logger.error("Agent execution failed [request_id=%s, error_type=%s]: %s", request_id, err_type, err_msg)
+            logger.error(
+                "Agent execution failed [request_id=%s, error_type=%s]: %s",
+                request_id,
+                err_type,
+                err_msg,
+            )
 
             safe_error = f"{err_type}: {_sanitize_error(err_msg)}"
             response = BrainResponse(
@@ -233,7 +254,11 @@ class Brain:
 
         if has_limit_reached or (has_tool_errors and not run_result.text):
             status = ResponseStatus.PARTIAL if run_result.text else ResponseStatus.FAILURE
-            error_desc = "Tool iteration limit reached" if has_limit_reached else "One or more tool executions failed"
+            error_desc = (
+                "Tool iteration limit reached"
+                if has_limit_reached
+                else "One or more tool executions failed"
+            )
         else:
             status = ResponseStatus.SUCCESS
             error_desc = None

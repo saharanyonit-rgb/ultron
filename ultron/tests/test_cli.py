@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from ultron.actions import PermissionGate
 from ultron.actions.audit_log import AuditLog
 from ultron.cli import Cli, main

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.tools._termux import (
-    run_termux, run_cmd, run_settings, run_raw, run_am,
+    run_am,
+    run_cmd,
+    run_settings,
+    run_termux,
 )
 from ultron.tools.base import Tool
 
@@ -14,6 +19,7 @@ class GetBatteryInfo(Tool):
     """Get battery status and level."""
 
     name = "get_battery"
+    risk = RiskLevel.READ
     description = "Get current battery level, health, temperature, and charging status."
     parameters = {
         "type": "object",
@@ -31,7 +37,7 @@ class GetBatteryInfo(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("battery-status", parse_json=True)
         if not result.ok:
             return {"error": result.stderr, "level": -1}
@@ -51,6 +57,7 @@ class ToggleWifi(Tool):
     """Enable or disable WiFi."""
 
     name = "toggle_wifi"
+    risk = RiskLevel.MEDIUM
     description = "Turn WiFi on or off."
     parameters = {
         "type": "object",
@@ -71,7 +78,7 @@ class ToggleWifi(Tool):
     }
     mutates = True
 
-    def run(self, enabled: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, enabled: bool = True, **kwargs: Any) -> dict[str, Any]:
         state = kwargs.get("state") or kwargs.get("on") or enabled
         if isinstance(state, str):
             state = state.lower() in ("true", "on", "1", "yes", "enable")
@@ -83,6 +90,7 @@ class ToggleBluetooth(Tool):
     """Enable or disable Bluetooth."""
 
     name = "toggle_bluetooth"
+    risk = RiskLevel.MEDIUM
     description = "Turn Bluetooth on or off."
     parameters = {
         "type": "object",
@@ -103,13 +111,16 @@ class ToggleBluetooth(Tool):
     }
     mutates = True
 
-    def run(self, enabled: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, enabled: bool = True, **kwargs: Any) -> dict[str, Any]:
         state = kwargs.get("state") or kwargs.get("on") or enabled
         if isinstance(state, str):
             state = state.lower() in ("true", "on", "1", "yes", "enable")
 
-        action = "android.bluetooth.adapter.action.REQUEST_ENABLE" if state \
+        action = (
+            "android.bluetooth.adapter.action.REQUEST_ENABLE"
+            if state
             else "android.bluetooth.adapter.action.REQUEST_DISABLE"
+        )
         result = run_am(["start", "-a", action])
         return {"success": result.ok, "enabled": state, "error": result.stderr or None}
 
@@ -118,6 +129,7 @@ class ToggleAirplane(Tool):
     """Enable or disable airplane mode."""
 
     name = "toggle_airplane"
+    risk = RiskLevel.MEDIUM
     description = "Turn airplane mode on or off."
     parameters = {
         "type": "object",
@@ -138,7 +150,7 @@ class ToggleAirplane(Tool):
     }
     mutates = True
 
-    def run(self, enabled: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, enabled: bool = True, **kwargs: Any) -> dict[str, Any]:
         state = kwargs.get("state") or kwargs.get("on") or enabled
         if isinstance(state, str):
             state = state.lower() in ("true", "on", "1", "yes", "enable")
@@ -146,8 +158,17 @@ class ToggleAirplane(Tool):
         value = "1" if state else "0"
         result = run_settings(["put", "global", "airplane_mode_on", value])
         # Also broadcast the change
-        run_cmd(["am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE",
-                 "--ez", "state", str(state).lower()])
+        run_cmd(
+            [
+                "am",
+                "broadcast",
+                "-a",
+                "android.intent.action.AIRPLANE_MODE",
+                "--ez",
+                "state",
+                str(state).lower(),
+            ]
+        )
         return {"success": result.ok, "enabled": state, "error": result.stderr or None}
 
 
@@ -155,6 +176,7 @@ class SetBrightness(Tool):
     """Set screen brightness level."""
 
     name = "set_brightness"
+    risk = RiskLevel.LOW
     description = "Set screen brightness (0-255)."
     parameters = {
         "type": "object",
@@ -175,7 +197,7 @@ class SetBrightness(Tool):
     }
     mutates = True
 
-    def run(self, level: int = 128, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, level: int = 128, **kwargs: Any) -> dict[str, Any]:
         lv = kwargs.get("value") or kwargs.get("brightness") or level
         lv = max(0, min(255, int(lv)))
         result = run_termux("brightness", args=[str(lv)])
@@ -186,6 +208,7 @@ class SetVolume(Tool):
     """Set system volume for a specific stream."""
 
     name = "set_volume"
+    risk = RiskLevel.LOW
     description = "Set volume level for a stream (ring, notification, music, alarm, call, system)."
     parameters = {
         "type": "object",
@@ -212,7 +235,7 @@ class SetVolume(Tool):
     }
     mutates = True
 
-    def run(self, stream: str = "notification", level: int = 10, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, stream: str = "notification", level: int = 10, **kwargs: Any) -> dict[str, Any]:
         s = kwargs.get("type") or kwargs.get("audio_stream") or stream
         lv = kwargs.get("value") or kwargs.get("volume") or level
         lv = max(0, min(15, int(lv)))
@@ -225,6 +248,7 @@ class GetVolume(Tool):
     """Get current volume levels for all streams."""
 
     name = "get_volume"
+    risk = RiskLevel.READ
     description = "Get current volume level for a specific stream or all streams."
     parameters = {
         "type": "object",
@@ -243,7 +267,7 @@ class GetVolume(Tool):
         },
     }
 
-    def run(self, stream: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, stream: str = "", **kwargs: Any) -> dict[str, Any]:
         s = kwargs.get("type") or stream or ""
         args = [s] if s else []
         result = run_termux("volume", args=args, parse_json=True)
@@ -256,6 +280,7 @@ class ToggleData(Tool):
     """Enable or disable mobile data."""
 
     name = "toggle_data"
+    risk = RiskLevel.MEDIUM
     description = "Turn mobile data on or off (requires root or ADB)."
     parameters = {
         "type": "object",
@@ -276,7 +301,7 @@ class ToggleData(Tool):
     }
     mutates = True
 
-    def run(self, enabled: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, enabled: bool = True, **kwargs: Any) -> dict[str, Any]:
         state = kwargs.get("state") or kwargs.get("on") or enabled
         if isinstance(state, str):
             state = state.lower() in ("true", "on", "1", "yes", "enable")
@@ -290,6 +315,7 @@ class ToggleDoNotDisturb(Tool):
     """Enable or disable Do Not Disturb mode."""
 
     name = "toggle_dnd"
+    risk = RiskLevel.LOW
     description = "Turn Do Not Disturb mode on or off."
     parameters = {
         "type": "object",
@@ -310,7 +336,7 @@ class ToggleDoNotDisturb(Tool):
     }
     mutates = True
 
-    def run(self, enabled: bool = True, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, enabled: bool = True, **kwargs: Any) -> dict[str, Any]:
         state = kwargs.get("state") or kwargs.get("on") or enabled
         if isinstance(state, str):
             state = state.lower() in ("true", "on", "1", "yes", "enable")
@@ -325,6 +351,7 @@ class ScreenOn(Tool):
     """Turn the screen on."""
 
     name = "screen_on"
+    risk = RiskLevel.LOW
     description = "Turn the device screen on."
     parameters = {
         "type": "object",
@@ -337,7 +364,7 @@ class ScreenOn(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["input", "keyevent", "224"])
         return {"success": result.ok}
 
@@ -346,6 +373,7 @@ class ScreenOff(Tool):
     """Turn the screen off."""
 
     name = "screen_off"
+    risk = RiskLevel.LOW
     description = "Turn the device screen off."
     parameters = {
         "type": "object",
@@ -358,7 +386,7 @@ class ScreenOff(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["input", "keyevent", "223"])
         return {"success": result.ok}
 
@@ -367,6 +395,7 @@ class UnlockScreen(Tool):
     """Unlock the screen (swipe up to dismiss lock screen)."""
 
     name = "unlock_screen"
+    risk = RiskLevel.HIGH
     description = "Unlock the device by swiping up on the lock screen."
     parameters = {
         "type": "object",
@@ -379,10 +408,11 @@ class UnlockScreen(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         # Turn on screen first
         run_cmd(["input", "keyevent", "224"])
         import time
+
         time.sleep(0.5)
         # Swipe up
         result = run_cmd(["input", "swipe", "540", "1800", "540", "400", "300"])

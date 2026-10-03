@@ -8,7 +8,6 @@ database, no disk. Long-term memory is a later architecture round.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
@@ -21,14 +20,14 @@ class Memory:
     """A plain in-process list of user/assistant turns."""
 
     def __init__(self) -> None:
-        self._turns: List[Turn] = []
+        self._turns: list[Turn] = []
 
     def add(self, role: str, content: str) -> None:
         if not content:
             return
         self._turns.append(Turn(role=role, content=content))
 
-    def all(self) -> List[Turn]:
+    def all(self) -> list[Turn]:
         return list(self._turns)
 
     def clear(self) -> None:

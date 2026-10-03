@@ -10,7 +10,7 @@ import json
 import logging
 import queue
 import threading
-from typing import Any, List
+from typing import Any
 
 logger = logging.getLogger("ultron.web_broadcaster")
 
@@ -19,7 +19,7 @@ class EventBroadcaster:
     """SSE event broadcaster using a thread-safe fan-out pattern."""
 
     def __init__(self) -> None:
-        self._subscribers: List[queue.Queue] = []
+        self._subscribers: list[queue.Queue] = []
         self._lock = threading.Lock()
 
     def subscribe(self) -> queue.Queue:
@@ -35,7 +35,7 @@ class EventBroadcaster:
 
     def broadcast(self, event: str, data: Any) -> None:
         payload = f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
-        dead: List[queue.Queue] = []
+        dead: list[queue.Queue] = []
         with self._lock:
             for sub in self._subscribers:
                 try:

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import os
 import platform
 import shutil
 import socket
 import string
-from typing import Any, Dict
+from typing import Any
 
-from ultron.platform import is_windows, is_posix
+from ultron.platform import is_windows
 from ultron.tools.base import Tool
 
 
@@ -65,6 +67,7 @@ def _uptime_seconds() -> int:
     if is_windows():
         try:
             import ctypes
+
             return int(ctypes.windll.kernel32.GetTickCount64() // 1000)
         except Exception:
             return 0
@@ -95,7 +98,7 @@ def _cpu_info() -> str:
     return platform.processor() or "unknown"
 
 
-def _drives() -> list[Dict[str, Any]]:
+def _drives() -> list[dict[str, Any]]:
     if is_windows():
         result = []
         # os.listdrives() requires Python 3.13+; probe alphabetically instead
@@ -106,31 +109,45 @@ def _drives() -> list[Dict[str, Any]]:
                 continue
             try:
                 usage = shutil.disk_usage(drive)
-                result.append({
-                    "drive": drive,
-                    "total_gb": round(usage.total / 1e9, 1),
-                    "free_gb": round(usage.free / 1e9, 1),
-                })
+                result.append(
+                    {
+                        "drive": drive,
+                        "total_gb": round(usage.total / 1e9, 1),
+                        "free_gb": round(usage.free / 1e9, 1),
+                    }
+                )
             except OSError:
                 continue
         return result
     # POSIX: just show root filesystem
     try:
         usage = shutil.disk_usage("/")
-        return [{
-            "drive": "/",
-            "total_gb": round(usage.total / 1e9, 1),
-            "free_gb": round(usage.free / 1e9, 1),
-        }]
+        return [
+            {
+                "drive": "/",
+                "total_gb": round(usage.total / 1e9, 1),
+                "free_gb": round(usage.free / 1e9, 1),
+            }
+        ]
     except Exception:
         return []
 
 
 class GetSystemInfo(Tool):
     name = "get_system_info"
+    keywords = (
+        "system info",
+        "sysinfo",
+        "cpu usage",
+        "ram info",
+        "disk space",
+        "memory info",
+        "uptime",
+        "how much memory",
+    )
+    risk = RiskLevel.READ
     description = (
-        "Return basic system information: OS, hostname, CPU, memory, disk usage "
-        "and uptime."
+        "Return basic system information: OS, hostname, CPU, memory, disk usage and uptime."
     )
     parameters = {
         "type": "object",
@@ -164,7 +181,7 @@ class GetSystemInfo(Tool):
         },
     }
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         total_gb, avail_gb = _ram_gb()
         return {
             "os": platform.system(),

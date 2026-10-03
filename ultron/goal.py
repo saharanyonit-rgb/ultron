@@ -10,18 +10,17 @@ Task Graph and Orchestrator.
 
 from __future__ import annotations
 
-import re
-import uuid
 import logging
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.goal")
 
 
-class GoalStatus(str, Enum):
+class GoalStatus(StrEnum):
     CREATED = "created"
     PLANNING = "planning"
     EXECUTING = "executing"
@@ -32,13 +31,13 @@ class GoalStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class GoalComplexity(str, Enum):
+class GoalComplexity(StrEnum):
     SIMPLE = "simple"
     MODERATE = "moderate"
     COMPLEX = "complex"
 
 
-class GoalPriority(str, Enum):
+class GoalPriority(StrEnum):
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
@@ -51,10 +50,10 @@ class SuccessCriteria:
 
     description: str
     criterion_type: str = "output"  # output, state, file, custom
-    expected_value: Optional[str] = None
+    expected_value: str | None = None
     required: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "description": self.description,
             "criterion_type": self.criterion_type,
@@ -63,7 +62,7 @@ class SuccessCriteria:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SuccessCriteria":
+    def from_dict(cls, data: dict[str, Any]) -> SuccessCriteria:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -73,9 +72,9 @@ class GoalConstraint:
 
     description: str
     constraint_type: str = "general"  # general, time, resource, security, capability
-    value: Optional[str] = None
+    value: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "description": self.description,
             "constraint_type": self.constraint_type,
@@ -83,7 +82,7 @@ class GoalConstraint:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GoalConstraint":
+    def from_dict(cls, data: dict[str, Any]) -> GoalConstraint:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -102,22 +101,22 @@ class Goal:
     complexity: GoalComplexity = GoalComplexity.SIMPLE
     priority: GoalPriority = GoalPriority.NORMAL
 
-    success_criteria: List[SuccessCriteria] = field(default_factory=list)
-    constraints: List[GoalConstraint] = field(default_factory=list)
-    expected_outputs: List[str] = field(default_factory=list)
+    success_criteria: list[SuccessCriteria] = field(default_factory=list)
+    constraints: list[GoalConstraint] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
 
-    required_capabilities: List[str] = field(default_factory=list)
-    required_tools: List[str] = field(default_factory=list)
+    required_capabilities: list[str] = field(default_factory=list)
+    required_tools: list[str] = field(default_factory=list)
 
-    llm_reasoning: Optional[str] = None
+    llm_reasoning: str | None = None
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    completed_at: Optional[str] = None
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    completed_at: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "description": self.description,
@@ -138,7 +137,7 @@ class Goal:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Goal":
+    def from_dict(cls, data: dict[str, Any]) -> Goal:
         success_criteria = [SuccessCriteria.from_dict(c) for c in data.get("success_criteria", [])]
         constraints = [GoalConstraint.from_dict(c) for c in data.get("constraints", [])]
         return cls(
@@ -167,7 +166,7 @@ class Goal:
 
     def update_status(self, status: GoalStatus) -> None:
         self.status = status
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
         if status in (GoalStatus.COMPLETED, GoalStatus.FAILED, GoalStatus.CANCELLED):
             self.completed_at = self.updated_at
 
@@ -175,38 +174,93 @@ class Goal:
 # ── Keywords for complexity detection ──────────────────────────────
 
 COMPLEX_KEYWORDS = {
-    "and then", "after that", "finally", "then verify", "then check",
-    "then confirm", "and verify", "and check", "analyze and",
-    "research and", "create and", "write and", "build and",
-    "multiple", "several", "series of", "step by step",
-    "end to end", "full workflow", "entire process",
+    "and then",
+    "after that",
+    "finally",
+    "then verify",
+    "then check",
+    "then confirm",
+    "and verify",
+    "and check",
+    "analyze and",
+    "research and",
+    "create and",
+    "write and",
+    "build and",
+    "multiple",
+    "several",
+    "series of",
+    "step by step",
+    "end to end",
+    "full workflow",
+    "entire process",
 }
 
 MODERATE_KEYWORDS = {
-    "create", "write", "generate", "analyze", "compare",
-    "search", "find", "research", "verify", "check",
-    "validate", "test", "build", "deploy", "configure",
-    "update", "modify", "refactor", "review",
+    "create",
+    "write",
+    "generate",
+    "analyze",
+    "compare",
+    "search",
+    "find",
+    "research",
+    "verify",
+    "check",
+    "validate",
+    "test",
+    "build",
+    "deploy",
+    "configure",
+    "update",
+    "modify",
+    "refactor",
+    "review",
 }
 
 SIMPLE_INDICATORS = {
-    "what is", "what's", "how do", "how to", "tell me",
-    "show me", "get", "read", "open", "list", "what are",
+    "what is",
+    "what's",
+    "how do",
+    "how to",
+    "tell me",
+    "show me",
+    "get",
+    "read",
+    "open",
+    "list",
+    "what are",
 }
 
 # Capability keywords mapped to required capabilities
-CAPABILITY_KEYWORDS: Dict[str, List[str]] = {
+CAPABILITY_KEYWORDS: dict[str, list[str]] = {
     "research": ["research", "search", "find", "look up", "investigate", "analyze"],
     "coding": ["code", "code", "implement", "develop", "program", "script", "function", "class"],
     "writing": ["write", "draft", "create", "compose", "document", "report"],
-    "filesystem": ["file", "directory", "folder", "create file", "read file", "delete", "move", "copy"],
+    "filesystem": [
+        "file",
+        "directory",
+        "folder",
+        "create file",
+        "read file",
+        "delete",
+        "move",
+        "copy",
+    ],
     "browser": ["browse", "website", "url", "navigate", "web page", "internet"],
     "analysis": ["analyze", "compare", "evaluate", "assess", "review", "examine"],
 }
 
 # Tool keywords mapped to required tools
-TOOL_KEYWORDS: Dict[str, List[str]] = {
-    "create_file": ["create file", "create a file", "write file", "write a file", "make file", "save file"],
+TOOL_KEYWORDS: dict[str, list[str]] = {
+    "create_file": [
+        "create file",
+        "create a file",
+        "write file",
+        "write a file",
+        "make file",
+        "save file",
+    ],
     "read_file": ["read file", "open file", "cat file", "view file"],
     "search_files": ["search files", "find files", "glob", "list files"],
     "delete_file": ["delete file", "remove file"],
@@ -326,7 +380,7 @@ class GoalEngine:
 
         return GoalPriority.NORMAL
 
-    def _detect_capabilities(self, text: str) -> List[str]:
+    def _detect_capabilities(self, text: str) -> list[str]:
         """Detect which agent capabilities are required."""
         lower = text.lower()
         caps = []
@@ -335,7 +389,7 @@ class GoalEngine:
                 caps.append(cap)
         return list(set(caps))
 
-    def _detect_tools(self, text: str) -> List[str]:
+    def _detect_tools(self, text: str) -> list[str]:
         """Detect which tools are likely needed."""
         lower = text.lower()
         tools = []
@@ -344,69 +398,85 @@ class GoalEngine:
                 tools.append(tool)
         return list(set(tools))
 
-    def _extract_success_criteria(self, text: str) -> List[SuccessCriteria]:
+    def _extract_success_criteria(self, text: str) -> list[SuccessCriteria]:
         """Extract success criteria from the request."""
         criteria = []
         lower = text.lower()
 
         if any(w in lower for w in ["verify", "check", "confirm", "ensure"]):
-            criteria.append(SuccessCriteria(
-                description="Results verified and confirmed",
-                criterion_type="verification",
-            ))
+            criteria.append(
+                SuccessCriteria(
+                    description="Results verified and confirmed",
+                    criterion_type="verification",
+                )
+            )
 
         if any(w in lower for w in ["file", "create file", "write file"]):
-            criteria.append(SuccessCriteria(
-                description="File operations completed successfully",
-                criterion_type="file",
-            ))
+            criteria.append(
+                SuccessCriteria(
+                    description="File operations completed successfully",
+                    criterion_type="file",
+                )
+            )
 
         if any(w in lower for w in ["report", "summary", "summary"]):
-            criteria.append(SuccessCriteria(
-                description="Report or summary generated",
-                criterion_type="output",
-            ))
+            criteria.append(
+                SuccessCriteria(
+                    description="Report or summary generated",
+                    criterion_type="output",
+                )
+            )
 
         if any(w in lower for w in ["test", "validate", "verify"]):
-            criteria.append(SuccessCriteria(
-                description="Tests or validation passed",
-                criterion_type="verification",
-            ))
+            criteria.append(
+                SuccessCriteria(
+                    description="Tests or validation passed",
+                    criterion_type="verification",
+                )
+            )
 
         if not criteria:
-            criteria.append(SuccessCriteria(
-                description="Goal objective achieved",
-                criterion_type="output",
-            ))
+            criteria.append(
+                SuccessCriteria(
+                    description="Goal objective achieved",
+                    criterion_type="output",
+                )
+            )
 
         return criteria
 
-    def _extract_constraints(self, text: str) -> List[GoalConstraint]:
+    def _extract_constraints(self, text: str) -> list[GoalConstraint]:
         """Extract constraints from the request."""
         constraints = []
         lower = text.lower()
 
         if any(w in lower for w in ["don't", "do not", "never", "must not"]):
-            constraints.append(GoalConstraint(
-                description="Negative constraint detected in request",
-                constraint_type="general",
-            ))
+            constraints.append(
+                GoalConstraint(
+                    description="Negative constraint detected in request",
+                    constraint_type="general",
+                )
+            )
 
         if any(w in lower for w in ["only", "just", "simply"]):
-            constraints.append(GoalConstraint(
-                description="Scope limitation detected",
-                constraint_type="scope",
-            ))
+            constraints.append(
+                GoalConstraint(
+                    description="Scope limitation detected",
+                    constraint_type="scope",
+                )
+            )
 
         if any(w in lower for w in ["quick", "fast", "immediately"]):
-            constraints.append(GoalConstraint(
-                description="Time constraint: quick execution preferred",
-                constraint_type="time",
-            ))
+            constraints.append(
+                GoalConstraint(
+                    description="Time constraint: quick execution preferred",
+                    constraint_type="time",
+                )
+            )
 
         return constraints
 
-    def _extract_expected_outputs(self, text: str) -> List[str]:
+    def _extract_expected_outputs(self, text: str) -> list[str]:
         """Extract expected output descriptions."""
         outputs = []
         lower = text.lower()

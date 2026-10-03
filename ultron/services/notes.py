@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from ultron.services.base import BaseService
 
@@ -21,9 +20,9 @@ class NotesService(BaseService):
         self,
         title: str,
         content: str = "",
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Create a new note."""
         now = self._now_iso()
         note_id = self._generate_id()
@@ -41,7 +40,7 @@ class NotesService(BaseService):
         logger.info("Note created: %s", note_id)
         return note
 
-    def get_note(self, note_id: str) -> Optional[Dict[str, Any]]:
+    def get_note(self, note_id: str) -> dict[str, Any] | None:
         """Retrieve a single note by ID."""
         for item in self._items():
             if item.get("id") == note_id:
@@ -50,9 +49,9 @@ class NotesService(BaseService):
 
     def list_notes(
         self,
-        tag: Optional[str] = None,
+        tag: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List notes, optionally filtered by tag."""
         notes = self._items()
         if tag:
@@ -63,11 +62,11 @@ class NotesService(BaseService):
     def update_note(
         self,
         note_id: str,
-        title: Optional[str] = None,
-        content: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        title: str | None = None,
+        content: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """Update an existing note."""
         for item in self._data["items"]:
             if item.get("id") == note_id:
@@ -82,7 +81,7 @@ class NotesService(BaseService):
                 item["updated_at"] = self._now_iso()
                 self._persist()
                 logger.info("Note updated: %s", note_id)
-                return item
+                return cast("dict[str, Any]", item)
         return None
 
     def delete_note(self, note_id: str) -> bool:
@@ -96,29 +95,30 @@ class NotesService(BaseService):
                 return True
         return False
 
-    def search_notes(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def search_notes(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Search notes by title or content."""
         q = query.lower()
         notes = [
-            n for n in self._items()
+            n
+            for n in self._items()
             if q in n.get("title", "").lower() or q in n.get("content", "").lower()
         ]
         notes.sort(key=lambda n: n.get("updated_at", ""), reverse=True)
         return notes[:limit]
 
-    def get_all_tags(self) -> List[str]:
+    def get_all_tags(self) -> list[str]:
         """Return all unique tags across notes."""
-        tags: Dict[str, bool] = {}
+        tags: dict[str, bool] = {}
         for note in self._items():
             for tag in note.get("tags", []):
                 tags[tag] = True
         return sorted(tags.keys())
 
 
-_notes_service: Optional[NotesService] = None
+_notes_service: NotesService | None = None
 
 
-def get_notes_service(data_dir: Optional[Path] = None) -> NotesService:
+def get_notes_service(data_dir: Path | None = None) -> NotesService:
     global _notes_service
     if _notes_service is None:
         _notes_service = NotesService(data_dir)

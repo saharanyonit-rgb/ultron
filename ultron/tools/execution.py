@@ -11,11 +11,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from ultron.actions import PermissionDecision, PermissionGate
-from ultron.tools.base import Tool
 
 if TYPE_CHECKING:
     from ultron.actions.audit_log import AuditLog
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ultron.tools.executor")
 
 
-class ToolExecutionStatus(str, Enum):
+class ToolExecutionStatus(StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
     PERMISSION_DENIED = "permission_denied"
@@ -36,10 +35,10 @@ class ToolExecutionResult:
 
     tool_name: str
     status: ToolExecutionStatus
-    output: Dict[str, Any]
+    output: dict[str, Any]
     allowed: bool = True
-    error: Optional[str] = None
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 class ToolExecutor:
@@ -47,19 +46,19 @@ class ToolExecutor:
 
     def __init__(
         self,
-        registry: "ToolRegistry",
-        gate: Optional[PermissionGate] = None,
-        audit_log: Optional["AuditLog"] = None,
+        registry: ToolRegistry,
+        gate: PermissionGate | None = None,
+        audit_log: AuditLog | None = None,
     ) -> None:
         self._registry = registry
         self._gate = gate or PermissionGate()
         self._audit = audit_log
 
     @property
-    def registry(self) -> "ToolRegistry":
+    def registry(self) -> ToolRegistry:
         return self._registry
 
-    def execute(self, tool_name: str, arguments: Dict[str, Any]) -> ToolExecutionResult:
+    def execute(self, tool_name: str, arguments: dict[str, Any]) -> ToolExecutionResult:
         """Safely validate and execute a tool by name."""
         arguments = dict(arguments or {})
 
@@ -82,7 +81,9 @@ class ToolExecutor:
             )
 
         # 2. Parameter Validation
-        if hasattr(tool, "validate_parameters") and callable(getattr(tool, "validate_parameters", None)):
+        if hasattr(tool, "validate_parameters") and callable(
+            getattr(tool, "validate_parameters", None)
+        ):
             is_valid, validation_err = tool.validate_parameters(arguments)
         else:
             is_valid, validation_err = True, None
@@ -106,7 +107,9 @@ class ToolExecutor:
         # 3. Security Permission Check
         decision = self._gate.check(tool, arguments)
         if not decision.allowed:
-            logger.warning("Tool execution permission denied for '%s': %s", tool_name, decision.reason)
+            logger.warning(
+                "Tool execution permission denied for '%s': %s", tool_name, decision.reason
+            )
             output = {"error": decision.reason}
             if self._audit:
                 self._audit.record(tool_name, arguments, output, decision)

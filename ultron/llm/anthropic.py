@@ -6,8 +6,7 @@ https://docs.anthropic.com/claude/reference/messages
 
 from __future__ import annotations
 
-import json
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -29,7 +28,7 @@ class AnthropicProvider(LLMProvider):
         self,
         api_key: str,
         model: str = "claude-sonnet-4-20250514",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
         base_url: str = "https://api.anthropic.com/v1",
     ) -> None:
@@ -46,13 +45,13 @@ class AnthropicProvider(LLMProvider):
                 "Content-Type": "application/json",
             },
         )
-        self._messages: List[Dict[str, Any]] = []
+        self._messages: list[dict[str, Any]] = []
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         if text is not None:
             self._messages.append({"role": "user", "content": text})
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": 4096,
             "messages": self._messages,
@@ -84,7 +83,7 @@ class AnthropicProvider(LLMProvider):
         response.raise_for_status()
         return self._parse_response(response.json())
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         for result in results:
             self._messages.append(
                 {
@@ -99,11 +98,11 @@ class AnthropicProvider(LLMProvider):
                 }
             )
 
-    def _parse_response(self, data: Dict[str, Any]) -> ProviderResult:
+    def _parse_response(self, data: dict[str, Any]) -> ProviderResult:
         content = data.get("content", [])
 
-        text: Optional[str] = None
-        tool_calls: List[ToolCall] = []
+        text: str | None = None
+        tool_calls: list[ToolCall] = []
 
         for block in content:
             if block.get("type") == "text":

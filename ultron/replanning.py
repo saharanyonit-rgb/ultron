@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.llm.base import LLMProvider
 from ultron.models import ExecutionResult, ExecutionStatus, MultiStepPlan, MultiStepPlanStep
-from ultron.orchestrator import Orchestrator
 
 logger = logging.getLogger("ultron.replanning")
 
@@ -21,12 +20,13 @@ logger = logging.getLogger("ultron.replanning")
 @dataclass
 class ReplanTrigger:
     """Information about why replanning was triggered."""
-    reason: str = ""
-    failed_tasks: List[str] = field(default_factory=list)
-    partial_results: Dict[str, Any] = field(default_factory=dict)
-    new_constraints: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    reason: str = ""
+    failed_tasks: list[str] = field(default_factory=list)
+    partial_results: dict[str, Any] = field(default_factory=dict)
+    new_constraints: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "reason": self.reason,
             "failed_tasks": self.failed_tasks,
@@ -38,13 +38,14 @@ class ReplanTrigger:
 @dataclass
 class ReplanResult:
     """Result of a replanning attempt."""
-    success: bool = False
-    new_plan: Optional[MultiStepPlan] = None
-    changes: List[str] = field(default_factory=list)
-    reasoning: str = ""
-    preserved_tasks: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    success: bool = False
+    new_plan: MultiStepPlan | None = None
+    changes: list[str] = field(default_factory=list)
+    reasoning: str = ""
+    preserved_tasks: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "changes": self.changes,
@@ -63,7 +64,7 @@ class DynamicReplanner:
 
     def __init__(
         self,
-        provider: Optional[LLMProvider] = None,
+        provider: LLMProvider | None = None,
         max_replans: int = 3,
         failure_threshold: int = 1,
     ) -> None:
@@ -78,21 +79,19 @@ class DynamicReplanner:
 
     def should_replan(
         self,
-        results: Dict[str, ExecutionResult],
+        results: dict[str, ExecutionResult],
         total_tasks: int,
     ) -> ReplanTrigger:
         """Determine if replanning is needed based on execution results."""
-        failed = [
-            tid for tid, r in results.items()
-            if r.status == ExecutionStatus.FAILED
-        ]
+        failed = [tid for tid, r in results.items() if r.status == ExecutionStatus.FAILED]
 
         if len(failed) >= self._failure_threshold:
             return ReplanTrigger(
                 reason=f"{len(failed)} tasks failed",
                 failed_tasks=failed,
                 partial_results={
-                    tid: r.output for tid, r in results.items()
+                    tid: r.output
+                    for tid, r in results.items()
                     if r.status == ExecutionStatus.SUCCESS
                 },
             )
@@ -104,7 +103,7 @@ class DynamicReplanner:
         original_plan: MultiStepPlan,
         trigger: ReplanTrigger,
         objective: str,
-        results: Optional[Dict[str, ExecutionResult]] = None,
+        results: dict[str, ExecutionResult] | None = None,
     ) -> ReplanResult:
         """Create a revised plan based on trigger information."""
         if self._replan_count >= self._max_replans:
@@ -132,21 +131,27 @@ class DynamicReplanner:
         original_plan: MultiStepPlan,
         trigger: ReplanTrigger,
         objective: str,
-        results: Dict[str, ExecutionResult],
+        results: dict[str, ExecutionResult],
     ) -> ReplanResult:
         """Use LLM to generate a revised plan."""
+        if self._provider is None:
+            # replan() only routes here when a provider exists; fall back to the
+            # same heuristic path used when the LLM call fails below.
+            return self._heuristic_replan(original_plan, trigger, results)
+
         original_tasks = []
         for step in original_plan.steps:
-            original_tasks.append({
-                "task_id": step.step_id,
-                "tool": step.tool_name,
-                "description": step.description,
-                "depends_on": step.dependencies,
-            })
+            original_tasks.append(
+                {
+                    "task_id": step.step_id,
+                    "tool": step.tool_name,
+                    "description": step.description,
+                    "depends_on": step.dependencies,
+                }
+            )
 
         completed = {
-            tid: r.output for tid, r in results.items()
-            if r.status == ExecutionStatus.SUCCESS
+            tid: r.output for tid, r in results.items() if r.status == ExecutionStatus.SUCCESS
         }
 
         prompt = (
@@ -177,7 +182,7 @@ class DynamicReplanner:
         self,
         original_plan: MultiStepPlan,
         trigger: ReplanTrigger,
-        results: Dict[str, ExecutionResult],
+        results: dict[str, ExecutionResult],
     ) -> ReplanResult:
         """Heuristic-based replanning as fallback."""
         new_steps = []
@@ -225,16 +230,18 @@ class DynamicReplanner:
         try:
             data = json.loads(cleaned)
             if isinstance(data, dict):
-                steps = []
+                steps: list[MultiStepPlanStep] = []
                 for s in data.get("steps", []):
                     if isinstance(s, dict):
-                        steps.append(MultiStepPlanStep(
-                            step_id=s.get("task_id", f"replan_{len(steps)}"),
-                            tool_name=s.get("tool", "unknown"),
-                            description=s.get("description", ""),
-                            arguments=s.get("parameters", {}),
-                            dependencies=s.get("depends_on", []),
-                        ))
+                        steps.append(
+                            MultiStepPlanStep(
+                                step_id=s.get("task_id", f"replan_{len(steps)}"),
+                                tool_name=s.get("tool", "unknown"),
+                                description=s.get("description", ""),
+                                arguments=s.get("parameters", {}),
+                                dependencies=s.get("depends_on", []),
+                            )
+                        )
 
                 return ReplanResult(
                     success=True,

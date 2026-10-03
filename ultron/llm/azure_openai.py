@@ -6,7 +6,7 @@ Uses Azure's OpenAI-compatible endpoint with API key authentication.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -31,7 +31,7 @@ class AzureOpenAIProvider(LLMProvider):
         endpoint: str,
         deployment: str,
         version: str = "2024-02-01",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
     ) -> None:
         self._api_key = api_key
@@ -47,16 +47,16 @@ class AzureOpenAIProvider(LLMProvider):
                 "Content-Type": "application/json",
             },
         )
-        self._messages: List[Dict[str, Any]] = []
+        self._messages: list[dict[str, Any]] = []
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         if self._system_prompt and not self._messages:
             self._messages.append({"role": "system", "content": self._system_prompt})
 
         if text is not None:
             self._messages.append({"role": "user", "content": text})
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "messages": self._messages,
             "temperature": self._temperature,
         }
@@ -85,7 +85,7 @@ class AzureOpenAIProvider(LLMProvider):
         response.raise_for_status()
         return self._parse_response(response.json())
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         for result in results:
             self._messages.append(
                 {
@@ -96,7 +96,7 @@ class AzureOpenAIProvider(LLMProvider):
                 }
             )
 
-    def _parse_response(self, data: Dict[str, Any]) -> ProviderResult:
+    def _parse_response(self, data: dict[str, Any]) -> ProviderResult:
         choices = data.get("choices", [])
         if not choices:
             return ProviderResult(text=None, tool_calls=[])
@@ -104,15 +104,15 @@ class AzureOpenAIProvider(LLMProvider):
         choice = choices[0]
         message = choice.get("message", {})
 
-        text: Optional[str] = message.get("content")
+        text: str | None = message.get("content")
         raw_tools = message.get("tool_calls", [])
 
-        assistant_turn: Dict[str, Any] = {"role": "assistant", "content": text}
+        assistant_turn: dict[str, Any] = {"role": "assistant", "content": text}
         if raw_tools:
             assistant_turn["tool_calls"] = raw_tools
         self._messages.append(assistant_turn)
 
-        tool_calls: List[ToolCall] = []
+        tool_calls: list[ToolCall] = []
         for tc in raw_tools:
             fn = tc.get("function", {})
             raw_args = fn.get("arguments", {})

@@ -8,22 +8,26 @@ Supports:
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
 import threading
-from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from enum import StrEnum
+from typing import Any
 
-from ultron.platform import is_windows, is_posix
+from ultron.platform import is_windows
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 logger = logging.getLogger("ultron.tools.voice")
 
 
-class VoiceState(str, Enum):
+class VoiceState(StrEnum):
     IDLE = "idle"
     LISTENING = "listening"
     PROCESSING = "processing"
@@ -36,11 +40,13 @@ class VoiceEngine:
 
     def __init__(self) -> None:
         self._state = VoiceState.IDLE
-        self._tts_engine = None
+        # pyttsx3 engine handle; `Any` because pyttsx3 is imported lazily and
+        # ships no type information.
+        self._tts_engine: Any = None
         self._lock = threading.Lock()
-        self._on_state_change: Optional[Callable[[VoiceState], None]] = None
+        self._on_state_change: Callable[[VoiceState], None] | None = None
         self._interrupt_event = threading.Event()
-        self._active_playback: Optional[subprocess.Popen] = None
+        self._active_playback: subprocess.Popen | None = None
 
     @property
     def state(self) -> VoiceState:
@@ -71,12 +77,13 @@ class VoiceEngine:
     def _clear_interrupt(self) -> None:
         self._interrupt_event.clear()
 
-    def speak(self, text: str) -> Dict[str, Any]:
+    def speak(self, text: str) -> dict[str, Any]:
         """Speak text aloud — tries platform-appropriate TTS engines."""
         self._clear_interrupt()
         self._set_state(VoiceState.SPEAKING)
         try:
             from ultron.config import load_dotenv
+
             dotenv = load_dotenv()
 
             # 1. Try Google AI Studio TTS (free, high quality, cross-platform)
@@ -111,10 +118,12 @@ class VoiceEngine:
         """Initialize the pyttsx3 TTS engine. Returns True on success."""
         try:
             import pyttsx3
+
             if self._tts_engine is None:
-                self._tts_engine = pyttsx3.init()
-                self._tts_engine.setProperty('rate', 175)
-                self._tts_engine.setProperty('volume', 1.0)
+                engine = pyttsx3.init()
+                self._tts_engine = engine
+                engine.setProperty("rate", 175)
+                engine.setProperty("volume", 1.0)
             return True
         except ImportError:
             self._tts_engine = None
@@ -124,13 +133,17 @@ class VoiceEngine:
             self._tts_engine = None
             return False
 
-    def _speak_windows_local(self, text: str) -> Dict[str, Any]:
+    def _speak_windows_local(self, text: str) -> dict[str, Any]:
         """Windows local TTS: pyttsx3 then SAPI fallback."""
         # Try pyttsx3
         if self._init_tts():
+            engine = self._tts_engine
+            if engine is None:
+                # Engine handle vanished (init raced/failed) — go straight to SAPI.
+                return self._speak_sapi(text)
             try:
-                self._tts_engine.say(text)
-                self._tts_engine.runAndWait()
+                engine.say(text)
+                engine.runAndWait()
                 self._set_state(VoiceState.IDLE)
                 return {"spoken": True, "text": text, "engine": "pyttsx3"}
             except Exception as e:
@@ -140,18 +153,16 @@ class VoiceEngine:
         # Windows SAPI fallback
         return self._speak_sapi(text)
 
-    def _speak_sapi(self, text: str) -> Dict[str, Any]:
+    def _speak_sapi(self, text: str) -> dict[str, Any]:
         """Fallback TTS using Windows SAPI via PowerShell."""
         try:
             escaped = text.replace("'", "''")
-            script = (
-                f"$voice = New-Object -ComObject SAPI.SpVoice; "
-                f"$voice.Speak('{escaped}')"
-            )
+            script = f"$voice = New-Object -ComObject SAPI.SpVoice; $voice.Speak('{escaped}')"
             proc = subprocess.Popen(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             self._active_playback = proc
             while proc.poll() is None:
@@ -172,7 +183,7 @@ class VoiceEngine:
             self._set_state(VoiceState.ERROR)
             return {"error": str(e), "spoken": False}
 
-    def _speak_posix_local(self, text: str) -> Dict[str, Any]:
+    def _speak_posix_local(self, text: str) -> dict[str, Any]:
         """Linux/Android local TTS: espeak, pico2wave, or termux-tts-speak."""
         engines = [
             (["termux-tts-speak", text], "termux_tts"),
@@ -186,7 +197,10 @@ class VoiceEngine:
                 if engine_name == "pico2wave":
                     # pico2wave writes to a file, then we play it
                     result = subprocess.run(
-                        cmd, capture_output=True, text=True, timeout=10,
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
                     )
                     if result.returncode == 0 and os.path.exists("/tmp/tts_out.wav"):
                         self._play_audio_posix("/tmp/tts_out.wav")
@@ -195,15 +209,19 @@ class VoiceEngine:
                         return {"spoken": True, "text": text, "engine": engine_name}
                 elif engine_name == "festival":
                     proc = subprocess.Popen(
-                        cmd, stdin=subprocess.PIPE,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        cmd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
                     )
                     proc.communicate(input=text.encode(), timeout=10)
                     self._set_state(VoiceState.IDLE)
                     return {"spoken": True, "text": text, "engine": engine_name}
                 else:
                     proc = subprocess.Popen(
-                        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
                     )
                     self._active_playback = proc
                     while proc.poll() is None:
@@ -230,13 +248,17 @@ class VoiceEngine:
 
     def _play_audio_posix(self, path: str) -> None:
         """Play audio file on Linux/Android."""
-        for cmd in [["termux-media-player", "play", path],
-                     ["mpv", "--no-video", path],
-                     ["aplay", path],
-                     ["ffplay", "-nodisp", "-autoexit", path]]:
+        for cmd in [
+            ["termux-media-player", "play", path],
+            ["mpv", "--no-video", path],
+            ["aplay", path],
+            ["ffplay", "-nodisp", "-autoexit", path],
+        ]:
             try:
                 proc = subprocess.Popen(
-                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 self._active_playback = proc
                 while proc.poll() is None:
@@ -253,7 +275,7 @@ class VoiceEngine:
             except FileNotFoundError:
                 continue
 
-    def _play_audio(self, tmp_path: str, interrupt_check: Optional[Callable[[], bool]] = None) -> bool:
+    def _play_audio(self, tmp_path: str, interrupt_check: Callable[[], bool] | None = None) -> bool:
         """Play audio via Windows MediaPlayer with optional interrupt support."""
         if not is_windows():
             self._play_audio_posix(tmp_path)
@@ -273,8 +295,9 @@ class VoiceEngine:
         try:
             proc = subprocess.Popen(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             self._active_playback = proc
             while proc.poll() is None:
@@ -295,7 +318,7 @@ class VoiceEngine:
             logger.warning("MediaPlayer playback failed: %s", e)
             return False
 
-    def _speak_google_tts(self, text: str, api_key: str) -> Dict[str, Any]:
+    def _speak_google_tts(self, text: str, api_key: str) -> dict[str, Any]:
         """Text-to-speech via Google AI Studio Gemini TTS (free tier)."""
         try:
             import httpx
@@ -313,11 +336,7 @@ class VoiceEngine:
                 "contents": [{"parts": [{"text": styled_text}]}],
                 "generationConfig": {
                     "responseModalities": ["AUDIO"],
-                    "speechConfig": {
-                        "voiceConfig": {
-                            "prebuiltVoiceConfig": {"voiceName": voice}
-                        }
-                    },
+                    "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}},
                 },
             }
 
@@ -333,6 +352,7 @@ class VoiceEngine:
                 for part in parts:
                     if "inlineData" in part:
                         import base64
+
                         audio_data = base64.b64decode(part["inlineData"]["data"])
                         break
 
@@ -362,7 +382,7 @@ class VoiceEngine:
             logger.warning("Google TTS failed: %s", e)
             return {"spoken": False, "error": str(e)}
 
-    def _speak_elevenlabs(self, text: str, api_key: str) -> Dict[str, Any]:
+    def _speak_elevenlabs(self, text: str, api_key: str) -> dict[str, Any]:
         """Text-to-speech via ElevenLabs API."""
         try:
             import httpx
@@ -405,11 +425,12 @@ class VoiceEngine:
         except Exception as e:
             return {"spoken": False, "error": str(e)}
 
-    def listen(self, timeout: int = 10) -> Dict[str, Any]:
+    def listen(self, timeout: int = 10) -> dict[str, Any]:
         """Listen for speech and return recognized text."""
         self._set_state(VoiceState.LISTENING)
         try:
             import speech_recognition as sr
+
             recognizer = sr.Recognizer()
 
             try:
@@ -418,8 +439,12 @@ class VoiceEngine:
                     audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=10)
             except sr.WaitTimeoutError:
                 self._set_state(VoiceState.IDLE)
-                return {"text": "", "success": False, "no_speech": True,
-                        "error": "No speech detected — speak within the timeout and try again."}
+                return {
+                    "text": "",
+                    "success": False,
+                    "no_speech": True,
+                    "error": "No speech detected — speak within the timeout and try again.",
+                }
             except OSError as e:
                 self._set_state(VoiceState.ERROR)
                 return {"text": "", "success": False, "error": f"No microphone available: {e}"}
@@ -434,12 +459,18 @@ class VoiceEngine:
                 pass
             except sr.RequestError as e:
                 self._set_state(VoiceState.IDLE)
-                return {"text": "", "success": False,
-                        "error": f"Speech recognition service unavailable: {e}"}
+                return {
+                    "text": "",
+                    "success": False,
+                    "error": f"Speech recognition service unavailable: {e}",
+                }
 
             self._set_state(VoiceState.IDLE)
-            return {"text": "", "success": False,
-                    "error": "Could not understand audio — try speaking clearly and closer to the microphone"}
+            return {
+                "text": "",
+                "success": False,
+                "error": "Could not understand audio — try speaking clearly and closer to the microphone",
+            }
 
         except ImportError as e:
             self._set_state(VoiceState.ERROR)
@@ -450,7 +481,7 @@ class VoiceEngine:
 
 
 # Global voice engine instance
-_voice_engine: Optional[VoiceEngine] = None
+_voice_engine: VoiceEngine | None = None
 
 
 def get_voice_engine() -> VoiceEngine:
@@ -462,7 +493,15 @@ def get_voice_engine() -> VoiceEngine:
 
 class Speak(Tool):
     """Speak text aloud using TTS."""
+
     name = "speak"
+    keywords = (
+        "speak",
+        "say out loud",
+        "read aloud",
+        "voice output",
+    )
+    risk = RiskLevel.LOW
     description = "Speak the given text aloud using text-to-speech."
     parameters = {
         "type": "object",
@@ -481,19 +520,31 @@ class Speak(Tool):
     }
     mutates = True
 
-    def run(self, text: str, **_: Any) -> Dict[str, Any]:
+    def run(self, text: str, **_: Any) -> dict[str, Any]:
         engine = get_voice_engine()
         return engine.speak(text)
 
 
 class Listen(Tool):
     """Listen for voice input and return recognized text."""
+
     name = "listen"
+    keywords = (
+        "listen",
+        "hear me",
+        "start listening",
+        "microphone on",
+    )
+    risk = RiskLevel.MEDIUM
     description = "Listen for voice input from the microphone and return the recognized text."
     parameters = {
         "type": "object",
         "properties": {
-            "timeout": {"type": "integer", "description": "Max seconds to wait for speech.", "default": 10},
+            "timeout": {
+                "type": "integer",
+                "description": "Max seconds to wait for speech.",
+                "default": 10,
+            },
         },
         "required": [],
     }
@@ -506,15 +557,19 @@ class Listen(Tool):
         },
     }
 
-    def run(self, timeout: int = 10, **_: Any) -> Dict[str, Any]:
+    def run(self, timeout: int = 10, **_: Any) -> dict[str, Any]:
         engine = get_voice_engine()
         return engine.listen(timeout=timeout)
 
 
 class GetVoiceState(Tool):
     """Get current voice engine state."""
+
     name = "get_voice_state"
-    description = "Get the current state of the voice engine (idle, listening, processing, speaking)."
+    risk = RiskLevel.READ
+    description = (
+        "Get the current state of the voice engine (idle, listening, processing, speaking)."
+    )
     parameters = {
         "type": "object",
         "properties": {},
@@ -527,7 +582,7 @@ class GetVoiceState(Tool):
         },
     }
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         engine = get_voice_engine()
         return {"state": engine.state.value}
 

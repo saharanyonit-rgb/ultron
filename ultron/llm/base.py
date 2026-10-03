@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # type-only import — avoids any circular import with tools
     from ultron.tools.base import ToolSpec
@@ -26,7 +26,7 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -41,8 +41,8 @@ class ToolResult:
 class ProviderResult:
     """Normalized model output."""
 
-    text: Optional[str] = None
-    tool_calls: List[ToolCall] = field(default_factory=list)
+    text: str | None = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 class LLMProvider(ABC):
@@ -51,7 +51,7 @@ class LLMProvider(ABC):
     name: str
 
     @abstractmethod
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         """Send the current conversation to the model.
 
         `text` is a new user message to append (or `None` to just continue
@@ -65,7 +65,7 @@ class LLMProvider(ABC):
         """
 
     @abstractmethod
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         """Append the results of the most recent round of tool calls."""
 
     def health_check(self) -> bool:

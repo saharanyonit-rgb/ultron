@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 from xml.etree import ElementTree
 
 logger = logging.getLogger("ultron.web_modules")
@@ -34,7 +34,7 @@ USER_AGENT = "JARVIS-Consulton/1.0 (+local dashboard)"
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
-WMO_CODES: Dict[int, str] = {
+WMO_CODES: dict[int, str] = {
     0: "Clear sky",
     1: "Mainly clear",
     2: "Partly cloudy",
@@ -65,14 +65,14 @@ WMO_CODES: Dict[int, str] = {
     99: "Thunderstorm with hail",
 }
 
-NEWS_FEEDS: List[Dict[str, str]] = [
+NEWS_FEEDS: list[dict[str, str]] = [
     {"url": "https://feeds.bbci.co.uk/news/world/rss.xml", "source": "BBC World"},
     {"url": "https://feeds.bbci.co.uk/news/technology/rss.xml", "source": "BBC Technology"},
     {"url": "https://hnrss.org/frontpage", "source": "Hacker News"},
 ]
 
 _lock = threading.Lock()
-_cache: Dict[str, Any] = {}
+_cache: dict[str, Any] = {}
 
 
 def _cache_get(key: str, ttl: float) -> Any:
@@ -94,7 +94,9 @@ def _cache_set(key: str, value: Any) -> None:
 def _fetch(url: str) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=UPSTREAM_TIMEOUT) as response:
-        return response.read()
+        # HTTPResponse.read() is typed as Any by the stdlib stubs; the runtime
+        # value is always the raw response body.
+        return cast(bytes, response.read())
 
 
 def _describe(code: Any) -> str:
@@ -106,8 +108,10 @@ def _describe(code: Any) -> str:
 
 # ── Weather ─────────────────────────────────────────────────────
 
-def get_weather(place: Optional[str] = None, lat: Optional[float] = None,
-                lon: Optional[float] = None) -> Dict[str, Any]:
+
+def get_weather(
+    place: str | None = None, lat: float | None = None, lon: float | None = None
+) -> dict[str, Any]:
     """Return current conditions plus a short daily forecast.
 
     Accepts either a free-text ``place`` or explicit coordinates. When nothing
@@ -118,7 +122,8 @@ def get_weather(place: Optional[str] = None, lat: Optional[float] = None,
     cache_key = f"weather:{place or ''}:{lat}:{lon}"
     cached = _cache_get(cache_key, WEATHER_CACHE_TTL)
     if cached is not None:
-        return cached
+        # Only this module writes the weather cache key, always with a dict.
+        return cast("dict[str, Any]", cached)
 
     location_name, latitude, longitude = _resolve_location(place, lat, lon)
 
@@ -135,7 +140,7 @@ def get_weather(place: Optional[str] = None, lat: Optional[float] = None,
     current = data.get("current", {}) or {}
     daily = data.get("daily", {}) or {}
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "location": location_name,
         "latitude": latitude,
         "longitude": longitude,
@@ -160,27 +165,30 @@ def get_weather(place: Optional[str] = None, lat: Optional[float] = None,
     return result
 
 
-def _build_daily(daily: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _build_daily(daily: dict[str, Any]) -> list[dict[str, Any]]:
     dates = daily.get("time") or []
     codes = daily.get("weather_code") or []
     highs = daily.get("temperature_2m_max") or []
     lows = daily.get("temperature_2m_min") or []
     rain = daily.get("precipitation_probability_max") or []
 
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for index, date in enumerate(dates):
-        rows.append({
-            "date": date,
-            "max_c": highs[index] if index < len(highs) else None,
-            "min_c": lows[index] if index < len(lows) else None,
-            "precipitation_pct": rain[index] if index < len(rain) else None,
-            "description": _describe(codes[index] if index < len(codes) else None),
-        })
+        rows.append(
+            {
+                "date": date,
+                "max_c": highs[index] if index < len(highs) else None,
+                "min_c": lows[index] if index < len(lows) else None,
+                "precipitation_pct": rain[index] if index < len(rain) else None,
+                "description": _describe(codes[index] if index < len(codes) else None),
+            }
+        )
     return rows
 
 
-def _resolve_location(place: Optional[str], lat: Optional[float], lon: Optional[float]
-                      ) -> tuple[str, float, float]:
+def _resolve_location(
+    place: str | None, lat: float | None, lon: float | None
+) -> tuple[str, float, float]:
     if lat is not None and lon is not None:
         return (place or f"{lat:.3f}, {lon:.3f}", float(lat), float(lon))
 
@@ -193,7 +201,9 @@ def _resolve_location(place: Optional[str], lat: Optional[float], lon: Optional[
             return cached["location"], cached["latitude"], cached["longitude"]
         raise LookupError("No location supplied and no previous location cached")
 
-    data = json.loads(_fetch(f"{GEOCODE_URL}?name={urllib.parse.quote(query)}&count=1").decode("utf-8"))
+    data = json.loads(
+        _fetch(f"{GEOCODE_URL}?name={urllib.parse.quote(query)}&count=1").decode("utf-8")
+    )
     results = data.get("results") or []
     if not results:
         raise LookupError(f"Location not found: {query}")
@@ -208,14 +218,16 @@ def _resolve_location(place: Optional[str], lat: Optional[float], lon: Optional[
 
 # ── News ───────────────────────────────────────────────────────
 
-def get_news(limit: int = 12) -> Dict[str, Any]:
+
+def get_news(limit: int = 12) -> dict[str, Any]:
     """Return headlines gathered from public RSS feeds."""
     cached = _cache_get("news", NEWS_CACHE_TTL)
     if cached is not None:
-        return cached
+        # Only this module writes the news cache key, always with a dict.
+        return cast("dict[str, Any]", cached)
 
-    items: List[Dict[str, Any]] = []
-    errors: List[str] = []
+    items: list[dict[str, Any]] = []
+    errors: list[str] = []
 
     for feed in NEWS_FEEDS:
         try:
@@ -226,47 +238,51 @@ def get_news(limit: int = 12) -> Dict[str, Any]:
 
     items.sort(key=lambda item: item.get("_sort", 0), reverse=True)
     result_items = [
-        {k: v for k, v in item.items() if k != "_sort"}
-        for item in items[: max(1, limit)]
+        {k: v for k, v in item.items() if k != "_sort"} for item in items[: max(1, limit)]
     ]
 
     if not result_items:
         raise ConnectionError("All news feeds failed: " + "; ".join(errors))
 
-    payload = {"items": result_items, "sources": [f["source"] for f in NEWS_FEEDS],
-               "fetched_at": time.time()}
+    payload = {
+        "items": result_items,
+        "sources": [f["source"] for f in NEWS_FEEDS],
+        "fetched_at": time.time(),
+    }
     _cache_set("news", payload)
     return payload
 
 
-def _parse_feed(feed: Dict[str, str]) -> List[Dict[str, Any]]:
+def _parse_feed(feed: dict[str, str]) -> list[dict[str, Any]]:
     root = ElementTree.fromstring(_fetch(feed["url"]))
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for node in root.iter("item"):
         title = _text(node, "title")
         if not title:
             continue
         published = _text(node, "pubDate")
-        rows.append({
-            "title": title.strip(),
-            "link": (_text(node, "link") or "").strip(),
-            "summary": _summary(_text(node, "description")),
-            "published": _iso(published),
-            "source": feed["source"],
-            "_sort": _timestamp(published),
-        })
+        rows.append(
+            {
+                "title": title.strip(),
+                "link": (_text(node, "link") or "").strip(),
+                "summary": _summary(_text(node, "description")),
+                "published": _iso(published),
+                "source": feed["source"],
+                "_sort": _timestamp(published),
+            }
+        )
     return rows
 
 
-def _text(node: ElementTree.Element, tag: str) -> Optional[str]:
+def _text(node: ElementTree.Element, tag: str) -> str | None:
     child = node.find(tag)
     if child is None or child.text is None:
         return None
     return child.text
 
 
-def _summary(raw: Optional[str]) -> str:
+def _summary(raw: str | None) -> str:
     if not raw:
         return ""
     text = ElementTree.fromstring(f"<div>{raw}</div>").itertext()
@@ -274,21 +290,23 @@ def _summary(raw: Optional[str]) -> str:
     return cleaned[:240]
 
 
-def _timestamp(published: Optional[str]) -> float:
+def _timestamp(published: str | None) -> float:
     if not published:
         return 0.0
     try:
         from email.utils import parsedate_to_datetime
+
         return parsedate_to_datetime(published).timestamp()
     except (TypeError, ValueError):
         return 0.0
 
 
-def _iso(published: Optional[str]) -> Optional[str]:
+def _iso(published: str | None) -> str | None:
     if not published:
         return None
     try:
         from email.utils import parsedate_to_datetime
+
         return parsedate_to_datetime(published).isoformat()
     except (TypeError, ValueError):
         return None

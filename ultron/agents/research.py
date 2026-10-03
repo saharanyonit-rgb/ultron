@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
-
-logger = logging.getLogger("ultron.agents.research")
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider, ToolResult
 from ultron.tools import Tool
+
+logger = logging.getLogger("ultron.agents.research")
 
 
 class ResearchAgent(BaseAgent):
@@ -18,7 +18,7 @@ class ResearchAgent(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 12,
     ) -> None:
         spec = AgentSpec(
@@ -30,13 +30,13 @@ class ResearchAgent(BaseAgent):
         )
         super().__init__(provider, tools, spec)
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute research task: gather information, analyze sources, compile findings."""
         available_tools = self._get_tools()
         tool_specs = [t.spec for t in available_tools]
         tool_map = {t.name: t for t in available_tools}
 
-        collected_findings: List[str] = []
+        collected_findings: list[str] = []
 
         for iteration in range(self._spec.max_iterations):
             result = self._provider.complete(user_text if iteration == 0 else None, tool_specs)

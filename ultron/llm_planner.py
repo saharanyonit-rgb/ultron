@@ -27,20 +27,36 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from ultron.goal import Goal, GoalComplexity
+from ultron.goal import Goal
 from ultron.llm.base import LLMProvider
 from ultron.planner_v5 import GoalPlanner, PlanningError
 from ultron.task import Task, TaskGraph, TaskPriority, TaskStatus
 
 logger = logging.getLogger("ultron.llm_planner")
 
-_VALID_CAPABILITIES = {"research", "coding", "writing", "filesystem", "browser", "analysis", "general"}
+_VALID_CAPABILITIES = {
+    "research",
+    "coding",
+    "writing",
+    "filesystem",
+    "browser",
+    "analysis",
+    "general",
+}
 _VALID_TOOLS = {
-    "create_file", "read_file", "search_files", "delete_file",
-    "open_url", "open_app", "close_app", "take_screenshot",
-    "get_system_info", "get_clipboard", "set_clipboard",
+    "create_file",
+    "read_file",
+    "search_files",
+    "delete_file",
+    "open_url",
+    "open_app",
+    "close_app",
+    "take_screenshot",
+    "get_system_info",
+    "get_clipboard",
+    "set_clipboard",
 }
 _VALID_PRIORITIES = {p.value for p in TaskPriority}
 
@@ -101,8 +117,8 @@ class LLMGoalPlanner:
     def __init__(
         self,
         provider: LLMProvider,
-        available_tools: Optional[List[str]] = None,
-        fallback: Optional[GoalPlanner] = None,
+        available_tools: list[str] | None = None,
+        fallback: GoalPlanner | None = None,
         max_tasks: int = 20,
     ) -> None:
         self._provider = provider
@@ -154,11 +170,17 @@ class LLMGoalPlanner:
 
         return self._fallback.replan(goal, existing_graph, failed_task_id)
 
-    def _llm_plan(self, goal: Goal) -> Optional[TaskGraph]:
+    def _llm_plan(self, goal: Goal) -> TaskGraph | None:
         """Call LLM to plan the goal, return TaskGraph or None."""
         tools_str = ", ".join(self._available_tools) if self._available_tools else "none"
-        capabilities_str = ", ".join(goal.required_capabilities) if goal.required_capabilities else "none"
-        criteria_str = "; ".join(c.description for c in goal.success_criteria) if goal.success_criteria else "none"
+        capabilities_str = (
+            ", ".join(goal.required_capabilities) if goal.required_capabilities else "none"
+        )
+        criteria_str = (
+            "; ".join(c.description for c in goal.success_criteria)
+            if goal.success_criteria
+            else "none"
+        )
 
         prompt = _PLANNING_PROMPT.format(
             tools=tools_str,
@@ -178,7 +200,7 @@ class LLMGoalPlanner:
 
         return self._parse_plan_response(result.text, goal)
 
-    def _llm_plan_with_retry(self, goal: Goal, max_retries: int = 2) -> Optional[TaskGraph]:
+    def _llm_plan_with_retry(self, goal: Goal, max_retries: int = 2) -> TaskGraph | None:
         """Call LLM to plan with retry on validation failure.
 
         When the LLM returns a plan that fails validation, re-prompts
@@ -199,7 +221,9 @@ class LLMGoalPlanner:
             if not errors:
                 logger.info(
                     "LLM planning succeeded [goal_id=%s, tasks=%d, attempt=%d]",
-                    goal.id, graph.task_count, attempt + 1,
+                    goal.id,
+                    graph.task_count,
+                    attempt + 1,
                 )
                 return graph
 
@@ -207,7 +231,8 @@ class LLMGoalPlanner:
             last_error = "; ".join(errors)
             logger.warning(
                 "LLM plan validation failed (attempt %d): %s",
-                attempt + 1, last_error,
+                attempt + 1,
+                last_error,
             )
 
             if attempt < max_retries:
@@ -225,7 +250,8 @@ class LLMGoalPlanner:
                             if not retry_errors:
                                 logger.info(
                                     "LLM planning succeeded on retry [goal_id=%s, tasks=%d]",
-                                    goal.id, retry_graph.task_count,
+                                    goal.id,
+                                    retry_graph.task_count,
                                 )
                                 return retry_graph
                 except Exception as exc:
@@ -238,7 +264,7 @@ class LLMGoalPlanner:
         goal: Goal,
         existing_graph: TaskGraph,
         failed_task_id: str,
-    ) -> Optional[TaskGraph]:
+    ) -> TaskGraph | None:
         """Call LLM to replan after a failure."""
         failed_task = existing_graph.get_task(failed_task_id)
         if not failed_task:
@@ -253,8 +279,7 @@ class LLMGoalPlanner:
         remaining = [
             {"id": t.id, "description": t.description, "dependencies": t.dependencies}
             for t in existing_graph.tasks
-            if t.status in (TaskStatus.PENDING, TaskStatus.READY)
-            and t.id != failed_task_id
+            if t.status in (TaskStatus.PENDING, TaskStatus.READY) and t.id != failed_task_id
         ]
 
         prompt = (
@@ -277,7 +302,7 @@ class LLMGoalPlanner:
 
         return self._parse_plan_response(result.text, goal)
 
-    def _parse_plan_response(self, text: str, goal: Goal) -> Optional[TaskGraph]:
+    def _parse_plan_response(self, text: str, goal: Goal) -> TaskGraph | None:
         """Parse LLM JSON response into a TaskGraph."""
         cleaned = text.strip()
 
@@ -307,14 +332,14 @@ class LLMGoalPlanner:
 
     def _build_graph_from_tasks(
         self,
-        tasks_data: List[Dict[str, Any]],
+        tasks_data: list[dict[str, Any]],
         goal: Goal,
-    ) -> Optional[TaskGraph]:
+    ) -> TaskGraph | None:
         """Build a validated TaskGraph from LLM-generated task list."""
         graph = TaskGraph(goal_id=goal.id, description=goal.description)
 
         # First pass: create all tasks
-        task_ids = set()
+        task_ids: set[str] = set()
         for t_data in tasks_data:
             if not isinstance(t_data, dict):
                 continue
@@ -333,13 +358,15 @@ class LLMGoalPlanner:
 
             # Validate capabilities
             capabilities = [
-                str(c) for c in t_data.get("required_capabilities", [])
+                str(c)
+                for c in t_data.get("required_capabilities", [])
                 if isinstance(c, str) and c in _VALID_CAPABILITIES
             ]
 
             # Validate tools
             tools = [
-                str(t) for t in t_data.get("required_tools", [])
+                str(t)
+                for t in t_data.get("required_tools", [])
                 if isinstance(t, str) and t in _VALID_TOOLS
             ]
 
@@ -350,8 +377,7 @@ class LLMGoalPlanner:
 
             # Verification criteria
             verification = [
-                str(v) for v in t_data.get("verification_criteria", [])
-                if isinstance(v, str)
+                str(v) for v in t_data.get("verification_criteria", []) if isinstance(v, str)
             ]
 
             task = Task(
@@ -399,7 +425,8 @@ class LLMGoalPlanner:
         if len(graph.tasks) > self._max_tasks:
             logger.warning(
                 "LLM plan has %d tasks, capping at %d",
-                len(graph.tasks), self._max_tasks,
+                len(graph.tasks),
+                self._max_tasks,
             )
 
         return graph

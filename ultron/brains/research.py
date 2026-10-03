@@ -17,10 +17,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider, ToolResult
 from ultron.tools import Tool
 
 logger = logging.getLogger("ultron.brains.research")
@@ -47,7 +47,7 @@ class ResearchFinding:
     source_type: str = "unknown"
     confidence: float = 0.5
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "content": self.content,
             "source": self.source,
@@ -61,11 +61,11 @@ class ResearchReport:
     """Complete research report with findings."""
 
     question: str
-    findings: List[ResearchFinding]
+    findings: list[ResearchFinding]
     summary: str = ""
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "question": self.question,
             "findings": [f.to_dict() for f in self.findings],
@@ -80,9 +80,9 @@ class ResearchBrain(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 12,
-        tool_executor: Optional[Any] = None,
+        tool_executor: Any | None = None,
     ) -> None:
         spec = AgentSpec(
             name="research",
@@ -94,7 +94,7 @@ class ResearchBrain(BaseAgent):
         super().__init__(provider, tools, spec)
         self._tool_executor = tool_executor
 
-    def research(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> ResearchReport:
+    def research(self, user_text: str, context: dict[str, Any] | None = None) -> ResearchReport:
         """Conduct research and produce a structured report.
 
         Args:
@@ -108,7 +108,7 @@ class ResearchBrain(BaseAgent):
         tool_specs = [t.spec for t in available_tools]
         tool_names = {t.name for t in available_tools}
 
-        findings: List[ResearchFinding] = []
+        findings: list[ResearchFinding] = []
 
         for iteration in range(self._spec.max_iterations):
             result = self._provider.complete(
@@ -158,7 +158,7 @@ class ResearchBrain(BaseAgent):
             self._provider.feed_tool_results(tool_results)
 
         summary = self._generate_summary(findings)
-        sources = list(set(f.source for f in findings if f.source not in ("error", "unknown")))
+        sources = list({f.source for f in findings if f.source not in ("error", "unknown")})
 
         return ResearchReport(
             question=user_text,
@@ -176,7 +176,7 @@ class ResearchBrain(BaseAgent):
             return "system"
         return "unknown"
 
-    def _generate_summary(self, findings: List[ResearchFinding]) -> str:
+    def _generate_summary(self, findings: list[ResearchFinding]) -> str:
         if not findings:
             return "No findings collected."
 
@@ -186,7 +186,7 @@ class ResearchBrain(BaseAgent):
 
         return f"Research completed. Found {len(successful)} reliable findings."
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute research task - returns JSON report as string."""
         report = self.research(user_text, context)
         return json.dumps(report.to_dict(), ensure_ascii=False, default=str)

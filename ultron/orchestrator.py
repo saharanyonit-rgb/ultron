@@ -21,54 +21,48 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any, cast
 
-from ultron.agent_manager import AgentManager, AgentMessage, MessageType
-from ultron.audit import AuditLogger, AuditEvent, EventType
-from ultron.autonomous import AutonomousExecutor, AutonomousConfig
+from ultron.agent_manager import AgentManager
+from ultron.audit import AuditEvent, AuditLogger, EventType
+from ultron.autonomous import AutonomousExecutor
 from ultron.context import (
-    AgentContext,
     ContextManager,
-    ExecutionContext,
     GoalContext,
     TaskContext,
 )
-from ultron.execution_state import ExecutionStateStore, TaskState, TaskStatus as PersistTaskStatus
+from ultron.execution_state import ExecutionStateStore, StepState, TaskState
+from ultron.execution_state import TaskStatus as PersistTaskStatus
 from ultron.goal import Goal, GoalEngine, GoalStatus
 from ultron.llm.base import LLMProvider
 from ultron.llm_goal import LLMGoalEngine
 from ultron.llm_planner import LLMGoalPlanner
 from ultron.models import ExecutionResult, ExecutionStatus
-from ultron.planner_v5 import GoalPlanner, PlanningError
-from ultron.policy import PolicyAction, PolicyEngine
-from ultron.recovery import RecoveryEngine, RecoveryAction
-from ultron.response import GoalResult, ResponseEngine, ResponseOutcome
-from ultron.risk import RiskClassifier
-from ultron.status import StatusEvent, StatusReporter
-from ultron.task import Task, TaskGraph, TaskPriority, TaskStatus
-from ultron.tools import ToolExecutor, ToolExecutionResult, ToolExecutionStatus
-from ultron.verification_v5 import (
-    TaskVerificationResult,
-    VerificationCheck,
-    VerificationEngine,
-)
-
 from ultron.orchestrator_types import (
     OrchestratorConfig,
     OrchestratorResult,
     OrchestratorState,
 )
-
+from ultron.planner_v5 import GoalPlanner, PlanningError
+from ultron.policy import PolicyAction, PolicyEngine
+from ultron.recovery import RecoveryAction, RecoveryEngine
+from ultron.response import ResponseEngine, ResponseOutcome
+from ultron.risk import RiskClassifier
+from ultron.status import StatusReporter
+from ultron.task import Task, TaskGraph, TaskStatus
+from ultron.tools import ToolExecutionStatus, ToolExecutor
 from ultron.tools.shutdown import ShutdownTool
+from ultron.verification_v5 import (
+    VerificationEngine,
+)
 
 logger = logging.getLogger("ultron.orchestrator")
 
 
-def _default_brain_event_handler(event_type: str, data: Dict[str, Any]) -> None:
+def _default_brain_event_handler(event_type: str, data: dict[str, Any]) -> None:
     """Default no-op brain event handler."""
     pass
 
@@ -83,19 +77,19 @@ class Orchestrator:
     def __init__(
         self,
         tool_executor: ToolExecutor,
-        agent_manager: Optional[AgentManager] = None,
-        config: Optional[OrchestratorConfig] = None,
-        audit_logger: Optional[AuditLogger] = None,
-        status_reporter: Optional[StatusReporter] = None,
-        state_store: Optional[ExecutionStateStore] = None,
-        policy_engine: Optional[PolicyEngine] = None,
-        risk_classifier: Optional[RiskClassifier] = None,
-        autonomous_executor: Optional[AutonomousExecutor] = None,
-        llm_provider: Optional[LLMProvider] = None,
-        goal_engine: Optional[Any] = None,
-        planner: Optional[Any] = None,
-        brain_orchestrator: Optional[Any] = None,
-        brain_event_handler: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        agent_manager: AgentManager | None = None,
+        config: OrchestratorConfig | None = None,
+        audit_logger: AuditLogger | None = None,
+        status_reporter: StatusReporter | None = None,
+        state_store: ExecutionStateStore | None = None,
+        policy_engine: PolicyEngine | None = None,
+        risk_classifier: RiskClassifier | None = None,
+        autonomous_executor: AutonomousExecutor | None = None,
+        llm_provider: LLMProvider | None = None,
+        goal_engine: Any | None = None,
+        planner: Any | None = None,
+        brain_orchestrator: Any | None = None,
+        brain_event_handler: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
         self._config = config or OrchestratorConfig()
         self._tool_executor = tool_executor
@@ -112,7 +106,7 @@ class Orchestrator:
         if goal_engine is not None:
             self._goal_engine = goal_engine
         elif provider is not None:
-            tool_names = [t.name for t in tool_executor.registry.list_tools()] if hasattr(tool_executor, "registry") and hasattr(getattr(tool_executor, "registry", None), "list_tools") else []
+            tool_names = self._discover_tool_names(tool_executor)
             self._goal_engine = LLMGoalEngine(provider=provider, available_tools=tool_names)
         else:
             self._goal_engine = GoalEngine()
@@ -121,7 +115,7 @@ class Orchestrator:
         if planner is not None:
             self._planner = planner
         elif provider is not None:
-            tool_names = [t.name for t in tool_executor.registry.list_tools()] if hasattr(tool_executor, "registry") and hasattr(getattr(tool_executor, "registry", None), "list_tools") else []
+            tool_names = self._discover_tool_names(tool_executor)
             self._planner = LLMGoalPlanner(provider=provider, available_tools=tool_names)
         else:
             self._planner = GoalPlanner()
@@ -138,30 +132,59 @@ class Orchestrator:
         self._autonomous_executor = autonomous_executor
 
         self._state = OrchestratorState.IDLE
-        self._current_goal: Optional[Goal] = None
-        self._current_graph: Optional[TaskGraph] = None
+        self._current_goal: Goal | None = None
+        self._current_graph: TaskGraph | None = None
         self._execution_id = str(uuid.uuid4())[:12]
-        self._events: List[Dict[str, Any]] = []
+        self._events: list[dict[str, Any]] = []
         # Lock protecting shared mutable state during parallel execution.
         # Serializes mutations to Task, TaskGraph, ContextManager,
         # StatusReporter, and AgentManager while keeping actual tool
         # execution (the expensive part) fully concurrent.
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _discover_tool_names(tool_executor: ToolExecutor) -> list[str]:
+        """List registered tool names for the LLM goal/planner hints.
+
+        Tool executors expose their registry optionally, and the listing API
+        has moved around, so the lookup stays duck-typed: try ``all()`` (the
+        current ToolRegistry API) then ``specs()``, falling back to an empty
+        list. Getting this right matters — an empty list means the goal engine
+        and planner are told no tools exist.
+        """
+        registry: Any = getattr(tool_executor, "registry", None)
+        if registry is None:
+            return []
+
+        for attr in ("all", "specs"):
+            lister: Any = getattr(registry, attr, None)
+            if not callable(lister):
+                continue
+            try:
+                items = lister()
+            except Exception:
+                logger.debug("Tool listing via %s() failed; skipping", attr)
+                continue
+            names = [getattr(i, "name", None) for i in items or []]
+            resolved = [str(n) for n in names if n]
+            if resolved:
+                return resolved
+        return []
+
     @property
     def state(self) -> OrchestratorState:
         return self._state
 
     @property
-    def current_goal(self) -> Optional[Goal]:
+    def current_goal(self) -> Goal | None:
         return self._current_goal
 
     @property
-    def current_graph(self) -> Optional[TaskGraph]:
+    def current_graph(self) -> TaskGraph | None:
         return self._current_graph
 
     @property
-    def brain_orchestrator(self) -> Optional[Any]:
+    def brain_orchestrator(self) -> Any | None:
         return self._brain_orchestrator
 
     def _should_use_brain(self, user_request: str) -> bool:
@@ -179,16 +202,35 @@ class Orchestrator:
 
         # Brain orchestration indicators
         complex_indicators = [
-            " and then", " first ", " after that", " next ",
-            " multiple ", " steps", " workflow", " plan",
-            " research ", " analyze", " compare",
+            " and then",
+            " first ",
+            " after that",
+            " next ",
+            " multiple ",
+            " steps",
+            " workflow",
+            " plan",
+            " research ",
+            " analyze",
+            " compare",
         ]
 
         specialized_indicators = [
-            "research", "analyze", "investigate",
-            "code", "fix", "bug", "implement", "refactor",
-            "open chrome", "open app", "browser", "navigate",
-            "verify", "check result", "confirm",
+            "research",
+            "analyze",
+            "investigate",
+            "code",
+            "fix",
+            "bug",
+            "implement",
+            "refactor",
+            "open chrome",
+            "open app",
+            "browser",
+            "navigate",
+            "verify",
+            "check result",
+            "confirm",
         ]
 
         for indicator in complex_indicators:
@@ -230,7 +272,6 @@ class Orchestrator:
         4. Initiates Windows shutdown via the shutdown tool
         5. Closes the JARVIS UI
         """
-        from ultron.tools.shutdown import ShutdownTool
         from ultron.risk import RiskLevel
 
         # Check if permission is required via configuration
@@ -238,8 +279,9 @@ class Orchestrator:
         require_permission = False
         try:
             from ultron.config import load_config
+
             config = load_config()
-            require_permission = getattr(config, 'require_permission', False)
+            require_permission = getattr(config, "require_permission", False)
         except Exception:
             pass
 
@@ -254,12 +296,8 @@ class Orchestrator:
             # When user configuration requires confirmation for system-control actions,
             # add a tool-specific override so that windows_shutdown maps to CONFIRM
             # instead of the default DENY (CRITICAL), enabling the confirmation flow.
-            self._policy_engine.set_tool_override(
-                "windows_shutdown", PolicyAction.CONFIRM
-            )
-            decision = self._policy_engine.evaluate(
-                "windows_shutdown", RiskLevel.CRITICAL, {}
-            )
+            self._policy_engine.set_tool_override("windows_shutdown", PolicyAction.CONFIRM)
+            decision = self._policy_engine.evaluate("windows_shutdown", RiskLevel.CRITICAL, {})
             if decision.action == PolicyAction.ALLOW:
                 # Policy allows without confirmation
                 return self._execute_shutdown()
@@ -308,13 +346,11 @@ class Orchestrator:
         Uses the shutdown tool to initiate Windows shutdown.
         This should only be called after permission is granted.
         """
-        from ultron.tools.shutdown import ShutdownTool
 
         shutdown_tool = ShutdownTool()
         result = shutdown_tool.run(confirm=True)
 
         success = result.get("success", False)
-        message = result.get("message", "Windows shutdown initiated")
 
         if success:
             # Transition to SHUTTING_DOWN state
@@ -378,14 +414,18 @@ class Orchestrator:
             logger.error("Orchestration failed: %s", exc)
             self._emit("EXECUTION_FAILED", {"error": str(exc)})
 
-            goal = goal if 'goal' in dir() else Goal(
-                description=user_request,
-                original_request=user_request,
-                status=GoalStatus.FAILED,
+            goal = (
+                goal
+                if "goal" in dir()
+                else Goal(
+                    description=user_request,
+                    original_request=user_request,
+                    status=GoalStatus.FAILED,
+                )
             )
-            result = self._response_engine.generate(goal, TaskGraph())
+            failed_result = self._response_engine.generate(goal, TaskGraph())
             return OrchestratorResult(
-                goal_result=result,
+                goal_result=failed_result,
                 state=OrchestratorState.FAILED,
                 events=self._events,
             )
@@ -410,7 +450,10 @@ class Orchestrator:
             self._emit("BRAIN_ROUTING", {"request": user_request[:100]})
 
             # Execute via brain orchestrator
-            result = self._brain_orchestrator.execute(user_request, brain_context)
+            brain_orchestrator = self._brain_orchestrator
+            if brain_orchestrator is None:
+                raise RuntimeError("Brain orchestrator is not available")
+            result = brain_orchestrator.execute(user_request, brain_context)
 
             # Convert BrainOrchestrationResult to OrchestratorResult
             if result.success:
@@ -426,7 +469,9 @@ class Orchestrator:
                 goal_result = self._response_engine.generate(goal, TaskGraph())
 
                 # Update with brain output
-                goal_result.summary = str(result.output)[:1000] if result.output else "Brain execution completed"
+                goal_result.summary = (
+                    str(result.output)[:1000] if result.output else "Brain execution completed"
+                )
 
                 return OrchestratorResult(
                     goal_result=goal_result,
@@ -472,14 +517,17 @@ class Orchestrator:
         """Resume an interrupted goal from persisted state."""
         self._current_goal = goal
         self._current_graph = graph
-        self._context_manager.set_goal_context(GoalContext(
-            goal_id=goal.id,
-            goal_description=goal.description,
-            original_request=goal.original_request,
-        ))
+        self._context_manager.set_goal_context(
+            GoalContext(
+                goal_id=goal.id,
+                goal_description=goal.description,
+                original_request=goal.original_request,
+            )
+        )
 
         incomplete_tasks = [
-            t for t in graph.tasks
+            t
+            for t in graph.tasks
             if t.status in (TaskStatus.PENDING, TaskStatus.RUNNING, TaskStatus.READY)
         ]
 
@@ -498,46 +546,58 @@ class Orchestrator:
         goal = self._goal_engine.create_goal(user_request)
         self._current_goal = goal
 
-        self._context_manager.set_goal_context(GoalContext(
-            goal_id=goal.id,
-            goal_description=goal.description,
-            original_request=goal.original_request,
-            success_criteria=[c.description for c in goal.success_criteria],
-            constraints=[c.description for c in goal.constraints],
-            expected_outputs=goal.expected_outputs,
-        ))
+        self._context_manager.set_goal_context(
+            GoalContext(
+                goal_id=goal.id,
+                goal_description=goal.description,
+                original_request=goal.original_request,
+                success_criteria=[c.description for c in goal.success_criteria],
+                constraints=[c.description for c in goal.constraints],
+                expected_outputs=goal.expected_outputs,
+            )
+        )
 
-        self._audit.log(AuditEvent(
-            event_type=EventType.REQUEST_RECEIVED,
-            request_id=self._execution_id,
-            task_id=goal.id,
-            metadata={"goal_description": goal.description, "complexity": goal.complexity.value},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.REQUEST_RECEIVED,
+                request_id=self._execution_id,
+                task_id=goal.id,
+                metadata={
+                    "goal_description": goal.description,
+                    "complexity": goal.complexity.value,
+                },
+            )
+        )
 
         self._emit("GOAL_CREATED", {"goal_id": goal.id, "complexity": goal.complexity.value})
 
-        return goal
+        return cast("Goal", goal)
 
     def _create_plan(self, goal: Goal) -> TaskGraph:
         """Create a TaskGraph from a Goal."""
         graph = self._planner.plan(goal)
         self._current_graph = graph
 
-        self._audit.log(AuditEvent(
-            event_type=EventType.PLAN_CREATED,
-            request_id=self._execution_id,
-            task_id=goal.id,
-            metadata={"task_count": graph.task_count, "description": graph.description},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.PLAN_CREATED,
+                request_id=self._execution_id,
+                task_id=goal.id,
+                metadata={"task_count": graph.task_count, "description": graph.description},
+            )
+        )
 
         self._status.plan_created(goal.id, graph.task_count)
-        self._emit("PLAN_CREATED", {
-            "goal_id": goal.id,
-            "task_count": graph.task_count,
-            "parallel_groups": len(graph.get_parallel_groups()),
-        })
+        self._emit(
+            "PLAN_CREATED",
+            {
+                "goal_id": goal.id,
+                "task_count": graph.task_count,
+                "parallel_groups": len(graph.get_parallel_groups()),
+            },
+        )
 
-        return graph
+        return cast("TaskGraph", graph)
 
     def _execute_graph(self, goal: Goal, graph: TaskGraph) -> OrchestratorResult:
         """Execute the task graph, handling parallelism, verification, and recovery."""
@@ -569,7 +629,11 @@ class Orchestrator:
         limitations = self._detect_limitations(graph)
 
         goal_result = self._response_engine.generate(
-            goal, graph, verification_results, outputs, limitations,
+            goal,
+            graph,
+            verification_results,
+            outputs,
+            limitations,
         )
 
         self._audit.log_final_response(
@@ -589,13 +653,15 @@ class Orchestrator:
         task.mark_running()
         self._status.step_started(goal.id, task.id, task.description, graph.progress)
 
-        self._audit.log(AuditEvent(
-            event_type=EventType.STEP_STARTED,
-            request_id=self._execution_id,
-            task_id=goal.id,
-            step_id=task.id,
-            metadata={"description": task.description, "agent": task.assigned_agent},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.STEP_STARTED,
+                request_id=self._execution_id,
+                task_id=goal.id,
+                step_id=task.id,
+                metadata={"description": task.description, "agent": task.assigned_agent},
+            )
+        )
 
         agent = self._agent_manager.select_agent(task.required_capabilities)
         if agent:
@@ -617,7 +683,7 @@ class Orchestrator:
 
         self._status.step_completed(goal.id, task.id, graph.progress)
 
-    def _execute_parallel(self, goal: Goal, graph: TaskGraph, tasks: List[Task]) -> None:
+    def _execute_parallel(self, goal: Goal, graph: TaskGraph, tasks: list[Task]) -> None:
         """Execute multiple independent tasks in parallel.
 
         Tool execution runs concurrently across threads, but all shared
@@ -645,7 +711,9 @@ class Orchestrator:
                             task.mark_completed({"tool_result": result.output})
                             self._on_task_completed(goal, graph, task)
                         else:
-                            self._handle_task_failure(goal, graph, task, result.error or "Unknown error")
+                            self._handle_task_failure(
+                                goal, graph, task, result.error or "Unknown error"
+                            )
                 except Exception as exc:
                     with self._lock:
                         self._handle_task_failure(goal, graph, task, str(exc))
@@ -662,9 +730,7 @@ class Orchestrator:
         """
         # Use autonomous executor for LLM-driven execution when available
         if self._autonomous_executor:
-            goal_context = (
-                self._current_goal.description if self._current_goal else ""
-            )
+            goal_context = self._current_goal.description if self._current_goal else ""
             previous = self._collect_outputs(self._current_graph) if self._current_graph else None
             return self._autonomous_executor.execute_task(
                 task,
@@ -714,22 +780,30 @@ class Orchestrator:
 
     def _on_task_completed(self, goal: Goal, graph: TaskGraph, task: Task) -> None:
         """Handle task completion: propagate to dependents, persist state."""
-        self._audit.log(AuditEvent(
-            event_type=EventType.STEP_COMPLETED,
-            request_id=self._execution_id,
-            task_id=goal.id,
-            step_id=task.id,
-            metadata={"duration": task.duration_seconds},
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.STEP_COMPLETED,
+                request_id=self._execution_id,
+                task_id=goal.id,
+                step_id=task.id,
+                metadata={"duration": task.duration_seconds},
+            )
+        )
 
-        newly_ready = graph.on_task_completed(task.id, task.output_data)
+        # Side effect only: marks the task completed in the graph. The
+        # execution loop re-queries graph.ready_tasks() each iteration, so
+        # the returned newly-ready list is intentionally discarded.
+        graph.on_task_completed(task.id, task.output_data)
 
-        self._context_manager.set_task_context(task.id, TaskContext(
-            task_id=task.id,
-            task_description=task.description,
-            objective=task.objective,
-            input_data=task.output_data,
-        ))
+        self._context_manager.set_task_context(
+            task.id,
+            TaskContext(
+                task_id=task.id,
+                task_description=task.description,
+                objective=task.objective,
+                input_data=task.output_data,
+            ),
+        )
 
         if self._state_store:
             self._persist_state(goal, graph)
@@ -738,19 +812,22 @@ class Orchestrator:
         """Handle task failure with recovery decisions."""
         task.mark_failed(error)
 
-        self._audit.log(AuditEvent(
-            event_type=EventType.STEP_FAILED,
-            request_id=self._execution_id,
-            task_id=goal.id,
-            step_id=task.id,
-            success=False,
-            error=error,
-        ))
+        self._audit.log(
+            AuditEvent(
+                event_type=EventType.STEP_FAILED,
+                request_id=self._execution_id,
+                task_id=goal.id,
+                step_id=task.id,
+                success=False,
+                error=error,
+            )
+        )
 
         self._status.step_failed(goal.id, task.id, error)
 
         decision = self._recovery_engine.decide_recovery(
-            task,
+            # decide_recovery only reads step.retry_count, which Task provides.
+            cast("StepState", task),
             Exception(error),
             [task.output_data] if task.output_data else None,
         )
@@ -765,19 +842,25 @@ class Orchestrator:
             task.retry_count += 1
             task.status = TaskStatus.PENDING
             self._status.retrying(goal.id, task.id)
-            self._emit("TASK_RETRY", {
-                "task_id": task.id,
-                "retry": task.retry_count,
-                "max_retries": task.max_retries,
-            })
+            self._emit(
+                "TASK_RETRY",
+                {
+                    "task_id": task.id,
+                    "retry": task.retry_count,
+                    "max_retries": task.max_retries,
+                },
+            )
         elif decision.action == RecoveryAction.SKIP:
             graph.on_task_failed(task.id, error, propagate=False)
         else:
             blocked = graph.on_task_failed(task.id, error, propagate=True)
-            self._emit("TASK_FAILED_BLOCKED", {
-                "task_id": task.id,
-                "blocked_tasks": blocked,
-            })
+            self._emit(
+                "TASK_FAILED_BLOCKED",
+                {
+                    "task_id": task.id,
+                    "blocked_tasks": blocked,
+                },
+            )
 
     def _handle_graph_failure(self, goal: Goal, graph: TaskGraph) -> None:
         """Handle unrecoverable graph failure."""
@@ -796,19 +879,19 @@ class Orchestrator:
                 logger.error("Replanning failed: %s", exc)
                 self._state = OrchestratorState.FAILED
 
-    def _verify_completed_tasks(self, goal: Goal, graph: TaskGraph) -> Dict[str, bool]:
+    def _verify_completed_tasks(self, goal: Goal, graph: TaskGraph) -> dict[str, bool]:
         """Verify all completed tasks."""
         results = {}
-        verified_any = False
 
         for task in graph.get_tasks_by_status(TaskStatus.COMPLETED):
             if not task.verification_criteria:
                 continue
 
-            verified_any = True
             task.mark_running()
             self._status.verifying(goal.id, task.id)
-            checks = self._verification_engine.build_checks_from_criteria(task.verification_criteria)
+            checks = self._verification_engine.build_checks_from_criteria(
+                task.verification_criteria
+            )
 
             exec_result = ExecutionResult(
                 tool_name=task.assigned_agent or "task",
@@ -837,7 +920,7 @@ class Orchestrator:
 
         return results
 
-    def _collect_outputs(self, graph: TaskGraph) -> Dict[str, Any]:
+    def _collect_outputs(self, graph: TaskGraph) -> dict[str, Any]:
         """Collect important outputs from completed tasks."""
         outputs = {}
         for task in graph.get_tasks_by_status(TaskStatus.COMPLETED):
@@ -848,7 +931,7 @@ class Orchestrator:
                 }
         return outputs
 
-    def _detect_limitations(self, graph: TaskGraph) -> List[str]:
+    def _detect_limitations(self, graph: TaskGraph) -> list[str]:
         """Detect execution limitations."""
         limitations = []
 
@@ -892,8 +975,7 @@ class Orchestrator:
 
         if graph.is_complete:
             task_state.status = (
-                PersistTaskStatus.COMPLETED if not graph.has_failures
-                else PersistTaskStatus.FAILED
+                PersistTaskStatus.COMPLETED if not graph.has_failures else PersistTaskStatus.FAILED
             )
 
         self._state_store.save_task(task_state)
@@ -907,11 +989,11 @@ class Orchestrator:
             events=self._events,
         )
 
-    def _emit(self, event_type: str, data: Dict[str, Any]) -> None:
+    def _emit(self, event_type: str, data: dict[str, Any]) -> None:
         """Emit an orchestration event."""
         event = {
             "event_type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "execution_id": self._execution_id,
             **data,
         }

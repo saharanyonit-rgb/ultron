@@ -8,9 +8,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -38,7 +37,7 @@ class BedrockProvider(LLMProvider):
         access_key: str,
         secret_key: str,
         model: str = "anthropic.claude-sonnet-4-20250514",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
     ) -> None:
         self._region = region
@@ -48,7 +47,7 @@ class BedrockProvider(LLMProvider):
         self._system_prompt = system_prompt
         self._temperature = temperature
         self._base_url = f"https://bedrock.{region}.amazonaws.com"
-        self._messages: List[Dict[str, Any]] = []
+        self._messages: list[dict[str, Any]] = []
 
     def _sign(self, key: bytes, msg: str) -> bytes:
         return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
@@ -66,7 +65,7 @@ class BedrockProvider(LLMProvider):
         url: str,
         body: str,
         service: str = "bedrock",
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         t = datetime.utcnow()
         amz_date = t.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = t.strftime("%Y%m%d")
@@ -83,7 +82,9 @@ class BedrockProvider(LLMProvider):
             "host": parsed.netloc,
         }
 
-        canonical_headers = "\n".join(f"{k.lower()}:{v}" for k, v in sorted(headers_to_sign.items())) + "\n"
+        canonical_headers = (
+            "\n".join(f"{k.lower()}:{v}" for k, v in sorted(headers_to_sign.items())) + "\n"
+        )
         signed_headers = ";".join(k.lower() for k in sorted(headers_to_sign.keys()))
 
         canonical_request = f"{method}\n{canonical_uri}\n{canonical_querystr}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
@@ -92,7 +93,9 @@ class BedrockProvider(LLMProvider):
         string_to_sign = f"{algorithm}\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
 
         signing_key = self._get_signing_key(self._secret_key, date_stamp, self._region, service)
-        signature = hmac.new(signing_key, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+        signature = hmac.new(
+            signing_key, string_to_sign.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
 
         authorization_header = (
             f"{algorithm} Credential={self._access_key}/{credential_scope}, "
@@ -109,19 +112,24 @@ class BedrockProvider(LLMProvider):
     def _is_anthropic_model(self) -> bool:
         return self._model.startswith("anthropic.")
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         if text is not None:
-            self._messages.append({"role": "user", "content": [{"text": text}] if self._is_anthropic_model() else text})
+            self._messages.append(
+                {
+                    "role": "user",
+                    "content": [{"text": text}] if self._is_anthropic_model() else text,
+                }
+            )
 
         if self._is_anthropic_model():
             return self._complete_anthropic(tools)
         else:
             return self._complete_openai(tools)
 
-    def _complete_anthropic(self, tools: List["ToolSpec"]) -> ProviderResult:
+    def _complete_anthropic(self, tools: list[ToolSpec]) -> ProviderResult:
         system_content = self._system_prompt or ""
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": 4096,
             "messages": self._messages,
@@ -157,11 +165,11 @@ class BedrockProvider(LLMProvider):
         data = json.loads(response.text)
         return self._parse_anthropic_response(data)
 
-    def _complete_openai(self, tools: List["ToolSpec"]) -> ProviderResult:
+    def _complete_openai(self, tools: list[ToolSpec]) -> ProviderResult:
         if self._system_prompt and not any(m.get("role") == "system" for m in self._messages):
             self._messages.insert(0, {"role": "system", "content": self._system_prompt})
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": self._messages,
             "temperature": self._temperature,
@@ -197,11 +205,11 @@ class BedrockProvider(LLMProvider):
         data = json.loads(response.text)
         return self._parse_openai_response(data)
 
-    def _parse_anthropic_response(self, data: Dict[str, Any]) -> ProviderResult:
+    def _parse_anthropic_response(self, data: dict[str, Any]) -> ProviderResult:
         content = data.get("completion", {}).get("content", [])
 
-        text: Optional[str] = None
-        tool_calls: List[ToolCall] = []
+        text: str | None = None
+        tool_calls: list[ToolCall] = []
 
         for block in content:
             if block.get("type") == "text":
@@ -220,7 +228,7 @@ class BedrockProvider(LLMProvider):
 
         return ProviderResult(text=text, tool_calls=tool_calls)
 
-    def _parse_openai_response(self, data: Dict[str, Any]) -> ProviderResult:
+    def _parse_openai_response(self, data: dict[str, Any]) -> ProviderResult:
         choices = data.get("choices", [])
         if not choices:
             return ProviderResult(text=None, tool_calls=[])
@@ -228,15 +236,15 @@ class BedrockProvider(LLMProvider):
         choice = choices[0]
         message = choice.get("message", {})
 
-        text: Optional[str] = message.get("content")
+        text: str | None = message.get("content")
         raw_tools = message.get("tool_calls", [])
 
-        assistant_turn: Dict[str, Any] = {"role": "assistant", "content": text}
+        assistant_turn: dict[str, Any] = {"role": "assistant", "content": text}
         if raw_tools:
             assistant_turn["tool_calls"] = raw_tools
         self._messages.append(assistant_turn)
 
-        tool_calls: List[ToolCall] = []
+        tool_calls: list[ToolCall] = []
         for tc in raw_tools:
             fn = tc.get("function", {})
             raw_args = fn.get("arguments", {})
@@ -260,7 +268,7 @@ class BedrockProvider(LLMProvider):
 
         return ProviderResult(text=text, tool_calls=tool_calls)
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         for result in results:
             if self._is_anthropic_model():
                 self._messages.append(

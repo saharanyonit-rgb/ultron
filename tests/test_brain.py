@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from typing import List, Optional
-
-import pytest
-
 from ultron.actions import PermissionGate
 from ultron.actions.audit_log import AuditLog
 from ultron.core.agent import Agent
@@ -24,18 +19,18 @@ from ultron.tools import ALL_TOOLS, ToolRegistry
 class ScriptedProvider(LLMProvider):
     name = "scripted_brain_provider"
 
-    def __init__(self, script: Optional[List[ProviderResult]] = None) -> None:
+    def __init__(self, script: list[ProviderResult] | None = None) -> None:
         self._script = list(script) if script else []
         self.should_fail = False
 
-    def complete(self, text: Optional[str], tools) -> ProviderResult:
+    def complete(self, text: str | None, tools) -> ProviderResult:
         if self.should_fail:
             raise RuntimeError("LLM Provider Connection Failed")
         if not self._script:
             return ProviderResult(text="default scripted response", tool_calls=[])
         return self._script.pop(0)
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         pass
 
 
@@ -98,7 +93,8 @@ def test_llm_failure(tmp_path):
 # --- Test 4 — Agent failure ---
 def test_agent_failure_handled(tmp_path):
     class FailingAgent(Agent):
-        def run(self, user_text: str):
+        # Signature mirrors Agent.run, which takes an optional visible-tool subset.
+        def run(self, user_text: str, tools=None):
             raise ValueError("Agent internal pipeline crash")
 
     provider = ScriptedProvider()

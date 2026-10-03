@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from ultron.agents import AgentCapability
 from ultron.core.router import IntentRouter, RouteDecision, RouteType
@@ -25,7 +25,7 @@ from ultron.core.router import IntentRouter, RouteDecision, RouteType
 logger = logging.getLogger("ultron.brains.router")
 
 
-class BrainType(str, Enum):
+class BrainType(StrEnum):
     PLANNING = "planning"
     RESEARCH = "research"
     CODING = "coding"
@@ -42,8 +42,8 @@ class BrainRouteDecision:
     brain_type: BrainType
     confidence: float = 1.0
     reasoning: str = ""
-    required_capabilities: List[AgentCapability] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    required_capabilities: list[AgentCapability] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     routing_decision: Any = None
 
 
@@ -62,44 +62,113 @@ class BrainRouter:
     """
 
     PLANNING_KEYWORDS = {
-        "plan", "strategy", "execute", "step", "steps", "workflow",
-        "multiple", "sequence", "coordinate", "decompose", "break down",
-        "subtask", "parallel", "dependency", "roadmap", "milestone",
+        "plan",
+        "strategy",
+        "execute",
+        "step",
+        "steps",
+        "workflow",
+        "multiple",
+        "sequence",
+        "coordinate",
+        "decompose",
+        "break down",
+        "subtask",
+        "parallel",
+        "dependency",
+        "roadmap",
+        "milestone",
     }
 
     RESEARCH_KEYWORDS = {
-        "research", "search", "find", "look up", "investigate", "explore",
-        "analyze", "compare", "evaluate", "review", "survey", "study",
-        "information", "facts", "sources", "competitor", "pricing",
+        "research",
+        "search",
+        "find",
+        "look up",
+        "investigate",
+        "explore",
+        "analyze",
+        "compare",
+        "evaluate",
+        "review",
+        "survey",
+        "study",
+        "information",
+        "facts",
+        "sources",
+        "competitor",
+        "pricing",
     }
 
     CODING_KEYWORDS = {
-        "code", "programming", "implement", "bug", "fix", "error",
-        "function", "class", "module", "refactor", "test", "debug",
-        "repository", "file", "commit", "repository", "git", "merge",
-        "authentication", "login", "feature", "development",
+        "code",
+        "programming",
+        "implement",
+        "bug",
+        "fix",
+        "error",
+        "function",
+        "class",
+        "module",
+        "refactor",
+        "test",
+        "debug",
+        "repository",
+        "file",
+        "commit",
+        "git",
+        "merge",
+        "authentication",
+        "login",
+        "feature",
+        "development",
     }
 
     COMPUTER_KEYWORDS = {
-        "open", "close", "click", "type", "browse", "navigate",
-        "mouse", "keyboard", "screen", "window", "application",
-        "chrome", "browser", "app", "desktop", "launch",
+        "open",
+        "close",
+        "click",
+        "type",
+        "browse",
+        "navigate",
+        "mouse",
+        "keyboard",
+        "screen",
+        "window",
+        "application",
+        "chrome",
+        "browser",
+        "app",
+        "desktop",
+        "launch",
     }
 
     VERIFICATION_KEYWORDS = {
-        "verify", "check", "confirm", "validate", "test", "ensure",
-        "inspect", "review", "success", "failed", "result", "output",
-        "did it work", "was it successful", "confirm that",
+        "verify",
+        "check",
+        "confirm",
+        "validate",
+        "test",
+        "ensure",
+        "inspect",
+        "review",
+        "success",
+        "failed",
+        "result",
+        "output",
+        "did it work",
+        "was it successful",
+        "confirm that",
     }
 
     def __init__(
         self,
-        intent_router: Optional[IntentRouter] = None,
+        intent_router: IntentRouter | None = None,
         use_capability_routing: bool = True,
-        available_tools: Optional[set] = None,
+        available_tools: set | None = None,
         use_llm_fallback: bool = False,
         confidence_threshold: float = 0.35,
-        llm_classifier: Optional[Any] = None,
+        llm_classifier: Any | None = None,
     ) -> None:
         self._intent_router = intent_router or IntentRouter()
         self._use_capability_routing = use_capability_routing
@@ -107,14 +176,18 @@ class BrainRouter:
         self._available_tools = available_tools or set()
 
         import os as _os
+
         _use_llm = use_llm_fallback
         if _os.environ.get("JARVIS_ROUTER_LLM_FALLBACK", "").lower() == "true":
             _use_llm = True
 
-        _threshold = float(_os.environ.get("JARVIS_ROUTER_CONFIDENCE_THRESHOLD", str(confidence_threshold)))
+        _threshold = float(
+            _os.environ.get("JARVIS_ROUTER_CONFIDENCE_THRESHOLD", str(confidence_threshold))
+        )
 
         if self._use_capability_routing:
             from ultron.brains.capability_router import CapabilityBasedRouter
+
             self._capability_router = CapabilityBasedRouter(
                 available_tools=self._available_tools,
                 use_llm_fallback=_use_llm,
@@ -122,7 +195,7 @@ class BrainRouter:
                 llm_classifier=llm_classifier,
             )
 
-    def route(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> BrainRouteDecision:
+    def route(self, user_input: str, context: dict[str, Any] | None = None) -> BrainRouteDecision:
         """Analyze user input and select the appropriate brain.
 
         Args:
@@ -137,9 +210,14 @@ class BrainRouter:
 
         return self._route_legacy(user_input, context)
 
-    def _route_with_capabilities(self, user_input: str, context: Optional[Dict[str, Any]]) -> BrainRouteDecision:
+    def _route_with_capabilities(
+        self, user_input: str, context: dict[str, Any] | None
+    ) -> BrainRouteDecision:
         """Route using the new capability-based router."""
-        routing_decision = self._capability_router.route(user_input, context)
+        router = self._capability_router
+        if router is None:
+            return self._route_legacy(user_input, context)
+        routing_decision = router.route(user_input, context)
 
         brain_type_map = {
             "planning": BrainType.PLANNING,
@@ -150,10 +228,7 @@ class BrainRouter:
             "fast": BrainType.FAST,
         }
 
-        brain_type = brain_type_map.get(
-            routing_decision.selected_brain,
-            BrainType.FAST
-        )
+        brain_type = brain_type_map.get(routing_decision.selected_brain, BrainType.FAST)
 
         capability_map = {
             BrainType.PLANNING: [AgentCapability.TASK],
@@ -171,7 +246,9 @@ class BrainRouter:
             required_capabilities=capability_map.get(brain_type, [AgentCapability.GENERAL]),
             metadata={
                 "intent": routing_decision.intent.value if routing_decision.intent else "unknown",
-                "complexity": routing_decision.complexity.value if routing_decision.complexity else "unknown",
+                "complexity": routing_decision.complexity.value
+                if routing_decision.complexity
+                else "unknown",
                 "matched_capabilities": routing_decision.matched_capabilities,
                 "required_tools": routing_decision.required_tools,
                 "workflow_required": routing_decision.workflow_required,
@@ -190,7 +267,7 @@ class BrainRouter:
             routing_decision=routing_decision,
         )
 
-    def _route_legacy(self, user_input: str, context: Optional[Dict[str, Any]]) -> BrainRouteDecision:
+    def _route_legacy(self, user_input: str, context: dict[str, Any] | None) -> BrainRouteDecision:
         """Legacy keyword-based routing for backwards compatibility."""
         text = user_input.lower().strip()
 
@@ -216,7 +293,7 @@ class BrainRouter:
         self,
         text: str,
         intent_decision: RouteDecision,
-        context: Optional[Dict[str, Any]],
+        context: dict[str, Any] | None,
     ) -> BrainRouteDecision:
         tool_name = intent_decision.target or ""
 
@@ -249,7 +326,7 @@ class BrainRouter:
     def _route_conversational(
         self,
         text: str,
-        context: Optional[Dict[str, Any]],
+        context: dict[str, Any] | None,
     ) -> BrainRouteDecision:
         scores = self._score_brain_types(text)
 
@@ -303,12 +380,19 @@ class BrainRouter:
     def _route_complex(
         self,
         text: str,
-        context: Optional[Dict[str, Any]],
+        context: dict[str, Any] | None,
     ) -> BrainRouteDecision:
         has_complexity_indicators = any(
-            phrase in text for phrase in [
-                "and then", "first", "after that", "next",
-                "multiple", "several", "steps", "workflow",
+            phrase in text
+            for phrase in [
+                "and then",
+                "first",
+                "after that",
+                "next",
+                "multiple",
+                "several",
+                "steps",
+                "workflow",
             ]
         )
 
@@ -335,8 +419,8 @@ class BrainRouter:
 
         return self._route_conversational(text, context)
 
-    def _score_brain_types(self, text: str) -> Dict[str, float]:
-        scores: Dict[str, float] = {
+    def _score_brain_types(self, text: str) -> dict[str, float]:
+        scores: dict[str, float] = {
             "planning": 0.0,
             "research": 0.0,
             "coding": 0.0,
@@ -377,8 +461,14 @@ class BrainRouter:
         text = user_input.lower()
 
         complexity_indicators = [
-            " and ", " then ", " after ", " multiple ",
-            " steps", " workflow", " execute", " plan",
+            " and ",
+            " then ",
+            " after ",
+            " multiple ",
+            " steps",
+            " workflow",
+            " execute",
+            " plan",
         ]
 
         has_complexity = any(ind in text for ind in complexity_indicators)

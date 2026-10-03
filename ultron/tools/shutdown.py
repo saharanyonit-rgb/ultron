@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import logging
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 
 from ultron.tools.base import Tool
 
@@ -16,6 +18,7 @@ logger = logging.getLogger("ultron.tools.shutdown")
 @dataclass
 class ShutdownResult:
     """Result of shutdown operation."""
+
     success: bool
     message: str
     exit_code: int = 0
@@ -25,6 +28,14 @@ class ShutdownTool(Tool):
     """Initiate system shutdown using the platform-appropriate mechanism."""
 
     name = "system_shutdown"
+    keywords = (
+        "shut down",
+        "shutdown",
+        "power off",
+        "restart the computer",
+        "turn off the computer",
+    )
+    risk = RiskLevel.CRITICAL
     description = (
         "Initiate system shutdown or reboot. "
         "This is a CRITICAL-risk action that requires user confirmation. "
@@ -55,7 +66,7 @@ class ShutdownTool(Tool):
     }
     mutates = True
 
-    def run(self, confirm: bool = False, reboot: bool = False, **_: Any) -> Dict[str, Any]:
+    def run(self, confirm: bool = False, reboot: bool = False, **_: Any) -> dict[str, Any]:
         if not confirm:
             return {
                 "success": False,
@@ -69,7 +80,10 @@ class ShutdownTool(Tool):
                 cmd = ["reboot"] if reboot else ["shutdown", "-h", "now"]
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=30,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             success = result.returncode == 0
             action = "reboot" if reboot else "shutdown"

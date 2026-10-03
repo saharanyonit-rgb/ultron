@@ -20,15 +20,15 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ultron.execution_state")
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -44,17 +44,17 @@ class StepState:
     step_id: str
     objective: str = ""
     status: str = "pending"
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
+    result: dict[str, Any] | None = None
+    error: str | None = None
     retry_count: int = 0
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
+    started_at: str | None = None
+    completed_at: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StepState":
+    def from_dict(cls, data: dict[str, Any]) -> StepState:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -66,13 +66,13 @@ class TaskState:
     plan_id: str = ""
     description: str = ""
     status: TaskStatus = TaskStatus.PENDING
-    steps: List[StepState] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    completed_at: Optional[str] = None
+    steps: list[StepState] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    completed_at: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "plan_id": self.plan_id,
@@ -86,7 +86,7 @@ class TaskState:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TaskState":
+    def from_dict(cls, data: dict[str, Any]) -> TaskState:
         steps = [StepState.from_dict(s) for s in data.get("steps", [])]
         return cls(
             task_id=data["task_id"],
@@ -101,15 +101,15 @@ class TaskState:
         )
 
     @property
-    def completed_steps(self) -> List[StepState]:
+    def completed_steps(self) -> list[StepState]:
         return [s for s in self.steps if s.status == "succeeded"]
 
     @property
-    def failed_steps(self) -> List[StepState]:
+    def failed_steps(self) -> list[StepState]:
         return [s for s in self.steps if s.status == "failed"]
 
     @property
-    def pending_steps(self) -> List[StepState]:
+    def pending_steps(self) -> list[StepState]:
         return [s for s in self.steps if s.status == "pending"]
 
     @property
@@ -125,7 +125,7 @@ class ExecutionStateStore:
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._tasks: Dict[str, TaskState] = {}
+        self._tasks: dict[str, TaskState] = {}
         self._load()
 
     @property
@@ -134,15 +134,15 @@ class ExecutionStateStore:
 
     def save_task(self, task: TaskState) -> None:
         """Save or update a task state."""
-        task.updated_at = datetime.now(timezone.utc).isoformat()
+        task.updated_at = datetime.now(UTC).isoformat()
         self._tasks[task.task_id] = task
         self._persist()
 
-    def load_task(self, task_id: str) -> Optional[TaskState]:
+    def load_task(self, task_id: str) -> TaskState | None:
         """Load a task by ID."""
         return self._tasks.get(task_id)
 
-    def list_tasks(self, status: TaskStatus | None = None) -> List[TaskState]:
+    def list_tasks(self, status: TaskStatus | None = None) -> list[TaskState]:
         """List all tasks, optionally filtered by status."""
         tasks = list(self._tasks.values())
         if status:
@@ -162,8 +162,8 @@ class ExecutionStateStore:
         task_id: str,
         step_id: str,
         status: str,
-        result: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
     ) -> bool:
         """Update a specific step in a task."""
         task = self._tasks.get(task_id)
@@ -176,14 +176,14 @@ class ExecutionStateStore:
                 step.result = result
                 step.error = error
                 if status == "running":
-                    step.started_at = datetime.now(timezone.utc).isoformat()
+                    step.started_at = datetime.now(UTC).isoformat()
                 elif status in ("succeeded", "failed"):
-                    step.completed_at = datetime.now(timezone.utc).isoformat()
+                    step.completed_at = datetime.now(UTC).isoformat()
                 self._persist()
                 return True
         return False
 
-    def get_incomplete_tasks(self) -> List[TaskState]:
+    def get_incomplete_tasks(self) -> list[TaskState]:
         """Get tasks that were interrupted (running or paused)."""
         return self.list_tasks(TaskStatus.RUNNING) + self.list_tasks(TaskStatus.PAUSED)
 
@@ -204,7 +204,7 @@ class ExecutionStateStore:
         """Persist state to disk."""
         data = {
             "tasks": [t.to_dict() for t in self._tasks.values()],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
         try:
             with self._path.open("w", encoding="utf-8") as fh:

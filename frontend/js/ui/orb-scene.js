@@ -119,7 +119,7 @@ export function createOrbScene(container, options = {}) {
   const chromaticPass = new ShaderPass(chromaticShader);
   composer.addPass(chromaticPass);
 
-  // Controls: drag to rotate, scroll to zoom.
+  // Controls: drag to rotate, scroll / pinch to zoom.
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.04;
@@ -127,6 +127,11 @@ export function createOrbScene(container, options = {}) {
   controls.maxDistance = MAX_DISTANCE;
   controls.zoomSpeed = 1.4;
   controls.enablePan = false;
+  // Touch: one finger spins, two fingers pinch to zoom and drag to spin. The
+  // default is DOLLY_PAN, which silently does nothing for the pan half while
+  // pan is disabled, so the two-finger gesture is stated outright.
+  controls.touches.ONE = THREE.TOUCH.ROTATE;
+  controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
 
   // ——— COLORS ———
   const C_BRIGHT = 0xffaa30;

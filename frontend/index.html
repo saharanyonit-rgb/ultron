@@ -106,7 +106,7 @@
   <div class="orb-hud orb-hud-hint">
     <div>
       <span class="key">DRAG</span> spin&nbsp;&nbsp;
-      <span class="key">SCROLL</span> zoom&nbsp;&nbsp;
+      <span class="key">SCROLL</span> <span class="key">PINCH</span> zoom&nbsp;&nbsp;
       <span class="key">R</span> reset
     </div>
     <div>
@@ -333,85 +333,8 @@
       </button>
     </div>
 
-    <div class="core-flanks">
-      <div class="flank" id="flank-cpu">
-        <div class="flank-head">
-          <span class="flank-label">CPU</span>
-          <span class="flank-value" id="flank-cpu-val">--<small>%</small></span>
-        </div>
-        <div class="flank-track"><div class="flank-fill" id="flank-cpu-fill"></div></div>
-        <span class="flank-sub" id="flank-cpu-sub">AWAITING TELEMETRY</span>
-      </div>
-      <div class="flank" id="flank-ram">
-        <div class="flank-head">
-          <span class="flank-label">RAM</span>
-          <span class="flank-value" id="flank-ram-val">--<small>%</small></span>
-        </div>
-        <div class="flank-track"><div class="flank-fill" id="flank-ram-fill"></div></div>
-        <span class="flank-sub" id="flank-ram-sub">AWAITING TELEMETRY</span>
-      </div>
-    </div>
-
     <div class="lower-deck"></div>
   </main>
-
-  <!-- ══════════ RIGHT PANEL ══════════ -->
-  <aside class="right-panel scrollable" aria-label="Compute and storage">
-    <section class="panel">
-      <div class="panel-header">
-        <span class="panel-title"><span class="label">Storage</span></span>
-        <span class="status-pill" id="disk-pill">UNKNOWN</span>
-      </div>
-      <div class="row-list" id="disk-list">
-        <div class="telemetry-row"><span class="telemetry-key">Awaiting telemetry</span><span class="telemetry-val is-unknown">--</span></div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <span class="panel-title"><span class="label">Execution</span></span>
-      </div>
-      <div class="telemetry">
-        <div class="telemetry-row">
-          <span class="telemetry-key">State</span>
-          <span class="telemetry-val is-unknown" id="t-state">IDLE</span>
-        </div>
-        <div class="telemetry-row">
-          <span class="telemetry-key">Goal</span>
-          <span class="telemetry-val is-unknown" id="t-goal">NONE</span>
-        </div>
-        <div class="telemetry-row">
-          <span class="telemetry-key">Progress</span>
-          <span class="telemetry-val is-unknown" id="t-progress">0%</span>
-        </div>
-      </div>
-      <div class="telemetry-row" style="border:none;padding-bottom:0">
-        <div class="mini-meter" style="width:100%"><div class="mini-meter-fill" id="progress-fill" style="width:0%"></div></div>
-      </div>
-      <div style="display:flex;gap:4px;margin-top:var(--space-3)">
-        <button type="button" class="btn-mini" id="btn-pause">PAUSE</button>
-        <button type="button" class="btn-mini" id="btn-resume">RESUME</button>
-        <button type="button" class="btn-mini danger" id="btn-stop">ABORT</button>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <span class="panel-title"><span class="label">Active Window</span></span>
-        <span class="status-pill" id="desktop-pill">UNKNOWN</span>
-      </div>
-      <div class="telemetry">
-        <div class="telemetry-row">
-          <span class="telemetry-key">Foreground</span>
-          <span class="telemetry-val is-unknown" id="t-window">UNKNOWN</span>
-        </div>
-        <div class="telemetry-row">
-          <span class="telemetry-key">Processes</span>
-          <span class="telemetry-val is-unknown" id="t-procs">--</span>
-        </div>
-      </div>
-    </section>
-  </aside>
 
   <!-- ══════════ BOTTOM DOCK ══════════ -->
   <footer class="bottom-dock">

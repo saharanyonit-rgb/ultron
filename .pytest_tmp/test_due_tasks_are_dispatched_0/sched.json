@@ -1,0 +1,20 @@
+{
+  "tasks": [
+    {
+      "id": "t1",
+      "tool_name": "take_screenshot",
+      "arguments": {
+        "x": 1
+      },
+      "run_at": "2026-10-01T17:24:52.471984+05:30",
+      "risk": "low",
+      "created_at": "2026-10-01T17:24:57.471984+05:30",
+      "status": "completed",
+      "result": {
+        "ok": true
+      },
+      "error": null
+    }
+  ],
+  "automations": []
+}

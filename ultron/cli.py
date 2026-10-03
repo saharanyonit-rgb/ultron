@@ -7,15 +7,13 @@ Text in / text out. This is the temporary frontend; the orchestration brain
 from __future__ import annotations
 
 import ctypes
-import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 from ultron.actions import PermissionGate
-from ultron.audit import AuditLogger
 from ultron.actions.permissions import CLIPermissionGate, SecurePermissionGate
+from ultron.audit import AuditLogger
 from ultron.config import ConfigError, load_config
 from ultron.core.agent import Agent
 from ultron.core.brain import Brain, ResponseStatus
@@ -81,7 +79,7 @@ class Cli:
         agent: Agent,
         memory: Memory,
         registry: ToolRegistry,
-        brain: Optional[Brain] = None,
+        brain: Brain | None = None,
     ) -> None:
         self._memory = memory
         self._registry = registry
@@ -158,11 +156,20 @@ class Cli:
         print("Checking external AI engines...")
         try:
             import os
+
             import httpx
 
             checks = [
-                ("Vane (vane_search)", os.environ.get("VANE_BASE_URL", "http://127.0.0.1:3000").rstrip("/"), "/api/providers"),
-                ("AgenticSeek (agenticseek_task)", os.environ.get("AGENTICSEEK_BASE_URL", "http://127.0.0.1:7777").rstrip("/"), "/health"),
+                (
+                    "Vane (vane_search)",
+                    os.environ.get("VANE_BASE_URL", "http://127.0.0.1:3000").rstrip("/"),
+                    "/api/providers",
+                ),
+                (
+                    "AgenticSeek (agenticseek_task)",
+                    os.environ.get("AGENTICSEEK_BASE_URL", "http://127.0.0.1:7777").rstrip("/"),
+                    "/health",
+                ),
             ]
             for label, base, path in checks:
                 try:
@@ -189,7 +196,6 @@ class Cli:
 
     def _print_permissions(self) -> None:
         gate = self._brain.agent._gate
-        from ultron.actions.permissions import SecurePermissionGate
         if isinstance(gate, SecurePermissionGate):
             print("Permission mode: SECURE (mutating tools require confirmation)")
         else:
@@ -200,6 +206,7 @@ class Cli:
         turns = len(self._memory)
         print(f"In-memory turns: {turns}")
         from ultron.memory.persistent import PersistentMemory
+
         if isinstance(self._memory, PersistentMemory):
             print(f"Persistent file: {self._memory.path}")
             if self._memory.path.is_file():
@@ -214,16 +221,26 @@ class Cli:
             print("Set ULTRON_MEMORY_FILE to enable persistence.")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Ultron — JARVIS-style desktop assistant")
-    parser.add_argument("--web", action="store_true", default=True, help="Start the web dashboard (default: on)")
+    parser.add_argument(
+        "--web", action="store_true", default=True, help="Start the web dashboard (default: on)"
+    )
     parser.add_argument("--no-web", action="store_true", help="Disable web dashboard")
-    parser.add_argument("--headless", action="store_true", help="Run without REPL (background/autostart mode)")
+    parser.add_argument(
+        "--headless", action="store_true", help="Run without REPL (background/autostart mode)"
+    )
     parser.add_argument("--port", type=int, default=8080, help="Web dashboard port (default: 8080)")
-    parser.add_argument("--host", default="127.0.0.1", help="Web dashboard host (default: 127.0.0.1)")
-    parser.add_argument("--lan", action="store_true", help="Bind to 0.0.0.0 for LAN/mobile access (e.g. from Android)")
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Web dashboard host (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--lan",
+        action="store_true",
+        help="Bind to 0.0.0.0 for LAN/mobile access (e.g. from Android)",
+    )
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress log output")
     parser.add_argument(
         "--provider",
@@ -241,6 +258,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.provider:
         import os
+
         os.environ["ULTRON_PROVIDER"] = args.provider
 
     try:
@@ -260,7 +278,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     _lock_file = None
     try:
         if sys.platform == "win32":
-            mutex_name = "JarvisMutex_{}".format("ultron".encode().hex())
+            mutex_name = "JarvisMutex_{}".format(b"ultron".hex())
             # use_last_error=True is required for ctypes.get_last_error() to
             # capture the CreateMutexW WIN32 error (ERROR_ALREADY_EXISTS=183).
             kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -268,19 +286,24 @@ def main(argv: Optional[list[str]] = None) -> int:
             last_error = ctypes.get_last_error()
             if last_error == 183:  # ERROR_ALREADY_EXISTS
                 logger.error("Another JARVIS instance is already running (mutex: %s)", mutex_name)
-                print("Another JARVIS instance is already running. Only one instance may run at a time.")
+                print(
+                    "Another JARVIS instance is already running. Only one instance may run at a time."
+                )
                 return 1
             _jarvis_mutex = mutex
         else:
             # POSIX: use a lock file
             import fcntl
+
             lock_path = Path.home() / ".ultron" / ".lock"
             lock_path.parent.mkdir(parents=True, exist_ok=True)
             _lock_file = open(lock_path, "w")
             try:
                 fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except OSError:
-                print("Another JARVIS instance is already running. Only one instance may run at a time.")
+                print(
+                    "Another JARVIS instance is already running. Only one instance may run at a time."
+                )
                 return 1
     except Exception:
         logger.warning("Could not create lock for instance prevention")
@@ -295,12 +318,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         if _lock_file is not None:
             try:
                 import fcntl
+
                 fcntl.flock(_lock_file, fcntl.LOCK_UN)
                 _lock_file.close()
             except Exception:
                 pass
 
     import atexit
+
     atexit.register(cleanup_mutex)
 
     # ... rest of main() continues
@@ -315,6 +340,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     registry = ToolRegistry()
     audit = AuditLogger(config.audit_log_path)
     from ultron.actions.audit_log import AuditLog
+
     agent_audit = AuditLog(config.audit_log_path)
 
     if config.require_permission:
@@ -332,6 +358,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     from ultron.memory.semantic import SemanticMemory
     from ultron.services import get_memory_service
+
     if str(config.memory_file):
         memory: Memory = SemanticMemory(config.memory_file)
     else:
@@ -342,19 +369,32 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     web_server = None
     if args.web:
-        import webbrowser
         import time as _time
-        from ultron.web import JarvisAPI, BrainExecutionController
-        from ultron.orchestrator import Orchestrator, OrchestratorConfig
-        from ultron.autonomous import AutonomousExecutor, AutonomousConfig
-        from ultron.tools import ToolExecutor
+        import webbrowser
+
         from ultron.agent_manager import AgentManager
-        from ultron.status import StatusReporter
+        from ultron.autonomous import AutonomousConfig, AutonomousExecutor
         from ultron.brains import BrainOrchestrator
+        from ultron.orchestrator import Orchestrator, OrchestratorConfig
+        from ultron.status import StatusReporter
+        from ultron.tools import ToolExecutor
+        from ultron.web import BrainExecutionController, JarvisAPI
 
         execution_controller = BrainExecutionController(brain)
 
-        tool_executor = ToolExecutor(registry)
+        # The specialized brains and the autonomous executor run tools through
+        # this executor, so it must carry the same gate and audit log as the
+        # main agent. Constructing it bare gave them a pass-through gate and no
+        # audit trail, which silently bypassed secure mode for every goal-mode
+        # request coming from the dashboard.
+        tool_executor = ToolExecutor(registry, gate=gate, audit_log=agent_audit)
+
+        # Deferred tool calls must use this same gated, audited executor, not a
+        # self-built one, otherwise scheduled work would run unattended without
+        # the user's permission checks or any audit trail.
+        from ultron.tools.scheduling import set_executor as _set_schedule_executor
+
+        _set_schedule_executor(tool_executor)
         status_reporter = StatusReporter()
         agent_manager = AgentManager()
 
@@ -400,7 +440,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         web_server.set_orchestrator(orchestrator)
 
         # Wire reminder notifications → SSE broadcaster
-        from ultron.services import get_reminders_service, ReminderStatus
+        from ultron.services import get_reminders_service
+
         reminders_svc = get_reminders_service()
         reminders_svc.set_notification_callback(
             lambda r: web_server.broadcast_event("reminder_fired", r.to_dict())
@@ -412,10 +453,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         if args.lan:
             import socket as _socket
+
             lan_ips = []
             try:
                 for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
-                    ip = info[4][0]
+                    ip = str(info[4][0])
                     if not ip.startswith("127."):
                         lan_ips.append(ip)
             except Exception:
@@ -429,18 +471,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                 except Exception:
                     pass
             if lan_ips:
-                print(f"\n  LAN access (Android / other devices on same WiFi):")
+                print("\n  LAN access (Android / other devices on same WiFi):")
                 for ip in set(lan_ips):
                     print(f"    http://{ip}:{args.port}")
-                print(f"\n  Open this URL in your Android browser to use ULTRON.")
+                print("\n  Open this URL in your Android browser to use ULTRON.")
             else:
-                print(f"\n  LAN mode enabled but could not detect local IP.")
+                print("\n  LAN mode enabled but could not detect local IP.")
                 print(f"  Check your WiFi IP manually and use: http://<your-ip>:{args.port}")
 
         # Wait for server to be ready before opening UI
         print("Waiting for JARVIS server to be ready...")
         ready = False
-        for i in range(30):  # wait up to 30 seconds
+        for _ in range(30):  # wait up to 30 seconds
             try:
                 import httpx
 
@@ -459,6 +501,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         # Get screen resolution for kiosk mode (Windows only)
         try:
             import pyautogui
+
             screen_width, screen_height = pyautogui.size()
             print(f"Screen resolution: {screen_width}x{screen_height}")
         except (ImportError, Exception):
@@ -470,15 +513,33 @@ def main(argv: Optional[list[str]] = None) -> int:
                 webbrowser.open(url)
             except Exception:
                 webbrowser.open(url)
+
         import threading
-        threading.Thread(target=_open_browser, daemon=True).start()
+
+        # Try pywebview first for desktop window; fall back to webbrowser
+        try:
+            import webview
+
+            webview.create_window(
+                "JARVIS",
+                f"http://{args.host}:{args.port}",
+                width=1200,
+                height=800,
+                resizable=True,
+                fullscreen=False,
+            )
+            webview.start(debug=False)
+        except Exception:
+            threading.Thread(target=_open_browser, daemon=True).start()
 
     cli = Cli(agent=agent, memory=memory, registry=registry, brain=brain)
     if args.headless:
         # Autostart/background mode: keep the web server alive, no REPL.
         # This prevents input() from getting EOF (no console) and shutdown.
-        logger.info("Ultron running in headless mode [dashboard=%s]",
-                    f"http://{args.host}:{args.port}" if args.web else "disabled")
+        logger.info(
+            "Ultron running in headless mode [dashboard=%s]",
+            f"http://{args.host}:{args.port}" if args.web else "disabled",
+        )
         try:
             while True:
                 time.sleep(3600)

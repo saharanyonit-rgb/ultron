@@ -11,18 +11,18 @@ expected — no changes to the Agent or Brain required.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import cast
 
 from ultron.errors import (
     AuthenticationError,
+    MalformedResponseError,
     ProviderError,
+    ProviderUnavailableError,
     QuotaError,
     RateLimitError,
     TimeoutError,
-    MalformedResponseError,
-    ProviderUnavailableError,
 )
-from ultron.llm.base import LLMProvider, ProviderResult, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider, ProviderResult, ToolResult
 
 if False:  # TYPE_CHECKING
     from ultron.tools.base import ToolSpec
@@ -46,7 +46,7 @@ class ProviderRouter(LLMProvider):
 
     name = "provider_router"
 
-    def __init__(self, providers: List[LLMProvider]) -> None:
+    def __init__(self, providers: list[LLMProvider]) -> None:
         if not providers:
             raise ValueError("ProviderRouter requires at least one provider")
         self._providers = list(providers)
@@ -60,7 +60,7 @@ class ProviderRouter(LLMProvider):
         return self._providers[self._active_index]
 
     @property
-    def providers(self) -> List[LLMProvider]:
+    def providers(self) -> list[LLMProvider]:
         """All providers in fallback order."""
         return list(self._providers)
 
@@ -86,8 +86,6 @@ class ProviderRouter(LLMProvider):
 
     def _classify_error(self, exc: Exception) -> str:
         """Classify the error to determine routing behavior."""
-        exc_type = type(exc).__name__
-
         if isinstance(exc, QuotaError):
             return "quota_exhausted"
 
@@ -115,11 +113,11 @@ class ProviderRouter(LLMProvider):
         """Determine if the error classification allows retrying the same provider."""
         return classification in ("rate_limited", "timeout", "provider_error", "unknown")
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         """Try each provider in order until one succeeds or all fail."""
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         fallback_triggered = False
-        fallback_provider_index: Optional[int] = None
+        fallback_provider_index: int | None = None
 
         for i, provider in enumerate(self._providers):
             # Skip providers in cooldown
@@ -135,9 +133,15 @@ class ProviderRouter(LLMProvider):
                     self._active_index = i
                 return result
 
-            except (QuotaError, RateLimitError, AuthenticationError, TimeoutError,
-                    ProviderError, MalformedResponseError, ProviderUnavailableError) as exc:
-
+            except (
+                QuotaError,
+                RateLimitError,
+                AuthenticationError,
+                TimeoutError,
+                ProviderError,
+                MalformedResponseError,
+                ProviderUnavailableError,
+            ) as exc:
                 last_error = exc
                 classification = self._classify_error(exc)
                 logger.warning(
@@ -210,7 +214,9 @@ class ProviderRouter(LLMProvider):
                     logger.info("Fallback provider %s succeeded", provider.name)
                     return result
                 except Exception as fallback_exc:
-                    logger.warning("Fallback provider %s also failed: %s", provider.name, fallback_exc)
+                    logger.warning(
+                        "Fallback provider %s also failed: %s", provider.name, fallback_exc
+                    )
                     continue
 
         # All providers failed
@@ -218,30 +224,35 @@ class ProviderRouter(LLMProvider):
             raise last_error
         return ProviderResult(text="All providers failed.", tool_calls=[])
 
-    def _extract_retry_after(self, exc: QuotaError) -> float:
-        """Extract retry_after from quota error if available."""
+    def _extract_retry_after(self, exc: ProviderError) -> float:
+        """Extract retry_after from quota error if available.
+
+        Accepts the common ``ProviderError`` base because the caller's
+        ``except`` tuple widens ``exc`` to it; the body only probes for an
+        optional ``retry_after`` attribute and the message text.
+        """
         # Try to get retry delay from the exception
         if hasattr(exc, "retry_after") and exc.retry_after:
-            return __import__("time").time() + exc.retry_after
+            return cast(float, __import__("time").time() + exc.retry_after)
 
         # Try to parse from error message
         msg = str(exc).lower()
         import re
-        match = re.search(r'retry after[\s:]+(\d+)', msg)
+
+        match = re.search(r"retry after[\s:]+(\d+)", msg)
         if match:
             retry_seconds = int(match.group(1))
-            return __import__("time").time() + retry_seconds
+            return cast(float, __import__("time").time() + retry_seconds)
 
         # Default: mark as unavailable for 1 hour
-        return __import__("time").time() + 3600
+        return cast(float, __import__("time").time() + 3600)
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         """Feed tool results to the active provider."""
         self._providers[self._active_index].feed_tool_results(results)
 
     def health_check(self) -> bool:
         """Check if at least one provider is healthy and not in cooldown."""
-        current_time = __import__("time").time()
         for provider in self._providers:
             if not self._should_skip_provider(provider.name):
                 try:

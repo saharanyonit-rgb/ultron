@@ -15,7 +15,6 @@ import gzip
 import hashlib
 import json
 import logging
-import mimetypes
 import os
 import queue
 import socketserver
@@ -24,18 +23,17 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse, unquote
+from typing import Any, cast
+from urllib.parse import unquote, urlparse
 
+from ultron.permission_manager import PermissionManager, WebPermissionEngine
+from ultron.status import StatusUpdate
 from ultron.web_broadcaster import EventBroadcaster
 from ultron.web_static import (
     API_CACHE_CONTROL,
     FRONTEND_DIR,
     MIME_TYPES,
-    STATIC_CACHE_MAX_AGE,
 )
-from ultron.permission_manager import PermissionManager, WebPermissionEngine
-from ultron.policy import PolicyEngine
 
 logger = logging.getLogger("ultron.web")
 
@@ -44,9 +42,12 @@ def _check_termux_api() -> bool:
     """Check if termux-api is available."""
     try:
         import subprocess
+
         result = subprocess.run(
             ["which", "termux-battery-status"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return result.returncode == 0
     except Exception:
@@ -55,6 +56,7 @@ def _check_termux_api() -> bool:
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     """Multi-threaded HTTP server."""
+
     daemon_threads = True
     allow_reuse_address = True
     request_queue_size = 128
@@ -120,7 +122,11 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
         # Try gzip compression for text files
         accept_encoding = self.headers.get("Accept-Encoding", "")
-        use_gzip = "gzip" in accept_encoding and len(body) > 1024 and mime_type.startswith(("text/", "application/javascript", "application/json"))
+        use_gzip = (
+            "gzip" in accept_encoding
+            and len(body) > 1024
+            and mime_type.startswith(("text/", "application/javascript", "application/json"))
+        )
         if use_gzip:
             body = gzip.compress(body, compresslevel=6)
 
@@ -136,13 +142,14 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _read_body(self) -> Optional[Dict[str, Any]]:
+    def _read_body(self) -> dict[str, Any] | None:
         length = int(self.headers.get("Content-Length", 0))
         if length == 0:
             return None
         raw = self.rfile.read(length)
         try:
-            return json.loads(raw)
+            # Handlers treat every request body as a JSON object.
+            return cast("dict[str, Any]", json.loads(raw))
         except json.JSONDecodeError:
             return None
 
@@ -373,22 +380,28 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
-            if hasattr(self.server, "unsubscribe_events") and callable(self.server.unsubscribe_events):
+            if hasattr(self.server, "unsubscribe_events") and callable(
+                self.server.unsubscribe_events
+            ):
                 self.server.unsubscribe_events(q)
 
     def _handle_control_state(self) -> None:
         ec = getattr(self.server, "_execution_controller", None)
         curr_state = getattr(self.server, "_current_state", "idle")
         if ec:
-            self._send_json({
-                "state": getattr(ec, "_state", "unknown"),
-                "rate_limit": {"max_per_minute": 30},
-            })
+            self._send_json(
+                {
+                    "state": getattr(ec, "_state", "unknown"),
+                    "rate_limit": {"max_per_minute": 30},
+                }
+            )
         else:
-            self._send_json({
-                "state": curr_state,
-                "rate_limit": {"max_per_minute": 30},
-            })
+            self._send_json(
+                {
+                    "state": curr_state,
+                    "rate_limit": {"max_per_minute": 30},
+                }
+            )
 
     def _handle_submit_goal(self) -> None:
         body = self._read_body()
@@ -426,34 +439,42 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_system_metrics(self) -> None:
         from ultron.web_api import get_system_metrics
+
         self._send_json(get_system_metrics())
 
     def _handle_network_status(self) -> None:
         from ultron.web_api import get_network_status
+
         self._send_json(get_network_status())
 
     def _handle_system_info(self) -> None:
         from ultron.web_api import get_system_info
+
         self._send_json(get_system_info())
 
     def _handle_agent_status(self) -> None:
         from ultron.web_api import get_agent_status
+
         self._send_json(get_agent_status())
 
     def _handle_memory_status(self) -> None:
         from ultron.web_api import get_memory_status
+
         self._send_json(get_memory_status())
 
     def _handle_security_status(self) -> None:
         from ultron.web_api import get_security_status
+
         self._send_json(get_security_status())
 
     def _handle_computer_state(self) -> None:
         from ultron.web_api import get_computer_state
+
         self._send_json(get_computer_state())
 
     def _handle_orchestrator_state(self) -> None:
         from ultron.web_api import get_orchestrator_state
+
         # Use the orchestrator if available, otherwise use our tracked state
         if self.server._orchestrator:
             self._send_json(get_orchestrator_state(self.server._orchestrator))
@@ -465,6 +486,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
     def _handle_voice_state(self) -> None:
         self.server._wire_voice_broadcast()
         from ultron.web_api import get_voice_state
+
         self._send_json(get_voice_state())
 
     # ── Additive module routes (ultron/web_modules.py) ─────────
@@ -473,9 +495,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_weather(self) -> None:
         query = dict(
-            item.split("=", 1)
-            for item in urlparse(self.path).query.split("&")
-            if "=" in item
+            item.split("=", 1) for item in urlparse(self.path).query.split("&") if "=" in item
         )
         place = unquote(query["q"]) if "q" in query else None
 
@@ -495,6 +515,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
         try:
             from ultron.web_modules import get_weather
+
             self._send_json(get_weather(place=place, lat=lat, lon=lon))
         except LookupError as exc:
             self._send_error(404, str(exc))
@@ -504,9 +525,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_news(self) -> None:
         query = dict(
-            item.split("=", 1)
-            for item in urlparse(self.path).query.split("&")
-            if "=" in item
+            item.split("=", 1) for item in urlparse(self.path).query.split("&") if "=" in item
         )
         try:
             limit = max(1, min(30, int(query.get("limit", 12))))
@@ -514,6 +533,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             limit = 12
         try:
             from ultron.web_modules import get_news
+
             self._send_json(get_news(limit))
         except Exception as exc:
             logger.warning("news fetch failed: %s", exc)
@@ -525,27 +545,69 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         try:
             from ultron.platform import is_android
             from ultron.tools import ToolRegistry
+
             registry = ToolRegistry()
-            android_tools = [t.name for t in registry.all()
-                           if any(kw in t.name for kw in [
-                               'call', 'sms', 'contact', 'alarm', 'notification',
-                               'battery', 'toggle', 'brightness', 'volume', 'wifi',
-                               'bluetooth', 'airplane', 'data', 'dnd', 'screen_on',
-                               'screen_off', 'unlock', 'device_info', 'network_info',
-                               'location', 'scan_wifi', 'running_apps', 'installed',
-                               'storage', 'memory', 'media', 'vibrate', 'toast',
-                               'tap', 'swipe', 'long_press', 'double_tap',
-                               'input_text', 'press_back', 'press_home', 'press_recent',
-                               'press_key', 'drag', 'ui_dump', 'click_ui', 'read_screen',
-                               'screen_resolution', 'screen_density',
-                           ])]
-            self._send_json({
-                "is_android": is_android(),
-                "android_tools": android_tools,
-                "android_tool_count": len(android_tools),
-                "total_tools": len(registry.all()),
-                "termux_api_available": _check_termux_api(),
-            })
+            android_tools = [
+                t.name
+                for t in registry.all()
+                if any(
+                    kw in t.name
+                    for kw in [
+                        "call",
+                        "sms",
+                        "contact",
+                        "alarm",
+                        "notification",
+                        "battery",
+                        "toggle",
+                        "brightness",
+                        "volume",
+                        "wifi",
+                        "bluetooth",
+                        "airplane",
+                        "data",
+                        "dnd",
+                        "screen_on",
+                        "screen_off",
+                        "unlock",
+                        "device_info",
+                        "network_info",
+                        "location",
+                        "scan_wifi",
+                        "running_apps",
+                        "installed",
+                        "storage",
+                        "memory",
+                        "media",
+                        "vibrate",
+                        "toast",
+                        "tap",
+                        "swipe",
+                        "long_press",
+                        "double_tap",
+                        "input_text",
+                        "press_back",
+                        "press_home",
+                        "press_recent",
+                        "press_key",
+                        "drag",
+                        "ui_dump",
+                        "click_ui",
+                        "read_screen",
+                        "screen_resolution",
+                        "screen_density",
+                    ]
+                )
+            ]
+            self._send_json(
+                {
+                    "is_android": is_android(),
+                    "android_tools": android_tools,
+                    "android_tool_count": len(android_tools),
+                    "total_tools": len(registry.all()),
+                    "termux_api_available": _check_termux_api(),
+                }
+            )
         except Exception as e:
             self._send_json({"is_android": False, "error": str(e)})
 
@@ -553,13 +615,17 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_calendar_list(self) -> None:
         from ultron.services import get_calendar_service
+
         service = get_calendar_service()
         query = urlparse(self.path).query
         params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
-        self._send_json({"events": service.list_events(params.get("from_time"), params.get("to_time"))})
+        self._send_json(
+            {"events": service.list_events(params.get("from_time"), params.get("to_time"))}
+        )
 
     def _handle_calendar_get(self, event_id: str) -> None:
         from ultron.services import get_calendar_service
+
         service = get_calendar_service()
         event = service.get_event(event_id)
         if event is None:
@@ -569,6 +635,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_calendar_create(self) -> None:
         from ultron.services import get_calendar_service
+
         body = self._read_body()
         if not body or "title" not in body:
             self._send_error(400, "Missing 'title' field")
@@ -587,6 +654,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_calendar_delete(self, event_id: str) -> None:
         from ultron.services import get_calendar_service
+
         service = get_calendar_service()
         if service.delete_event(event_id):
             self._send_json({"deleted": True})
@@ -595,12 +663,23 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_calendar_update(self, event_id: str) -> None:
         from ultron.services import get_calendar_service
+
         body = self._read_body()
         if body is None:
             self._send_error(400, "A JSON request body is required")
             return
-        allowed = ("title", "description", "start_time", "end_time", "timezone", "recurrence", "metadata")
-        event = get_calendar_service().update_event(event_id, **{key: body[key] for key in allowed if key in body})
+        allowed = (
+            "title",
+            "description",
+            "start_time",
+            "end_time",
+            "timezone",
+            "recurrence",
+            "metadata",
+        )
+        event = get_calendar_service().update_event(
+            event_id, **{key: body[key] for key in allowed if key in body}
+        )
         if event is None:
             self._send_error(404, f"Event {event_id} not found")
         else:
@@ -610,6 +689,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_notes_list(self) -> None:
         from ultron.services import get_notes_service
+
         service = get_notes_service()
         query = urlparse(self.path).query
         params = dict(item.split("=", 1) for item in query.split("&") if "=" in item)
@@ -617,6 +697,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_notes_get(self, note_id: str) -> None:
         from ultron.services import get_notes_service
+
         service = get_notes_service()
         note = service.get_note(note_id)
         if note is None:
@@ -626,6 +707,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_notes_create(self) -> None:
         from ultron.services import get_notes_service
+
         body = self._read_body()
         if not body or "title" not in body:
             self._send_error(400, "Missing 'title' field")
@@ -641,6 +723,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_notes_update(self, note_id: str) -> None:
         from ultron.services import get_notes_service
+
         body = self._read_body()
         service = get_notes_service()
         note = service.update_note(
@@ -656,6 +739,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_notes_delete(self, note_id: str) -> None:
         from ultron.services import get_notes_service
+
         service = get_notes_service()
         if service.delete_note(note_id):
             self._send_json({"deleted": True})
@@ -666,11 +750,13 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_reminders_list(self) -> None:
         from ultron.services import get_reminders_service
+
         service = get_reminders_service()
         self._send_json({"reminders": service.list_reminders()})
 
     def _handle_reminders_get(self, reminder_id: str) -> None:
         from ultron.services import get_reminders_service
+
         service = get_reminders_service()
         reminder = service.get_reminder(reminder_id)
         if reminder is None:
@@ -680,6 +766,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_reminders_create(self) -> None:
         from ultron.services import get_reminders_service
+
         body = self._read_body()
         if not body or "message" not in body:
             self._send_error(400, "Missing 'message' field")
@@ -698,6 +785,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
     def _handle_reminders_delete(self, reminder_id: str) -> None:
         from ultron.services import get_reminders_service
+
         service = get_reminders_service()
         if service.delete_reminder(reminder_id):
             self._send_json({"deleted": True})
@@ -712,6 +800,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         try:
             self.server._wire_voice_broadcast()
             from ultron.tools.voice import get_voice_engine
+
             engine = get_voice_engine()
             result = engine.speak(body["text"])
             self._send_json(result)
@@ -722,6 +811,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         try:
             self.server._wire_voice_broadcast()
             from ultron.tools.voice import get_voice_engine
+
             engine = get_voice_engine()
             timeout = 10
             body = self._read_body()
@@ -739,7 +829,8 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         """Stop any in-progress TTS/STT and return the engine to idle."""
         try:
             self.server._wire_voice_broadcast()
-            from ultron.tools.voice import get_voice_engine, VoiceState
+            from ultron.tools.voice import get_voice_engine
+
             engine = get_voice_engine()
             engine.interrupt()
             self._send_json({"interrupted": True, "state": engine.state.value})
@@ -752,6 +843,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
         path = body.get("path")
         try:
             from ultron.tools.vision import VisionTool
+
             tool = VisionTool()
             result = tool.run(prompt=prompt, path=path)
             if "error" in result:
@@ -791,9 +883,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
                     self._send_json(pending)
             else:
                 # List all pending
-                self._send_json({
-                    "pending": self.server._permission_manager.list_pending()
-                })
+                self._send_json({"pending": self.server._permission_manager.list_pending()})
         elif self.command == "POST":
             if permission_id:
                 # Parse action from path
@@ -807,18 +897,23 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
 
                 success = self.server._permission_manager.decide(permission_id, allowed)
                 if success:
-                    self._send_json({
-                        "permission_id": permission_id,
-                        "decision": "allowed" if allowed else "denied",
-                        "accepted": True
-                    })
+                    self._send_json(
+                        {
+                            "permission_id": permission_id,
+                            "decision": "allowed" if allowed else "denied",
+                            "accepted": True,
+                        }
+                    )
                 else:
-                    self._send_json({
-                        "permission_id": permission_id,
-                        "decision": "allowed" if allowed else "denied",
-                        "accepted": False,
-                        "error": "Permission request not found or expired"
-                    }, 404)
+                    self._send_json(
+                        {
+                            "permission_id": permission_id,
+                            "decision": "allowed" if allowed else "denied",
+                            "accepted": False,
+                            "error": "Permission request not found or expired",
+                        },
+                        404,
+                    )
             else:
                 self._send_error(400, "Permission ID required")
         else:
@@ -831,6 +926,7 @@ class JarvisRequestHandler(BaseHTTPRequestHandler):
             return
         try:
             from ultron.tools.execute import ExecuteCommand
+
             tool = ExecuteCommand()
             try:
                 timeout = int(body.get("timeout", 60))
@@ -873,7 +969,7 @@ class BrainExecutionController:
         self._state = "idle"
 
 
-_STATUS_TO_SSE: Dict[str, str] = {
+_STATUS_TO_SSE: dict[str, str] = {
     "planning": "planning",
     "plan_created": "plan_created",
     "task_started": "task_started",
@@ -910,7 +1006,8 @@ class OrchestratorEventBridge:
     def __init__(self, status_reporter: Any, broadcaster: EventBroadcaster) -> None:
         self._reporter = status_reporter
         self._broadcaster = broadcaster
-        from ultron.status import CallbackSubscriber, StatusUpdate
+        from ultron.status import CallbackSubscriber
+
         self._subscriber = CallbackSubscriber(self._on_status)
         self._reporter.subscribe(self._subscriber)
 
@@ -933,11 +1030,11 @@ class JarvisAPI(ThreadedHTTPServer):
         self,
         host: str = "127.0.0.1",
         port: int = 8080,
-        orchestrator: Optional[Any] = None,
-        execution_controller: Optional[Any] = None,
-        brain: Optional[Any] = None,
-        registry: Optional[Any] = None,
-        memory: Optional[Any] = None,
+        orchestrator: Any | None = None,
+        execution_controller: Any | None = None,
+        brain: Any | None = None,
+        registry: Any | None = None,
+        memory: Any | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         self._brain = brain
@@ -945,18 +1042,18 @@ class JarvisAPI(ThreadedHTTPServer):
         self._memory = memory
         self._execution_controller = execution_controller
         self._event_broadcaster = EventBroadcaster()
-        self._orchestrator_bridge: Optional[OrchestratorEventBridge] = None
+        self._orchestrator_bridge: OrchestratorEventBridge | None = None
         self._permission_manager = PermissionManager(broadcaster=self._event_broadcaster)
-        self._goals: Dict[str, Dict[str, Any]] = {}
-        self._tasks: Dict[str, Dict[str, Any]] = {}
+        self._goals: dict[str, dict[str, Any]] = {}
+        self._tasks: dict[str, dict[str, Any]] = {}
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="jarvis-exec")
         self._current_state = "idle"
         self._execution_count = 0
 
-        super(JarvisAPI, self).__init__((host, port), JarvisRequestHandler)
+        super().__init__((host, port), JarvisRequestHandler)
         logger.info("JARVIS API server initialized on %s:%d", host, port)
 
-    def get_current_state(self) -> Dict[str, Any]:
+    def get_current_state(self) -> dict[str, Any]:
         """Return current execution state for the frontend."""
         return {
             "state": self._current_state,
@@ -974,17 +1071,27 @@ class JarvisAPI(ThreadedHTTPServer):
                 orchestrator._status, self._event_broadcaster
             )
             # Wire up brain orchestrator events to SSE if brain orchestrator is available
-            if hasattr(orchestrator, "_brain_orchestrator") and orchestrator._brain_orchestrator is not None:
-                def brain_event_handler(event_type: str, data: Dict[str, Any]) -> None:
+            if (
+                hasattr(orchestrator, "_brain_orchestrator")
+                and orchestrator._brain_orchestrator is not None
+            ):
+
+                def brain_event_handler(event_type: str, data: dict[str, Any]) -> None:
                     self._event_broadcaster.broadcast(event_type, data)
+
                 orchestrator._brain_orchestrator._event_handler = brain_event_handler
                 # Also update orchestrator's brain_event_handler reference if it has one
-                if hasattr(orchestrator, "_brain_event_handler") and orchestrator._brain_event_handler:
+                if (
+                    hasattr(orchestrator, "_brain_event_handler")
+                    and orchestrator._brain_event_handler
+                ):
                     # Chain the handlers
                     original_handler = orchestrator._brain_event_handler
-                    def chained_handler(event_type: str, data: Dict[str, Any]) -> None:
+
+                    def chained_handler(event_type: str, data: dict[str, Any]) -> None:
                         original_handler(event_type, data)
                         brain_event_handler(event_type, data)
+
                     orchestrator._brain_orchestrator._event_handler = chained_handler
                 logger.info("Brain orchestrator connected to SSE event broadcaster")
             # Wire up permission manager to orchestrator's policy engine
@@ -996,10 +1103,29 @@ class JarvisAPI(ThreadedHTTPServer):
 
     # ── Data Access ────────────────────────────────────────────────
 
-    def get_status(self) -> Dict[str, Any]:
+    def _configured_provider(self) -> str:
+        """Resolve the active provider from `.env` + environment.
+
+        Reading `os.environ` alone misses keys that only exist in `.env`, which
+        made the status endpoint report a hardcoded default instead of the
+        provider actually in use. Resolved once, then cached.
+        """
+        cached: str | None = getattr(self, "_provider_name", None)
+        if cached is not None:
+            return cached
+        try:
+            from ultron.config import load_config
+
+            cached = str(load_config().provider)
+        except Exception:
+            cached = os.environ.get("ULTRON_PROVIDER", "gemini")
+        self._provider_name = cached
+        return cached
+
+    def get_status(self) -> dict[str, Any]:
         return {
             "status": "running",
-            "provider": os.environ.get("ULTRON_PROVIDER", "gemini"),
+            "provider": self._configured_provider(),
             "orchestrator": self._orchestrator is not None,
             "execution_controller": self._execution_controller is not None,
             "goals_count": len(self._goals),
@@ -1007,36 +1133,54 @@ class JarvisAPI(ThreadedHTTPServer):
             "uptime_seconds": time.time() - self._start_time if hasattr(self, "_start_time") else 0,
         }
 
-    def list_goals(self) -> List[Dict[str, Any]]:
+    def list_goals(self) -> list[dict[str, Any]]:
         return list(self._goals.values())
 
-    def get_goal(self, goal_id: str) -> Optional[Dict[str, Any]]:
+    def get_goal(self, goal_id: str) -> dict[str, Any] | None:
         return self._goals.get(goal_id)
 
-    def list_tasks(self) -> List[Dict[str, Any]]:
+    def list_tasks(self) -> list[dict[str, Any]]:
         return list(self._tasks.values())
 
-    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+    def get_task(self, task_id: str) -> dict[str, Any] | None:
         return self._tasks.get(task_id)
 
-    def list_tools(self) -> List[Dict[str, Any]]:
-        if self._registry is not None and hasattr(self._registry, "_tools"):
-            return [
-                {"name": name, "description": getattr(tool, "description", "")}
-                for name, tool in self._registry._tools.items()
-            ]
-        if self._orchestrator and hasattr(self._orchestrator, "_tool_executor"):
-            executor = self._orchestrator._tool_executor
-            if hasattr(executor, "_registry"):
-                registry = executor._registry
-                if hasattr(registry, "_tools"):
-                    return [
-                        {"name": name, "description": getattr(t, "description", "")}
-                        for name, t in registry._tools.items()
-                    ]
+    def list_tools(self) -> list[dict[str, Any]]:
+        """Full tool specs for the dashboard's tool inventory.
+
+        Previously this returned only name+description, so the UI could not
+        show which tools mutate state or how risky they are — the two facts
+        that matter before letting the assistant act. Risk, category and
+        `mutates` are now derived from tool metadata, so they are reported
+        from the same source the permission engine enforces.
+        """
+        specs: list[dict[str, Any]] = []
+        for tool in self._all_tools():
+            spec = tool.spec
+            specs.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "risk": spec.risk.value,
+                    "mutates": spec.mutates,
+                    "category": spec.category,
+                    "parameters": spec.parameters,
+                    "output_schema": spec.output_schema,
+                }
+            )
+        return specs
+
+    def _all_tools(self) -> list[Any]:
+        """Every tool reachable from this server, whatever wired it."""
+        if self._registry is not None and hasattr(self._registry, "all"):
+            return list(self._registry.all())
+        executor = getattr(self._orchestrator, "_tool_executor", None)
+        registry = getattr(executor, "_registry", None)
+        if registry is not None and hasattr(registry, "all"):
+            return list(registry.all())
         return []
 
-    def get_control_state(self) -> Dict[str, Any]:
+    def get_control_state(self) -> dict[str, Any]:
         if self._execution_controller:
             return {
                 "state": getattr(self._execution_controller, "_state", "unknown"),
@@ -1047,22 +1191,29 @@ class JarvisAPI(ThreadedHTTPServer):
     def _wire_voice_broadcast(self) -> None:
         """Connect voice engine state changes to the SSE broadcaster."""
         try:
-            from ultron.tools.voice import get_voice_engine, VoiceState
+            from ultron.tools.voice import VoiceState, get_voice_engine
 
             def _on_voice_state(state: VoiceState) -> None:
-                self._event_broadcaster.broadcast("voice_state", {"state": state.value, "available": True})
+                self._event_broadcaster.broadcast(
+                    "voice_state", {"state": state.value, "available": True}
+                )
 
             engine = get_voice_engine()
             # Only set if not already wired to a broadcaster
-            if getattr(engine, "_on_state_change", None) is None or getattr(engine, "_broadcast_wired", False) is False:
+            if (
+                getattr(engine, "_on_state_change", None) is None
+                or getattr(engine, "_broadcast_wired", False) is False
+            ):
                 engine.set_state_callback(_on_voice_state)
-                engine._broadcast_wired = True
+                # Marker attribute is created on the engine instance; it is not
+                # declared on VoiceEngine.
+                engine._broadcast_wired = True  # type: ignore[attr-defined]
         except Exception as e:
             logger.debug("Could not wire voice broadcast: %s", e)
 
     # ── Actions ────────────────────────────────────────────────────
 
-    def submit_goal(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def submit_goal(self, data: dict[str, Any]) -> dict[str, Any]:
         goal_id = f"goal_{len(self._goals) + 1}"
         goal = {
             "id": goal_id,
@@ -1086,6 +1237,7 @@ class JarvisAPI(ThreadedHTTPServer):
 
     def _execute_via_orchestrator(self, goal_id: str, description: str) -> None:
         """Execute a goal through the Phase 5 Orchestrator in a background thread."""
+
         def _run():
             try:
                 self._current_state = "planning"
@@ -1106,21 +1258,27 @@ class JarvisAPI(ThreadedHTTPServer):
                     goal["status"] = "completed"
                     goal["response"] = gr.summary
                     self._current_state = "completed"
-                    self._event_broadcaster.broadcast("completed", {
-                        "id": goal_id,
-                        "response": gr.summary,
-                        "outcome": gr.outcome.value,
-                    })
+                    self._event_broadcaster.broadcast(
+                        "completed",
+                        {
+                            "id": goal_id,
+                            "response": gr.summary,
+                            "outcome": gr.outcome.value,
+                        },
+                    )
                 else:
                     goal["status"] = "failed"
                     goal["error"] = gr.summary
                     self._current_state = "error"
-                    self._event_broadcaster.broadcast("failed", {
-                        "id": goal_id,
-                        "message": gr.summary,
-                        "error": gr.summary,
-                        "outcome": gr.outcome.value,
-                    })
+                    self._event_broadcaster.broadcast(
+                        "failed",
+                        {
+                            "id": goal_id,
+                            "message": gr.summary,
+                            "error": gr.summary,
+                            "outcome": gr.outcome.value,
+                        },
+                    )
 
                 time.sleep(0.5)
                 self._current_state = "idle"
@@ -1142,6 +1300,7 @@ class JarvisAPI(ThreadedHTTPServer):
 
     def _execute_goal_async(self, goal_id: str, description: str) -> None:
         """Execute a goal through the Brain in a background thread."""
+
         def _run():
             try:
                 goal = self._goals.get(goal_id)
@@ -1152,24 +1311,27 @@ class JarvisAPI(ThreadedHTTPServer):
                 self._execution_count += 1
 
                 # Emit planning state
-                self._event_broadcaster.broadcast("planning", {"description": "Analyzing request..."})
+                self._event_broadcaster.broadcast(
+                    "planning", {"description": "Analyzing request..."}
+                )
                 # Small delay to let frontend process planning event
                 time.sleep(0.3)
 
                 if goal:
                     goal["status"] = "executing"
                 self._current_state = "executing"
-                self._event_broadcaster.broadcast("task_started", {
-                    "id": goal_id,
-                    "description": description
-                })
+                self._event_broadcaster.broadcast(
+                    "task_started", {"id": goal_id, "description": description}
+                )
                 self._event_broadcaster.broadcast("planning", {})  # End planning
 
                 result = self._brain.process(description)
 
                 # Emit verifying state
                 self._current_state = "verifying"
-                self._event_broadcaster.broadcast("verifying", {"description": "Validating results..."})
+                self._event_broadcaster.broadcast(
+                    "verifying", {"description": "Validating results..."}
+                )
 
                 goal = self._goals.get(goal_id)
                 if goal:
@@ -1177,27 +1339,37 @@ class JarvisAPI(ThreadedHTTPServer):
                         goal["status"] = "failed"
                         goal["error"] = result.error
                         self._current_state = "error"
-                        self._event_broadcaster.broadcast("failed", {
-                            "id": goal_id,
-                            "error": result.error,
-                            "message": result.response or result.error
-                        })
+                        self._event_broadcaster.broadcast(
+                            "failed",
+                            {
+                                "id": goal_id,
+                                "error": result.error,
+                                "message": result.response or result.error,
+                            },
+                        )
                     else:
                         goal["status"] = "completed"
                         goal["response"] = result.response
                         self._current_state = "completed"
-                        self._event_broadcaster.broadcast("completed", {
-                            "id": goal_id,
-                            "response": result.response
-                        })
+                        self._event_broadcaster.broadcast(
+                            "completed", {"id": goal_id, "response": result.response}
+                        )
 
                 # Broadcast execution events from the brain
-                for event in (result.events if result else []):
-                    self._event_broadcaster.broadcast("step_completed", {
-                        "message": f"Executed {event.name}" + (f" ({event.arguments})" if getattr(event, 'arguments', None) else ""),
-                        "description": f"{event.name}",
-                        "arguments": str(event.arguments) if getattr(event, 'arguments', None) else ""
-                    })
+                for event in result.events if result else []:
+                    self._event_broadcaster.broadcast(
+                        "step_completed",
+                        {
+                            "message": f"Executed {event.name}"
+                            + (
+                                f" ({event.arguments})" if getattr(event, "arguments", None) else ""
+                            ),
+                            "description": f"{event.name}",
+                            "arguments": str(event.arguments)
+                            if getattr(event, "arguments", None)
+                            else "",
+                        },
+                    )
 
                 self._event_broadcaster.broadcast("verifying", {})  # End verifying
 
@@ -1220,21 +1392,21 @@ class JarvisAPI(ThreadedHTTPServer):
 
         self._executor.submit(_run)
 
-    def pause_execution(self) -> Dict[str, Any]:
+    def pause_execution(self) -> dict[str, Any]:
         if self._execution_controller and hasattr(self._execution_controller, "pause"):
             self._execution_controller.pause()
             self._event_broadcaster.broadcast("execution_paused", {})
             return {"status": "paused"}
         return {"status": "no_controller"}
 
-    def resume_execution(self) -> Dict[str, Any]:
+    def resume_execution(self) -> dict[str, Any]:
         if self._execution_controller and hasattr(self._execution_controller, "resume"):
             self._execution_controller.resume()
             self._event_broadcaster.broadcast("execution_resumed", {})
             return {"status": "resumed"}
         return {"status": "no_controller"}
 
-    def stop_execution(self) -> Dict[str, Any]:
+    def stop_execution(self) -> dict[str, Any]:
         if self._execution_controller and hasattr(self._execution_controller, "emergency_stop"):
             self._execution_controller.emergency_stop()
             self._event_broadcaster.broadcast("execution_stopped", {})
@@ -1252,7 +1424,7 @@ class JarvisAPI(ThreadedHTTPServer):
     def broadcast_event(self, event: str, data: Any) -> None:
         self._event_broadcaster.broadcast(event, data)
 
-    def start(self, daemon: bool = True) -> None:
+    def start(self, daemon: bool = True) -> threading.Thread:
         """Start the server in a background thread."""
         self._start_time = time.time()
         thread = threading.Thread(target=self.serve_forever, daemon=daemon)

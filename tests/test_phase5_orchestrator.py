@@ -1,10 +1,11 @@
 """Tests for Phase 5 Execution Orchestrator — End-to-End Integration."""
 from __future__ import annotations
-import tempfile
+
 from pathlib import Path
 from unittest.mock import MagicMock
-from ultron.agent_manager import AgentManager
+
 from ultron.actions.audit_log import AuditLog
+from ultron.agent_manager import AgentManager
 from ultron.audit import AuditLogger
 from ultron.execution_state import ExecutionStateStore
 from ultron.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorState
@@ -13,6 +14,8 @@ from ultron.risk import RiskClassifier
 from ultron.status import StatusReporter
 from ultron.tools import ToolExecutor, ToolRegistry
 from ultron.tools.file_ops import CreateFile, ReadFile, SearchFiles
+
+
 def _make_orchestrator(tmp_path: Path, **kwargs) -> Orchestrator:
     """Create a real orchestrator with file tools for testing."""
     tools = [ReadFile(), CreateFile(), SearchFiles()]
@@ -120,12 +123,18 @@ class TestOrchestratorSecurity:
         )
         assert result.goal_result.outcome.value in ("failed", "partial_success", "blocked")
     def test_risk_classification_used(self, tmp_path):
-        """Test that risk classification is applied."""
+        """Test that risk classification is applied.
+
+        Ratings come from tool metadata, so the names here must be real
+        registered tools. The old hardcoded map carried entries such as
+        `delete_file` and `execute_shell` for tools that do not exist, which
+        classified nothing.
+        """
         orch = _make_orchestrator(tmp_path)
         risk = orch._risk_classifier
         read_risk = risk.classify("read_file")
         write_risk = risk.classify("create_file")
-        delete_risk = risk.classify("delete_file")
+        delete_risk = risk.classify("delete_file_full")
         assert read_risk.value == "read"
         assert write_risk.value == "medium"
         assert delete_risk.value == "high"
@@ -133,6 +142,7 @@ class TestOrchestratorLLMIntegration:
     def test_llm_provider_wires_llm_goal_and_planner(self, tmp_path):
         """Test that passing an LLMProvider initializes LLMGoalEngine and LLMGoalPlanner."""
         from unittest.mock import MagicMock
+
         from ultron.llm.base import LLMProvider
         from ultron.llm_goal import LLMGoalEngine
         from ultron.llm_planner import LLMGoalPlanner
@@ -143,6 +153,7 @@ class TestOrchestratorLLMIntegration:
     def test_autonomous_executor_wires_llm_goal_and_planner(self, tmp_path):
         """Test that passing an AutonomousExecutor extracts its provider to initialize LLMGoalEngine and LLMGoalPlanner."""
         from unittest.mock import MagicMock
+
         from ultron.autonomous import AutonomousExecutor
         from ultron.llm_goal import LLMGoalEngine
         from ultron.llm_planner import LLMGoalPlanner

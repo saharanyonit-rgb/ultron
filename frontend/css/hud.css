@@ -556,6 +556,7 @@ body[data-core-state="processing"] .core-pulse { animation: core-pulse 2.4s ease
 .core-mic svg { width: 13px; height: 13px; }
 .core-mic:hover { border-color: var(--cyan); color: var(--cyan); }
 .core-mic:disabled { opacity: .45; cursor: not-allowed; border-color: var(--border-primary); color: var(--text-muted); }
+.core-mic[aria-disabled="true"] { opacity: .7; cursor: pointer; }
 
 body[data-core-state="listening"] .core-mic {
   border-color: var(--cyan);
@@ -563,66 +564,6 @@ body[data-core-state="listening"] .core-mic {
   background: rgba(0, 212, 255, 0.1);
   box-shadow: 0 0 18px var(--glow-cyan);
 }
-
-/* ── CPU / RAM flanking gauges ─────────────────────────────── */
-.core-flanks {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
-  width: 100%;
-  max-width: 620px;
-}
-
-.flank {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.flank-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.flank-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: var(--letter-wider);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-}
-
-.flank-value {
-  font-family: var(--font-mono);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.flank-value small { font-size: 10px; color: var(--text-tertiary); font-weight: 400; }
-.flank.sev-warn .flank-value { color: var(--warning); }
-.flank.sev-crit .flank-value { color: var(--critical); }
-
-.flank-track {
-  height: 3px;
-  background: var(--border-secondary);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.flank-fill {
-  height: 100%;
-  width: 0;
-  background: var(--cyan);
-  border-radius: 2px;
-  transition: width var(--transition-slow), background var(--transition-base);
-}
-
-.flank.sev-warn .flank-fill { background: var(--warning); }
-.flank.sev-crit .flank-fill { background: var(--critical); }
-.flank-sub { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
 
 /* ───────────────────────────────────────────────────────────────
    LOWER DECK — RADAR + GLOBE
@@ -1202,10 +1143,8 @@ body[data-link="connecting"] .uplink-state { color: var(--warning); }
    RESPONSIVE
    ─────────────────────────────────────────────────────────────── */
 @media (max-width: 1400px) {
-  .lower-deck { max-width: 620px; }
-  .core-flanks { max-width: 520px; }
+.lower-deck { max-width: 620px; }
 }
-
 @media (max-width: 1100px) {
   .lower-deck { grid-template-columns: 1fr; max-width: 460px; gap: var(--space-2); }
   .scan-panel, .uplink { padding: var(--space-2); }
@@ -1213,9 +1152,7 @@ body[data-link="connecting"] .uplink-state { color: var(--warning); }
   .dock-metrics { min-width: 120px; }
   .dock-spark { width: 120px; }
 }
-
 @media (max-width: 860px) {
-  .core-flanks { max-width: 380px; gap: var(--space-3); }
   .dock-metrics { display: none; }
   .dock-item { min-width: 54px; padding: 6px 7px; }
   .toast-stack { left: var(--space-3); right: var(--space-3); max-width: none; }

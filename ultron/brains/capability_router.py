@@ -9,15 +9,17 @@ from __future__ import annotations
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.brains.capability_router")
 
 
-class Intent(str, Enum):
+class Intent(StrEnum):
     """High-level user intent categories."""
+
     GREETING = "greeting"
     CONVERSATION = "conversation"
     COMPUTER_CONTROL = "computer_control"
@@ -30,8 +32,9 @@ class Intent(str, Enum):
     UNKNOWN = "unknown"
 
 
-class Complexity(str, Enum):
+class Complexity(StrEnum):
     """Task complexity levels."""
+
     TRIVIAL = "trivial"
     SIMPLE = "simple"
     MODERATE = "moderate"
@@ -39,8 +42,9 @@ class Complexity(str, Enum):
     VERY_COMPLEX = "very_complex"
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     """Risk levels for tasks."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -50,21 +54,23 @@ class RiskLevel(str, Enum):
 @dataclass(frozen=True)
 class BrainCapability:
     """A single capability that a brain provides."""
+
     name: str
     description: str
-    keywords: Set[str] = field(default_factory=set)
-    required_tools: Set[str] = field(default_factory=set)
+    keywords: set[str] = field(default_factory=set)
+    required_tools: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
 class BrainCapabilities:
     """Structured capabilities for a brain type."""
+
     brain_type: str
-    primary_intents: Set[Intent]
-    capabilities: Tuple[BrainCapability, ...]
-    compatible_risk_levels: Set[RiskLevel]
+    primary_intents: set[Intent]
+    capabilities: tuple[BrainCapability, ...]
+    compatible_risk_levels: set[RiskLevel]
     max_agent_transitions: int = 3
-    preferred_complexity: Set[Complexity] = field(default_factory=frozenset)
+    preferred_complexity: set[Complexity] = field(default_factory=set)
 
 
 class BrainCapabilityRegistry:
@@ -77,9 +83,23 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="planning",
                 description="Goal decomposition and task planning",
-                keywords={"plan", "strategy", "workflow", "steps", "execute", "coordinate",
-                         "decompose", "break down", "roadmap", "milestone", "sequence",
-                         "multiple steps", "parallel", "dependencies", "subtask"},
+                keywords={
+                    "plan",
+                    "strategy",
+                    "workflow",
+                    "steps",
+                    "execute",
+                    "coordinate",
+                    "decompose",
+                    "break down",
+                    "roadmap",
+                    "milestone",
+                    "sequence",
+                    "multiple steps",
+                    "parallel",
+                    "dependencies",
+                    "subtask",
+                },
                 required_tools=set(),
             ),
             BrainCapability(
@@ -101,16 +121,34 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="research",
                 description="Information gathering and analysis",
-                keywords={"research", "investigate", "explore", "survey", "study",
-                         "find information", "look up", "analyze", "compare",
-                         "evaluate", "facts", "sources", "information"},
+                keywords={
+                    "research",
+                    "investigate",
+                    "explore",
+                    "survey",
+                    "study",
+                    "find information",
+                    "look up",
+                    "analyze",
+                    "compare",
+                    "evaluate",
+                    "facts",
+                    "sources",
+                    "information",
+                },
                 required_tools={"read_file", "search_files", "open_url"},
             ),
             BrainCapability(
                 name="web_search",
                 description="Web-based information retrieval",
-                keywords={"search the web", "find online", "google", "web search",
-                         "browse", "internet"},
+                keywords={
+                    "search the web",
+                    "find online",
+                    "google",
+                    "web search",
+                    "browse",
+                    "internet",
+                },
                 required_tools={"open_url"},
             ),
             BrainCapability(
@@ -132,22 +170,49 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="code_analysis",
                 description="Analyzing existing code",
-                keywords={"code", "function", "class", "module", "repository", "file",
-                         "inspect", "analyze code", "understand code", "review code"},
+                keywords={
+                    "code",
+                    "function",
+                    "class",
+                    "module",
+                    "repository",
+                    "file",
+                    "inspect",
+                    "analyze code",
+                    "understand code",
+                    "review code",
+                },
                 required_tools={"read_file", "search_files"},
             ),
             BrainCapability(
                 name="debugging",
                 description="Finding and fixing bugs",
-                keywords={"bug", "fix", "debug", "error", "issue", "problem", "crash",
-                         "failing", "broken", "incorrect"},
+                keywords={
+                    "bug",
+                    "fix",
+                    "debug",
+                    "error",
+                    "issue",
+                    "problem",
+                    "crash",
+                    "failing",
+                    "broken",
+                    "incorrect",
+                },
                 required_tools={"read_file", "search_files"},
             ),
             BrainCapability(
                 name="code_generation",
                 description="Creating new code",
-                keywords={"implement", "create", "write code", "add feature", "develop",
-                         "generate code", "programming"},
+                keywords={
+                    "implement",
+                    "create",
+                    "write code",
+                    "add feature",
+                    "develop",
+                    "generate code",
+                    "programming",
+                },
                 required_tools={"create_file", "read_file"},
             ),
             BrainCapability(
@@ -175,15 +240,22 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="desktop_control",
                 description="Desktop application control",
-                keywords={"open", "close", "launch", "start", "stop", "application",
-                         "desktop"},
+                keywords={"open", "close", "launch", "start", "stop", "application", "desktop"},
                 required_tools={"open_app", "close_app"},
             ),
             BrainCapability(
                 name="browser_control",
                 description="Web browser control",
-                keywords={"chrome", "browser", "navigate", "browse", "click", "type",
-                         "open website", "go to"},
+                keywords={
+                    "chrome",
+                    "browser",
+                    "navigate",
+                    "browse",
+                    "click",
+                    "type",
+                    "open website",
+                    "go to",
+                },
                 required_tools={"navigate_url", "open_url", "click_element"},
             ),
             BrainCapability(
@@ -205,9 +277,22 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="verification",
                 description="Verifying task results",
-                keywords={"verify", "check", "confirm", "validate", "test", "ensure",
-                         "did it work", "was it successful", "confirm that", "inspect",
-                         "success", "failed", "result", "output"},
+                keywords={
+                    "verify",
+                    "check",
+                    "confirm",
+                    "validate",
+                    "test",
+                    "ensure",
+                    "did it work",
+                    "was it successful",
+                    "confirm that",
+                    "inspect",
+                    "success",
+                    "failed",
+                    "result",
+                    "output",
+                },
                 required_tools=set(),
             ),
             BrainCapability(
@@ -217,7 +302,12 @@ class BrainCapabilityRegistry:
                 required_tools=set(),
             ),
         ),
-        compatible_risk_levels={RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH, RiskLevel.CRITICAL},
+        compatible_risk_levels={
+            RiskLevel.LOW,
+            RiskLevel.MEDIUM,
+            RiskLevel.HIGH,
+            RiskLevel.CRITICAL,
+        },
         max_agent_transitions=2,
         preferred_complexity={Complexity.TRIVIAL, Complexity.SIMPLE, Complexity.MODERATE},
     )
@@ -229,8 +319,19 @@ class BrainCapabilityRegistry:
             BrainCapability(
                 name="conversation",
                 description="General conversation and greetings",
-                keywords={"hello", "hi", "hey", "thanks", "thank you", "bye", "goodbye",
-                         "how are you", "what's up", "greetings", "nice to meet"},
+                keywords={
+                    "hello",
+                    "hi",
+                    "hey",
+                    "thanks",
+                    "thank you",
+                    "bye",
+                    "goodbye",
+                    "how are you",
+                    "what's up",
+                    "greetings",
+                    "nice to meet",
+                },
                 required_tools=set(),
             ),
         ),
@@ -240,7 +341,7 @@ class BrainCapabilityRegistry:
     )
 
     @classmethod
-    def get_all_capabilities(cls) -> Dict[str, BrainCapabilities]:
+    def get_all_capabilities(cls) -> dict[str, BrainCapabilities]:
         return {
             "planning": cls.PLANNING,
             "research": cls.RESEARCH,
@@ -254,17 +355,18 @@ class BrainCapabilityRegistry:
 @dataclass
 class TaskRequirements:
     """Structured representation of what a task requires."""
+
     intent: Intent
     complexity: Complexity
-    required_capabilities: Set[str]
-    required_tools: Set[str]
+    required_capabilities: set[str]
+    required_tools: set[str]
     risk_level: RiskLevel
     verification_required: bool = False
     multi_agent_required: bool = False
-    workflow_steps: List[str] = field(default_factory=list)
+    workflow_steps: list[str] = field(default_factory=list)
     context_preserved: bool = False
     is_follow_up: bool = False
-    previous_brain: Optional[str] = None
+    previous_brain: str | None = None
     ambiguous: bool = False
     ambiguity_reason: str = ""
 
@@ -272,32 +374,34 @@ class TaskRequirements:
 @dataclass
 class RoutingDecision:
     """Structured routing decision with full metadata."""
+
     selected_brain: str
     confidence: float
     best_score: float = 0.0
     second_best_score: float = 0.0
     score_margin: float = 0.0
-    matched_capabilities: List[str] = field(default_factory=list)
-    required_tools: List[str] = field(default_factory=list)
+    matched_capabilities: list[str] = field(default_factory=list)
+    required_tools: list[str] = field(default_factory=list)
     intent: Intent = Intent.UNKNOWN
     complexity: Complexity = Complexity.MODERATE
     workflow_required: bool = False
-    workflow_steps: List[str] = field(default_factory=list)
-    alternatives: List[Tuple[str, float]] = field(default_factory=list)
+    workflow_steps: list[str] = field(default_factory=list)
+    alternatives: list[tuple[str, float]] = field(default_factory=list)
     reason: str = ""
     ambiguity: bool = False
     ambiguity_reason: str = ""
-    missing_information: List[str] = field(default_factory=list)
-    candidate_agents: List[str] = field(default_factory=list)
+    missing_information: list[str] = field(default_factory=list)
+    candidate_agents: list[str] = field(default_factory=list)
     needs_llm_classification: bool = False
     classifier_source: str = "deterministic"
     routing_latency_ms: float = 0.0
-    routing_metadata: Dict[str, Any] = field(default_factory=dict)
+    routing_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class RoutingScore:
     """Score breakdown for a single brain."""
+
     brain_type: str
     total_score: float
     capability_match: float = 0.0
@@ -310,19 +414,20 @@ class RoutingScore:
 
 def _word_boundary_match(text: str, keyword: str) -> bool:
     """Check if keyword matches with proper word boundaries."""
-    pattern = r'\b' + re.escape(keyword) + r'\b'
+    pattern = r"\b" + re.escape(keyword) + r"\b"
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 
-def _tokenize_words(text: str) -> Set[str]:
+def _tokenize_words(text: str) -> set[str]:
     """Extract words from text."""
-    words = re.findall(r'\b\w+\b', text.lower())
+    words = re.findall(r"\b\w+\b", text.lower())
     return set(words)
 
 
 class AmbiguousTaskError(Exception):
     """Raised when task is too ambiguous to route deterministically."""
-    def __init__(self, reason: str, candidates: List[str]):
+
+    def __init__(self, reason: str, candidates: list[str]):
         self.reason = reason
         self.candidates = candidates
         super().__init__(f"Ambiguous task: {reason}")
@@ -366,22 +471,31 @@ class CapabilityBasedRouter:
         r"^\s*(continue|keep going|proceed)\s*$",
     ]
 
-    REFERRING_EXPRESSIONS = {"it", "this", "that", "them", "the issue", "the bug",
-                            "the result", "the comparison", "the analysis"}
+    REFERRING_EXPRESSIONS = {
+        "it",
+        "this",
+        "that",
+        "them",
+        "the issue",
+        "the bug",
+        "the result",
+        "the comparison",
+        "the analysis",
+    }
 
     def __init__(
         self,
-        available_tools: Optional[Set[str]] = None,
+        available_tools: set[str] | None = None,
         use_llm_fallback: bool = False,
         confidence_threshold: float = 0.35,
-        llm_classifier: Optional[Callable[[str], Dict[str, Any]]] = None,
+        llm_classifier: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self._available_tools = available_tools or set()
         self._use_llm_fallback = use_llm_fallback
         self._confidence_threshold = confidence_threshold
         self._llm_classifier = llm_classifier
-        self._previous_context: Optional[Dict[str, Any]] = None
-        self._transition_history: List[str] = []
+        self._previous_context: dict[str, Any] | None = None
+        self._transition_history: list[str] = []
         self._capability_registry = BrainCapabilityRegistry.get_all_capabilities()
         self._llm_calls = 0
 
@@ -392,7 +506,7 @@ class CapabilityBasedRouter:
     def reset_llm_calls(self) -> None:
         self._llm_calls = 0
 
-    def route(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> RoutingDecision:
+    def route(self, user_input: str, context: dict[str, Any] | None = None) -> RoutingDecision:
         """Route a user request to the appropriate brain.
 
         Args:
@@ -506,9 +620,11 @@ class CapabilityBasedRouter:
             routing_latency_ms=latency,
         )
 
-    def _analyze_task(self, text: str, context: Optional[Dict[str, Any]]) -> TaskRequirements:
+    def _analyze_task(self, text: str, context: dict[str, Any] | None) -> TaskRequirements:
         """Analyze task and determine requirements."""
-        is_follow_up = bool(re.match(r'^\s*(fix|repair|summarize|explain|tell|which|what|continue)', text))
+        is_follow_up = bool(
+            re.match(r"^\s*(fix|repair|summarize|explain|tell|which|what|continue)", text)
+        )
 
         previous_brain = None
         if context and "previous_brain" in context:
@@ -568,29 +684,57 @@ class CapabilityBasedRouter:
 
     def _detect_intent(self, text: str) -> Intent:
         """Detect primary user intent using deterministic matching with word boundaries."""
-        if _word_boundary_match(text, "hello") or _word_boundary_match(text, "hi") or \
-           _word_boundary_match(text, "hey") or _word_boundary_match(text, "thanks"):
+        if (
+            _word_boundary_match(text, "hello")
+            or _word_boundary_match(text, "hi")
+            or _word_boundary_match(text, "hey")
+            or _word_boundary_match(text, "thanks")
+        ):
             return Intent.GREETING
 
-        if any(_word_boundary_match(text, kw) for kw in ["open", "close", "launch", "chrome", "browser"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in ["open", "close", "launch", "chrome", "browser"]
+        ):
             return Intent.COMPUTER_CONTROL
 
         if any(_word_boundary_match(text, kw) for kw in ["navigate", "browse", "click", "type"]):
             return Intent.COMPUTER_CONTROL
 
-        if any(_word_boundary_match(text, kw) for kw in ["bug", "fix", "debug", "refactor", "implement"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in ["bug", "fix", "debug", "refactor", "implement"]
+        ):
             return Intent.CODING
 
-        if any(_word_boundary_match(text, kw) for kw in ["code", "programming", "repository", "git", "class", "function"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in ["code", "programming", "repository", "git", "class", "function"]
+        ):
             return Intent.CODING
 
-        if any(_word_boundary_match(text, kw) for kw in ["research", "investigate", "analyze", "compare"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in ["research", "investigate", "analyze", "compare"]
+        ):
             return Intent.RESEARCH
 
         if any(_word_boundary_match(text, kw) for kw in ["search", "find information", "look up"]):
             return Intent.RESEARCH
 
-        if any(_word_boundary_match(text, kw) for kw in ["plan", "strategy", "workflow", "coordinate", "decompose", "break down", "subtask", "milestone"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in [
+                "plan",
+                "strategy",
+                "workflow",
+                "coordinate",
+                "decompose",
+                "break down",
+                "subtask",
+                "milestone",
+            ]
+        ):
             return Intent.PLANNING
 
         if any(_word_boundary_match(text, kw) for kw in ["verify", "check", "confirm", "validate"]):
@@ -610,7 +754,16 @@ class CapabilityBasedRouter:
             return Complexity.TRIVIAL
 
         complexity_indicators = sum(
-            1 for ind in [" and ", " then ", " after that ", " next ", " multiple ", " steps", " workflow"]
+            1
+            for ind in [
+                " and ",
+                " then ",
+                " after that ",
+                " next ",
+                " multiple ",
+                " steps",
+                " workflow",
+            ]
             if ind in text
         )
 
@@ -624,7 +777,9 @@ class CapabilityBasedRouter:
         if any(_word_boundary_match(text, kw) for kw in ["open", "close", "launch"]):
             return Complexity.SIMPLE
 
-        if _word_boundary_match(text, "get") and any(kw in text for kw in ["system info", "sysinfo"]):
+        if _word_boundary_match(text, "get") and any(
+            kw in text for kw in ["system info", "sysinfo"]
+        ):
             return Complexity.SIMPLE
 
         return Complexity.MODERATE
@@ -634,12 +789,15 @@ class CapabilityBasedRouter:
         if any(_word_boundary_match(text, kw) for kw in ["delete", "remove", "drop", "destroy"]):
             return RiskLevel.CRITICAL
 
-        if any(_word_boundary_match(text, kw) for kw in ["create", "write", "modify", "change", "update"]):
+        if any(
+            _word_boundary_match(text, kw)
+            for kw in ["create", "write", "modify", "change", "update"]
+        ):
             return RiskLevel.MEDIUM
 
         return RiskLevel.LOW
 
-    def _detect_required_capabilities(self, text: str, intent: Intent) -> Set[str]:
+    def _detect_required_capabilities(self, text: str, intent: Intent) -> set[str]:
         """Detect required capabilities based on intent."""
         capability_map = {
             Intent.PLANNING: {"planning", "task_decomposition"},
@@ -650,7 +808,7 @@ class CapabilityBasedRouter:
         }
         return capability_map.get(intent, set())
 
-    def _detect_required_tools(self, text: str) -> Set[str]:
+    def _detect_required_tools(self, text: str) -> set[str]:
         """Detect required tools based on text analysis with word boundaries."""
         tools = set()
 
@@ -674,8 +832,16 @@ class CapabilityBasedRouter:
 
     def _detect_verification_requirement(self, text: str) -> bool:
         """Detect if verification is required."""
-        verification_keywords = ["verify", "check if", "confirm", "make sure", "ensure",
-                               "did it work", "was it successful", "validate"]
+        verification_keywords = [
+            "verify",
+            "check if",
+            "confirm",
+            "make sure",
+            "ensure",
+            "did it work",
+            "was it successful",
+            "validate",
+        ]
         return any(_word_boundary_match(text, kw) for kw in verification_keywords)
 
     def _detect_multi_agent_pattern(self, text: str) -> bool:
@@ -685,20 +851,44 @@ class CapabilityBasedRouter:
         multi_step_indicators = [" and ", " then ", " after that ", " next "]
         if sum(1 for ind in multi_step_indicators if ind in text_clean) >= 1:
             verb_count = 0
-            for verb in ["research", "analyze", "compare", "evaluate", "implement", "fix", "verify", "recommend", "create", "build"]:
+            for verb in [
+                "research",
+                "analyze",
+                "compare",
+                "evaluate",
+                "implement",
+                "fix",
+                "verify",
+                "recommend",
+                "create",
+                "build",
+            ]:
                 if verb in text_clean:
                     verb_count += 1
             if verb_count >= 2:
                 return True
 
-        multi_agent_verbs = ["research", "analyze", "compare", "evaluate", "implement", "fix", "verify", "recommend", "create", "build"]
+        multi_agent_verbs = [
+            "research",
+            "analyze",
+            "compare",
+            "evaluate",
+            "implement",
+            "fix",
+            "verify",
+            "recommend",
+            "create",
+            "build",
+        ]
         verb_count = sum(1 for verb in multi_agent_verbs if _word_boundary_match(text, verb))
         if verb_count >= 2:
             return True
 
         return False
 
-    def _route_with_context(self, task_req: TaskRequirements, start_time: float) -> Optional[RoutingDecision]:
+    def _route_with_context(
+        self, task_req: TaskRequirements, start_time: float
+    ) -> RoutingDecision | None:
         """Route using previous context for follow-up requests."""
         if task_req.previous_brain and task_req.previous_brain in self._capability_registry:
             latency = (time.time() - start_time) * 1000
@@ -710,7 +900,10 @@ class CapabilityBasedRouter:
                 best_score=0.85,
                 second_best_score=0.3,
                 score_margin=0.55,
-                matched_capabilities=[f"context:{task_req.previous_brain}", f"intent:{intent_name}"],
+                matched_capabilities=[
+                    f"context:{task_req.previous_brain}",
+                    f"intent:{intent_name}",
+                ],
                 required_tools=list(task_req.required_tools),
                 intent=task_req.intent,
                 complexity=task_req.complexity,
@@ -745,7 +938,7 @@ class CapabilityBasedRouter:
 
     def _find_best_brain(self, task_req: TaskRequirements, start_time: float) -> RoutingDecision:
         """Find the best matching brain using capability scoring."""
-        scores: List[RoutingScore] = []
+        scores: list[RoutingScore] = []
 
         for brain_type, capabilities in self._capability_registry.items():
             score = self._score_brain(brain_type, capabilities, task_req)
@@ -848,12 +1041,12 @@ class CapabilityBasedRouter:
             context_match = 0.4
 
         total = (
-            intent_match * 0.40 +
-            capability_match * 0.20 +
-            tool_match * 0.20 +
-            complexity_match * 0.10 +
-            risk_match * 0.05 +
-            context_match * 0.05
+            intent_match * 0.40
+            + capability_match * 0.20
+            + tool_match * 0.20
+            + complexity_match * 0.10
+            + risk_match * 0.05
+            + context_match * 0.05
         )
 
         return RoutingScore(
@@ -867,7 +1060,9 @@ class CapabilityBasedRouter:
             context_match=context_match,
         )
 
-    def _get_matched_capabilities(self, score: RoutingScore, task_req: TaskRequirements) -> List[str]:
+    def _get_matched_capabilities(
+        self, score: RoutingScore, task_req: TaskRequirements
+    ) -> list[str]:
         """Get list of capabilities that matched."""
         matched = []
         if score.intent_match > 0:
@@ -930,7 +1125,9 @@ class CapabilityBasedRouter:
                 intent = intent_map.get(intent_str, Intent.CONVERSATION)
 
                 return RoutingDecision(
-                    selected_brain=llm_result.get("selected_brain", previous_decision.selected_brain),
+                    selected_brain=llm_result.get(
+                        "selected_brain", previous_decision.selected_brain
+                    ),
                     confidence=min(llm_result.get("confidence", 0.5), 0.9),
                     best_score=llm_result.get("best_score", 0.5),
                     second_best_score=llm_result.get("second_best_score", 0.3),
@@ -942,7 +1139,9 @@ class CapabilityBasedRouter:
                     workflow_required=llm_result.get("multi_agent", False),
                     reason=f"LLM fallback: {llm_result.get('reason', 'LLM classification')}",
                     ambiguity=llm_result.get("ambiguous", False),
-                    candidate_agents=llm_result.get("candidates", previous_decision.candidate_agents),
+                    candidate_agents=llm_result.get(
+                        "candidates", previous_decision.candidate_agents
+                    ),
                     needs_llm_classification=True,
                     classifier_source="llm_fallback",
                     routing_latency_ms=latency + llm_result.get("llm_latency_ms", 0),
@@ -953,13 +1152,13 @@ class CapabilityBasedRouter:
 
         return previous_decision
 
-    def get_alternative_brains(self, primary: str) -> List[Tuple[str, float]]:
+    def get_alternative_brains(self, primary: str) -> list[tuple[str, float]]:
         """Get fallback brain options if primary is unavailable."""
         if primary not in self._capability_registry:
             return []
 
         primary_caps = self._capability_registry[primary]
-        alternatives: List[Tuple[str, float]] = []
+        alternatives: list[tuple[str, float]] = []
 
         for brain_type, caps in self._capability_registry.items():
             if brain_type == primary:

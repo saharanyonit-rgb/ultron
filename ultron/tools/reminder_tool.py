@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.services import get_reminders_service, ReminderStatus
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from ultron.services import get_reminders_service
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 
 class CreateReminderTool(Tool):
     """Create a new reminder that fires at a specified time."""
 
     name = "create_reminder"
+    keywords = (
+        "create reminder",
+        "remind me",
+        "set a reminder",
+        "reminder to",
+    )
+    risk = RiskLevel.LOW
     description = (
         "Create a reminder that will notify the user at a specified time. "
         "Use when the user asks to be reminded, set a reminder, or get a notification. "
@@ -71,10 +82,10 @@ class CreateReminderTool(Tool):
         delta_value: int | None = None,
         recurrence: str | None = None,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if not trigger_time:
             if relative_delta and delta_value:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 if relative_delta == "minutes":
                     trigger = now + timedelta(minutes=delta_value)
                 elif relative_delta == "hours":
@@ -85,7 +96,9 @@ class CreateReminderTool(Tool):
                     return {"error": f"Unknown relative_delta: {relative_delta}"}
                 trigger_time = trigger.isoformat()
             else:
-                return {"error": "Either trigger_time or relative_delta+delta_value must be provided."}
+                return {
+                    "error": "Either trigger_time or relative_delta+delta_value must be provided."
+                }
 
         try:
             service = get_reminders_service()
@@ -103,6 +116,12 @@ class ListRemindersTool(Tool):
     """List reminders, optionally filtered by status."""
 
     name = "list_reminders"
+    keywords = (
+        "list reminders",
+        "show my reminders",
+        "my reminders",
+    )
+    risk = RiskLevel.READ
     description = (
         "List reminders. Use when the user asks to see reminders, list reminders, "
         "or check upcoming notifications."
@@ -129,7 +148,7 @@ class ListRemindersTool(Tool):
         },
     }
 
-    def run(self, status: str | None = None, limit: int = 20, **_: Any) -> Dict[str, Any]:
+    def run(self, status: str | None = None, limit: int = 20, **_: Any) -> dict[str, Any]:
         try:
             service = get_reminders_service()
             reminders = service.list_reminders(status=status, limit=limit)
@@ -142,6 +161,12 @@ class CancelReminderTool(Tool):
     """Cancel a pending reminder."""
 
     name = "cancel_reminder"
+    keywords = (
+        "cancel reminder",
+        "delete reminder",
+        "remove reminder",
+    )
+    risk = RiskLevel.LOW
     description = "Cancel a pending reminder by its ID. Use when the user asks to cancel or dismiss a reminder."
     parameters = {
         "type": "object",
@@ -162,11 +187,14 @@ class CancelReminderTool(Tool):
     }
     mutates = True
 
-    def run(self, reminder_id: str, **_: Any) -> Dict[str, Any]:
+    def run(self, reminder_id: str, **_: Any) -> dict[str, Any]:
         try:
             service = get_reminders_service()
             if service.cancel_reminder(reminder_id):
                 return {"cancelled": True}
-            return {"cancelled": False, "error": f"Reminder {reminder_id} not found or already cancelled"}
+            return {
+                "cancelled": False,
+                "error": f"Reminder {reminder_id} not found or already cancelled",
+            }
         except Exception as exc:
             return {"error": f"Failed to cancel reminder: {exc}"}

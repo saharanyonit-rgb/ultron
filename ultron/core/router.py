@@ -6,22 +6,28 @@ Categorizes requests into:
 - TOOL: Direct single-tool invocation
 - AGENT: Multi-step tool dispatch loop
 - UNSUPPORTED: Out-of-scope capabilities
+
+Routing is derived entirely from tool metadata (`ToolCatalog`). There is no
+hand-maintained tool keyword table: adding a tool and giving it `keywords` is
+what makes it routable, which is what keeps the router from claiming a
+capability is unsupported while that capability sits in the registry.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from enum import StrEnum
+from typing import Any
 
-from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.llm.base import LLMProvider
 from ultron.tools.base import Tool
+from ultron.tools.catalog import ToolCatalog, build_catalog
 
 logger = logging.getLogger("ultron.router")
 
 
-class RouteType(str, Enum):
+class RouteType(StrEnum):
     CONVERSATIONAL = "conversational"
     TOOL = "tool"
     AGENT = "agent"
@@ -34,81 +40,84 @@ class RouteDecision:
     """Strongly typed routing result produced by the Intent Router."""
 
     route_type: RouteType
-    target: Optional[str] = None
+    target: str | None = None
     confidence: float = 1.0
     reasoning: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
 
-# Known out-of-scope capability patterns for V1
-UNSUPPORTED_PATTERNS: List[tuple[Set[str], str]] = [
-    ({"mouse", "cursor", "click", "drag"}, "Mouse and cursor automation is not supported in V1."),
-    ({"speak", "voice", "audio", "microphone", "listen"}, "Voice and audio processing is not supported in V1."),
-    ({"webcam", "camera", "video"}, "Camera and video processing is not supported in V1."),
-    ({"shell", "terminal command", "powershell script", "bash"}, "Arbitrary shell/script execution is not supported in V1 for security."),
-    ({"train", "fine-tune", "local model", "ollama"}, "Local model training and Ollama are out of scope."),
-]
+# Capabilities the project genuinely does not implement. These are checked
+# against the catalog at import time by `validate_out_of_scope`: if a tool ever
+# starts covering one of these, the entry is a bug and raises instead of
+# silently refusing a request the assistant can actually fulfill.
+OUT_OF_SCOPE: tuple[tuple[frozenset[str], str], ...] = (
+    (
+        frozenset({"train a model", "fine-tune", "fine tune", "ollama"}),
+        "Training or running a local model server is not implemented.",
+    ),
+)
 
-# Fast deterministic tool keyword mappings
-TOOL_KEYWORD_MAP: Dict[str, List[str]] = {
-    "get_system_info": ["system info", "sysinfo", "cpu usage", "ram info", "disk space", "memory info", "uptime"],
-    "take_screenshot": ["screenshot", "take screenshot", "capture screen", "screen shot"],
-    "get_clipboard": ["get clipboard", "read clipboard", "clipboard content", "paste clipboard"],
-    "set_clipboard": ["set clipboard", "copy to clipboard", "write clipboard"],
-    "open_url": ["open url", "open website", "browse to", "open link"],
-    "open_app": ["open app", "launch app", "run app", "start notepad", "open notepad", "open calc", "open explorer",
-                 "open chrome", "open google chrome", "open vscode", "open visual studio code",
-                 "launch chrome", "launch vscode"],
-    "close_app": ["close app", "stop app", "kill process", "close notepad", "close calc"],
-    "read_file": ["read file", "cat file", "file content"],
-    "create_file": ["create file", "write file", "make file", "save file"],
-    "search_files": ["search files", "find files", "glob files", "list files"],
-    "remember": ["remember that", "remember this", "my name is", "call me", "i prefer",
-                 "note this down", "keep in mind", "don't forget that", "do not forget"],
-    "recall": ["what do you know about me", "do you remember", "what did i tell you",
-               "what did we discuss", "what do you remember", "recall"],
-    "list_memories": ["what do you remember", "list what you know", "show your memories",
-                      "what memories", "list memories"],
-    "forget": ["forget that", "forget what i said", "delete that memory", "forget",
-               "stop remembering"],
-    "play_song": ["play the song", "play a song", "play that song", "play songs",
-                  "play some music", "play music", "play a music", "i want to hear",
-                  "turn on music", "start the song"],
-    "github_search": ["search github", "find repos", "github repos", "search repositories",
-                      "find code on github", "github repositories"],
-    "github_clone": ["clone repo", "clone repository", "download repo", "clone from github",
-                     "get this repo", "clone github"],
-    "github_create_repo": ["create a github repo", "create github repository", "publish to github",
-                          "new repository on github", "create a repository", "upload to github"],
-    "github_push": ["push to github", "push to remote", "git push", "push changes",
-                    "upload commits"],
-    "github_pull": ["pull from github", "pull latest", "git pull", "update from remote"],
-    "generate_ui": ["generate ui", "design a page", "design a website", "make a landing page",
-                    "ui design", "design an interface", "make an animated page",
-                    "design a dashboard", "generate html design"],
-    "search_ui_design": ["ui style", "ui/ux", "design system", "color palette", "font pairing",
-                         "typography pairing", "charts recommendation", "ux guideline",
-                         "landing page pattern", "ui variations"],
-}
+
+def validate_out_of_scope(catalog: ToolCatalog) -> None:
+    """Fail loudly if a declared-unsupported capability has a tool for it."""
+    for keywords, reason in OUT_OF_SCOPE:
+        for keyword in sorted(keywords):
+            match = catalog.best_phrase_match(keyword)
+            if match is not None:
+                tool_name, phrase = match
+                raise AssertionError(
+                    f"Contradiction: {keyword!r} is declared out of scope "
+                    f"({reason!r}) but registered tool {tool_name!r} matches it "
+                    f"via phrase {phrase!r}. Remove the entry or the tool."
+                )
+
+
+_MULTI_STEP_MARKERS = ("and then", "after that", "then ", "first ", "finally ")
+
+# Self-introduction is chat, even though it can contain a keyword ("call me").
+_CONVERSATIONAL_PATTERNS = (
+    "my name is",
+    "i'm ",
+    "i am ",
+    "call me",
+    "you can call me",
+    "name's ",
+    "that's me",
+    "this is ",
+    "i'm called",
+)
 
 
 class IntentRouter:
     """Classifies user intent and selects an execution path for the Brain.
 
-    Determines WHERE a request should be executed without performing the execution.
+    Determines WHERE a request should be executed without performing the
+    execution. Capability knowledge comes from `ToolCatalog`; this class holds
+    no list of tool names.
     """
 
     def __init__(
         self,
-        tools: Optional[List[Tool]] = None,
-        provider: Optional[LLMProvider] = None,
+        tools: list[Tool] | None = None,
+        provider: LLMProvider | None = None,
         min_confidence: float = 0.6,
         use_llm_classification: bool = False,
+        catalog: ToolCatalog | None = None,
     ) -> None:
-        self._tools = {t.name: t for t in (tools or [])}
+        if catalog is not None:
+            self._catalog = catalog
+        elif tools:
+            self._catalog = build_catalog(list(tools))
+        else:
+            self._catalog = build_catalog()
+            validate_out_of_scope(self._catalog)
         self._provider = provider
         self._min_confidence = min_confidence
         self._use_llm_classification = use_llm_classification
+
+    @property
+    def catalog(self) -> ToolCatalog:
+        return self._catalog
 
     def route(self, user_input: str) -> RouteDecision:
         """Analyze user input and determine the execution route.
@@ -125,8 +134,19 @@ class IntentRouter:
 
         text = user_input.strip().lower()
 
-        # 1. Fast deterministic check: Unsupported out-of-scope capabilities
-        for keywords, reason in UNSUPPORTED_PATTERNS:
+        # 1. Self-introduction is conversation, checked first so that a keyword
+        #    such as "call me" cannot drag it into the tool path.
+        for pattern in _CONVERSATIONAL_PATTERNS:
+            if pattern in text:
+                logger.info("Deterministic route: CONVERSATIONAL (self-introduction guard)")
+                return RouteDecision(
+                    route_type=RouteType.CONVERSATIONAL,
+                    confidence=0.95,
+                    reasoning=f"Detected self-introduction pattern '{pattern}'.",
+                )
+
+        # 2. Capabilities that are genuinely not implemented.
+        for keywords, reason in OUT_OF_SCOPE:
             if any(kw in text for kw in keywords):
                 logger.info("Deterministic route: UNSUPPORTED ('%s')", reason)
                 return RouteDecision(
@@ -135,8 +155,8 @@ class IntentRouter:
                     reasoning=reason,
                 )
 
-        # 2. Fast deterministic check: Multi-step agent route
-        if any(w in text for w in ["and then", "first ", "after that", "then "]):
+        # 3. Multi-step agent route.
+        if any(marker in text for marker in _MULTI_STEP_MARKERS):
             logger.info("Deterministic route: AGENT (multi-step workflow)")
             return RouteDecision(
                 route_type=RouteType.AGENT,
@@ -145,26 +165,48 @@ class IntentRouter:
                 reasoning="Complex or multi-step request routed to agent loop.",
             )
 
-        # 3. Fast deterministic check: Known tool pattern match
-        for tool_name, keywords in TOOL_KEYWORD_MAP.items():
-            if any(kw in text for kw in keywords):
-                if tool_name in self._tools or not self._tools:
-                    logger.info("Deterministic route: TOOL (%s)", tool_name)
-                    return RouteDecision(
-                        route_type=RouteType.TOOL,
-                        target=tool_name,
-                        confidence=0.95,
-                        reasoning=f"Matched known tool keyword for '{tool_name}'.",
-                    )
-                else:
-                    logger.warning("Matched tool '%s' but tool is not in registry", tool_name)
-                    return RouteDecision(
-                        route_type=RouteType.UNSUPPORTED,
-                        confidence=0.9,
-                        reasoning=f"Tool '{tool_name}' is not registered in the tool registry.",
-                    )
+        # 4. Exact phrase match against tool metadata, most specific phrase first.
+        match = self._catalog.best_phrase_match(text)
+        if match is not None:
+            tool_name, phrase = match
+            logger.info("Deterministic route: TOOL (%s via %r)", tool_name, phrase)
+            return RouteDecision(
+                route_type=RouteType.TOOL,
+                target=tool_name,
+                confidence=0.95,
+                reasoning=f"Matched tool metadata phrase '{phrase}' for '{tool_name}'.",
+            )
 
-        # 4. LLM provider classification if explicitly enabled
+        # 5. Weaker token-overlap match: enough signal to need tools, not enough
+        #    for a confident single-tool call.
+        #
+        #    This bar is deliberately high. Coverage alone is useless in a short
+        #    sentence — one incidental word reaches 50% — and description tokens
+        #    carry common nouns ("story", "workspace"), so "tell me a story
+        #    about space" overlaps `recall` twice. Diverting ordinary chat into
+        #    a tool-oriented agent loop is a worse failure than deferring to the
+        #    LLM, which can still call any tool it likes. Three distinct tokens
+        #    is the point where the overlap is real signal.
+        for tool_name, score, overlap in self._catalog.score_tokens(text):
+            if overlap >= 3 and score >= 0.5:
+                logger.info(
+                    "Deterministic route: AGENT (token match %s=%.2f, overlap=%d)",
+                    tool_name,
+                    score,
+                    overlap,
+                )
+                return RouteDecision(
+                    route_type=RouteType.AGENT,
+                    target=tool_name,
+                    confidence=min(0.8, score),
+                    reasoning=(
+                        f"Partial metadata overlap with '{tool_name}'; "
+                        "routed to agent loop to let the model compose arguments."
+                    ),
+                )
+            break
+
+        # 6. LLM provider classification if explicitly enabled.
         if self._use_llm_classification and self._provider is not None:
             try:
                 llm_decision = self._classify_with_llm(user_input)
@@ -180,6 +222,20 @@ class IntentRouter:
                             confidence=llm_decision.confidence,
                             reasoning=f"Low confidence LLM classification ({llm_decision.confidence:.2f}); fallback to general conversation.",
                         )
+                    if (
+                        llm_decision.route_type is RouteType.TOOL
+                        and llm_decision.target
+                        and not self._catalog.get(llm_decision.target)
+                    ):
+                        # Never let the model name a tool that is not registered.
+                        return RouteDecision(
+                            route_type=RouteType.UNSUPPORTED,
+                            confidence=llm_decision.confidence,
+                            reasoning=(
+                                f"Tool '{llm_decision.target}' is not registered; "
+                                "refusing the call."
+                            ),
+                        )
                     return llm_decision
             except Exception as exc:
                 logger.error("LLM classification failed: %s", exc)
@@ -189,21 +245,7 @@ class IntentRouter:
                     reasoning=f"LLM classification failure ({type(exc).__name__}); fallback to general conversation.",
                 )
 
-        # Default fallback: Conversational query
-        # Guard: self-introduction patterns should ALWAYS be conversational
-        conversational_patterns = [
-            "my name is", "i'm ", "i am ", "call me", "you can call me",
-            "name's ", "that's me", "this is ", "i'm called",
-        ]
-        for pattern in conversational_patterns:
-            if pattern in text:
-                logger.info("Deterministic route: CONVERSATIONAL (self-introduction guard)")
-                return RouteDecision(
-                    route_type=RouteType.CONVERSATIONAL,
-                    confidence=0.95,
-                    reasoning=f"Detected self-introduction pattern '{pattern}'.",
-                )
-
+        # Default fallback: conversational query.
         logger.info("Default route: CONVERSATIONAL")
         return RouteDecision(
             route_type=RouteType.CONVERSATIONAL,
@@ -211,11 +253,16 @@ class IntentRouter:
             reasoning="General query routed to conversational LLM handler.",
         )
 
-    def _classify_with_llm(self, user_input: str) -> Optional[RouteDecision]:
+    def _classify_with_llm(self, user_input: str) -> RouteDecision | None:
         """Attempt LLM-assisted classification when available."""
+        if self._provider is None:
+            # No provider wired: report "no decision" so the caller keeps its
+            # deterministic fallbacks, matching the other failure paths here.
+            return None
+
         prompt = (
             f"Classify the following user input into exactly one category: [CONVERSATIONAL, TOOL, AGENT, UNSUPPORTED].\n"
-            f"Input: \"{user_input}\"\n"
+            f'Input: "{user_input}"\n'
             f"Format response as: CATEGORY|TARGET|CONFIDENCE|REASON"
         )
         res = self._provider.complete(prompt, tools=[])
@@ -248,4 +295,6 @@ __all__ = [
     "IntentRouter",
     "RouteDecision",
     "RouteType",
+    "OUT_OF_SCOPE",
+    "validate_out_of_scope",
 ]

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.tools._termux import run_termux, run_cmd, run_am
+from typing import Any
+
+from ultron.tools._termux import run_termux
 from ultron.tools.base import Tool
 
 
@@ -13,6 +14,7 @@ class SetAlarm(Tool):
     """Set an alarm for a specific time."""
 
     name = "set_alarm"
+    risk = RiskLevel.MEDIUM
     description = "Set an alarm for a given time. Format: HH:MM (24h) or use 'in X minutes'."
     parameters = {
         "type": "object",
@@ -38,20 +40,26 @@ class SetAlarm(Tool):
     }
     mutates = True
 
-    def run(self, time: str = "", label: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, time: str = "", label: str = "", **kwargs: Any) -> dict[str, Any]:
         t = time or kwargs.get("alarm_time") or kwargs.get("hour") or ""
-        l = label or kwargs.get("description") or kwargs.get("name") or "Ultron Alarm"
+        label_text = label or kwargs.get("description") or kwargs.get("name") or "Ultron Alarm"
         if not t:
             return {"error": "No time specified", "success": False}
 
-        result = run_termux("alarm-set", args=["-t", t, "-e", l])
-        return {"success": result.ok, "time": t, "label": l, "error": result.stderr or None}
+        result = run_termux("alarm-set", args=["-t", t, "-e", label_text])
+        return {
+            "success": result.ok,
+            "time": t,
+            "label": label_text,
+            "error": result.stderr or None,
+        }
 
 
 class ListAlarms(Tool):
     """List all currently set alarms."""
 
     name = "list_alarms"
+    risk = RiskLevel.READ
     description = "List all active alarms on the device."
     parameters = {
         "type": "object",
@@ -66,7 +74,7 @@ class ListAlarms(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("alarm-list", parse_json=True)
         if not result.ok:
             return {"alarms": [], "count": 0, "error": result.stderr}
@@ -79,6 +87,7 @@ class CancelAlarm(Tool):
     """Cancel an alarm by ID or time."""
 
     name = "cancel_alarm"
+    risk = RiskLevel.LOW
     description = "Cancel an active alarm by its ID."
     parameters = {
         "type": "object",
@@ -99,7 +108,7 @@ class CancelAlarm(Tool):
     }
     mutates = True
 
-    def run(self, alarm_id: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, alarm_id: str = "", **kwargs: Any) -> dict[str, Any]:
         aid = alarm_id or kwargs.get("id") or kwargs.get("alarm") or ""
         if not aid:
             return {"error": "No alarm ID provided", "success": False}
@@ -111,6 +120,7 @@ class SetTimer(Tool):
     """Set a countdown timer."""
 
     name = "set_timer"
+    risk = RiskLevel.LOW
     description = "Set a countdown timer for a specified duration in seconds."
     parameters = {
         "type": "object",
@@ -131,7 +141,7 @@ class SetTimer(Tool):
     }
     mutates = True
 
-    def run(self, seconds: int = 60, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, seconds: int = 60, **kwargs: Any) -> dict[str, Any]:
         s = kwargs.get("duration") or kwargs.get("time") or seconds
         s = int(s)
         if s <= 0:

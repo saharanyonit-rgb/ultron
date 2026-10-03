@@ -8,7 +8,6 @@ without hardcoding model IDs.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from ultron.config import BrainModelConfig, LLMConfig
 from ultron.llm.base import LLMProvider
@@ -29,7 +28,7 @@ class BrainProviderFactory:
     def create_provider(
         self,
         model_config: BrainModelConfig,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> LLMProvider:
         """Create an LLM provider based on brain model configuration.
 
@@ -59,6 +58,8 @@ class BrainProviderFactory:
             return self._create_anthropic_provider(model, temperature, system_prompt)
         elif provider == "grok":
             return self._create_grok_provider(model, temperature, system_prompt)
+        elif provider == "groq":
+            return self._create_groq_provider(model, temperature, system_prompt)
         else:
             logger.warning("Unknown provider '%s', falling back to gemini", provider)
             return self._create_gemini_provider(model, temperature, system_prompt)
@@ -67,7 +68,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> GeminiProvider:
         api_key = self._llm_config.gemini_api_key
         if not api_key:
@@ -83,7 +84,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> OpenRouterProvider:
         api_key = self._llm_config.openrouter_api_key
         if not api_key:
@@ -99,7 +100,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> OpenAIProvider:
         api_key = self._llm_config.openai_api_key
         if not api_key:
@@ -115,7 +116,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> OpenRouterProvider:
         api_key = self._llm_config.nvidia_api_key
         if not api_key:
@@ -131,7 +132,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> OpenRouterProvider:
         api_key = self._llm_config.anthropic_api_key
         if not api_key:
@@ -147,7 +148,7 @@ class BrainProviderFactory:
         self,
         model: str,
         temperature: float,
-        system_prompt: Optional[str],
+        system_prompt: str | None,
     ) -> GrokProvider:
         api_key = self._llm_config.grok_api_key
         if not api_key:
@@ -159,11 +160,29 @@ class BrainProviderFactory:
             temperature=temperature,
         )
 
+    def _create_groq_provider(
+        self,
+        model: str,
+        temperature: float,
+        system_prompt: str | None,
+    ) -> OpenAIProvider:
+        """Groq exposes an OpenAI-compatible API, so reuse that transport."""
+        api_key = self._llm_config.groq_api_key
+        if not api_key:
+            raise ValueError("ULTRON_GROQ_API_KEY is not configured")
+        return OpenAIProvider(
+            api_key=api_key,
+            model=model,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            base_url="https://api.groq.com/openai/v1",
+        )
+
     def create_provider_with_fallback(
         self,
         primary_config: BrainModelConfig,
         fallback_config: BrainModelConfig,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> LLMProvider:
         """Create a provider with automatic fallback.
 

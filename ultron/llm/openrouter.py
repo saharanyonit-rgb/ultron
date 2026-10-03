@@ -10,7 +10,7 @@ import json
 import logging
 import random
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -36,7 +36,7 @@ class OpenRouterProvider(LLMProvider):
         self,
         api_key: str,
         model: str = "openai/gpt-4o",
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         temperature: float = 0.3,
         max_retries: int = 4,
     ) -> None:
@@ -55,16 +55,16 @@ class OpenRouterProvider(LLMProvider):
                 "Content-Type": "application/json",
             },
         )
-        self._messages: List[Dict[str, Any]] = []
+        self._messages: list[dict[str, Any]] = []
 
-    def complete(self, text: Optional[str], tools: List["ToolSpec"]) -> ProviderResult:
+    def complete(self, text: str | None, tools: list[ToolSpec]) -> ProviderResult:
         if self._system_prompt and not self._messages:
             self._messages.append({"role": "system", "content": self._system_prompt})
 
         if text is not None:
             self._messages.append({"role": "user", "content": text})
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": self._messages,
             "temperature": self._temperature,
@@ -89,10 +89,10 @@ class OpenRouterProvider(LLMProvider):
         response = self._post_with_retries(payload)
         return self._parse_response(response.json())
 
-    def _post_with_retries(self, payload: Dict[str, Any]) -> httpx.Response:
+    def _post_with_retries(self, payload: dict[str, Any]) -> httpx.Response:
         """POST with exponential backoff on 429 / transient 5xx responses."""
         retryable_status = {429, 500, 502, 503, 504}
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(self._max_retries + 1):
             try:
@@ -105,7 +105,7 @@ class OpenRouterProvider(LLMProvider):
                 last_error = exc
                 if attempt >= self._max_retries:
                     raise
-                delay = min(2 ** attempt, 30) + random.uniform(0, 1)
+                delay = min(2**attempt, 30) + random.uniform(0, 1)
                 logger.warning(
                     "OpenRouter network error (attempt %d/%d): %s — retrying in %.1fs",
                     attempt + 1,
@@ -126,7 +126,7 @@ class OpenRouterProvider(LLMProvider):
                 if retry_after and retry_after.isdigit():
                     delay = min(float(retry_after), 60.0)
                 else:
-                    delay = min(2 ** attempt, 30) + random.uniform(0, 1)
+                    delay = min(2**attempt, 30) + random.uniform(0, 1)
                 logger.warning(
                     "OpenRouter %d (attempt %d/%d) — retrying in %.1fs",
                     response.status_code,
@@ -142,14 +142,12 @@ class OpenRouterProvider(LLMProvider):
 
         status = getattr(getattr(last_error, "response", None), "status_code", None)
         if status == 429:
-            raise RateLimitError(
-                "OpenRouter rate limit exceeded after retries"
-            ) from last_error
+            raise RateLimitError("OpenRouter rate limit exceeded after retries") from last_error
         raise ProviderServerError(
             f"OpenRouter request failed after {self._max_retries + 1} attempts"
         ) from last_error
 
-    def feed_tool_results(self, results: List[ToolResult]) -> None:
+    def feed_tool_results(self, results: list[ToolResult]) -> None:
         for result in results:
             self._messages.append(
                 {
@@ -160,7 +158,7 @@ class OpenRouterProvider(LLMProvider):
                 }
             )
 
-    def _parse_response(self, data: Dict[str, Any]) -> ProviderResult:
+    def _parse_response(self, data: dict[str, Any]) -> ProviderResult:
         choices = data.get("choices", [])
         if not choices:
             logger.warning("OpenRouter response had no choices")
@@ -169,7 +167,7 @@ class OpenRouterProvider(LLMProvider):
         choice = choices[0]
         message = choice.get("message", {})
 
-        text: Optional[str] = message.get("content")
+        text: str | None = message.get("content")
         raw_tools = message.get("tool_calls", [])
 
         # Some reasoning models return content in the reasoning field
@@ -180,12 +178,12 @@ class OpenRouterProvider(LLMProvider):
                 logger.debug("Using reasoning field as content fallback")
                 text = reasoning
 
-        assistant_turn: Dict[str, Any] = {"role": "assistant", "content": text}
+        assistant_turn: dict[str, Any] = {"role": "assistant", "content": text}
         if raw_tools:
             assistant_turn["tool_calls"] = raw_tools
         self._messages.append(assistant_turn)
 
-        tool_calls: List[ToolCall] = []
+        tool_calls: list[ToolCall] = []
         for tc in raw_tools:
             fn = tc.get("function", {})
             raw_args = fn.get("arguments", {})

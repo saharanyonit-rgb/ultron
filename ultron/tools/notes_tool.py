@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from typing import Any
 
 from ultron.services import get_notes_service
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 
 class CreateNoteTool(Tool):
     """Create a new note."""
 
     name = "create_note"
+    keywords = (
+        "create note",
+        "write a note",
+        "new note",
+        "take a note",
+    )
+    risk = RiskLevel.LOW
     description = (
         "Create a new note. Use when the user asks to create a note, write something down, "
         "save a note, or add an idea. Returns the created note with its ID."
@@ -46,7 +57,9 @@ class CreateNoteTool(Tool):
     }
     mutates = True
 
-    def run(self, title: str, content: str = "", tags: list[str] | None = None, **_: Any) -> Dict[str, Any]:
+    def run(
+        self, title: str, content: str = "", tags: list[str] | None = None, **_: Any
+    ) -> dict[str, Any]:
         try:
             service = get_notes_service()
             note = service.create_note(title=title, content=content, tags=tags or [])
@@ -59,6 +72,12 @@ class ListNotesTool(Tool):
     """List all notes, optionally filtered by tag."""
 
     name = "list_notes"
+    keywords = (
+        "list notes",
+        "show my notes",
+        "my notes",
+    )
+    risk = RiskLevel.READ
     description = (
         "List all notes, optionally filtered by tag. "
         "Use when the user asks to show notes, list notes, or see their notes."
@@ -85,7 +104,7 @@ class ListNotesTool(Tool):
         },
     }
 
-    def run(self, tag: str | None = None, limit: int = 20, **_: Any) -> Dict[str, Any]:
+    def run(self, tag: str | None = None, limit: int = 20, **_: Any) -> dict[str, Any]:
         try:
             service = get_notes_service()
             notes = service.list_notes(tag=tag, limit=limit)
@@ -98,6 +117,12 @@ class SearchNotesTool(Tool):
     """Search notes by title or content."""
 
     name = "search_notes"
+    keywords = (
+        "search notes",
+        "search my notes",
+        "find in notes",
+    )
+    risk = RiskLevel.READ
     description = (
         "Search notes by keyword in title or content. "
         "Use when the user asks to search notes, find notes about something, "
@@ -125,7 +150,7 @@ class SearchNotesTool(Tool):
         },
     }
 
-    def run(self, query: str, limit: int = 10, **_: Any) -> Dict[str, Any]:
+    def run(self, query: str, limit: int = 10, **_: Any) -> dict[str, Any]:
         try:
             service = get_notes_service()
             notes = service.search_notes(query=query, limit=limit)

@@ -8,23 +8,24 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
-from ultron.goal import Goal, GoalStatus
+from ultron.goal import Goal
 
 logger = logging.getLogger("ultron.multi_goal")
 
 
-class GoalPriority(str, Enum):
+class GoalPriority(StrEnum):
     CRITICAL = "critical"
     HIGH = "high"
     NORMAL = "normal"
     LOW = "low"
 
 
-class GoalScheduleStatus(str, Enum):
+class GoalScheduleStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -37,17 +38,18 @@ class GoalScheduleStatus(str, Enum):
 @dataclass
 class GoalSlot:
     """Scheduled goal with priority and resource allocation."""
+
     goal: Goal = field(default_factory=Goal)
     priority: str = GoalPriority.NORMAL.value
     schedule_status: str = GoalScheduleStatus.PENDING.value
-    allocated_budget: Dict[str, float] = field(default_factory=dict)
-    depends_on: List[str] = field(default_factory=list)
+    allocated_budget: dict[str, float] = field(default_factory=dict)
+    depends_on: list[str] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
-    started_at: Optional[float] = None
-    completed_at: Optional[float] = None
-    result: Optional[Dict[str, Any]] = None
+    started_at: float | None = None
+    completed_at: float | None = None
+    result: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal.id,
             "description": self.goal.description,
@@ -70,8 +72,8 @@ class MultiGoalManager:
 
     def __init__(self, max_concurrent: int = 3) -> None:
         self._max_concurrent = max_concurrent
-        self._slots: Dict[str, GoalSlot] = {}
-        self._completion_callbacks: List[Callable[[GoalSlot], None]] = []
+        self._slots: dict[str, GoalSlot] = {}
+        self._completion_callbacks: list[Callable[[GoalSlot], None]] = []
 
     @property
     def max_concurrent(self) -> int:
@@ -81,8 +83,8 @@ class MultiGoalManager:
         self,
         goal: Goal,
         priority: str = GoalPriority.NORMAL.value,
-        depends_on: Optional[List[str]] = None,
-        budget: Optional[Dict[str, float]] = None,
+        depends_on: list[str] | None = None,
+        budget: dict[str, float] | None = None,
     ) -> GoalSlot:
         """Add a goal to the queue."""
         slot = GoalSlot(
@@ -119,7 +121,7 @@ class MultiGoalManager:
         self,
         goal_id: str,
         success: bool = True,
-        result: Optional[Dict[str, Any]] = None,
+        result: dict[str, Any] | None = None,
     ) -> bool:
         """Mark a goal as completed."""
         slot = self._slots.get(goal_id)
@@ -127,8 +129,7 @@ class MultiGoalManager:
             return False
 
         slot.schedule_status = (
-            GoalScheduleStatus.COMPLETED.value if success
-            else GoalScheduleStatus.FAILED.value
+            GoalScheduleStatus.COMPLETED.value if success else GoalScheduleStatus.FAILED.value
         )
         slot.completed_at = time.time()
         slot.result = result
@@ -155,10 +156,11 @@ class MultiGoalManager:
             return True
         return False
 
-    def get_next_goal(self) -> Optional[GoalSlot]:
+    def get_next_goal(self) -> GoalSlot | None:
         """Get the highest priority pending goal that can run."""
         pending = [
-            slot for slot in self._slots.values()
+            slot
+            for slot in self._slots.values()
             if slot.schedule_status == GoalScheduleStatus.PENDING.value
         ]
 
@@ -169,9 +171,7 @@ class MultiGoalManager:
             GoalPriority.LOW.value: 3,
         }
 
-        pending.sort(
-            key=lambda s: priority_order.get(s.priority, 99)
-        )
+        pending.sort(key=lambda s: priority_order.get(s.priority, 99))
 
         for slot in pending:
             if self._can_start(slot):
@@ -181,24 +181,20 @@ class MultiGoalManager:
 
     def get_running_count(self) -> int:
         return sum(
-            1 for s in self._slots.values()
-            if s.schedule_status == GoalScheduleStatus.RUNNING.value
+            1 for s in self._slots.values() if s.schedule_status == GoalScheduleStatus.RUNNING.value
         )
 
-    def get_all_goals(self) -> List[GoalSlot]:
+    def get_all_goals(self) -> list[GoalSlot]:
         return list(self._slots.values())
 
-    def get_goals_by_status(self, status: str) -> List[GoalSlot]:
-        return [
-            s for s in self._slots.values()
-            if s.schedule_status == status
-        ]
+    def get_goals_by_status(self, status: str) -> list[GoalSlot]:
+        return [s for s in self._slots.values() if s.schedule_status == status]
 
     def add_completion_callback(self, callback: Callable[[GoalSlot], None]) -> None:
         self._completion_callbacks.append(callback)
 
-    def get_summary(self) -> Dict[str, Any]:
-        status_counts: Dict[str, int] = {}
+    def get_summary(self) -> dict[str, Any]:
+        status_counts: dict[str, int] = {}
         for slot in self._slots.values():
             status_counts[slot.schedule_status] = status_counts.get(slot.schedule_status, 0) + 1
         return {

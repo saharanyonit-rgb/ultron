@@ -1,0 +1,17 @@
+{
+  "tasks": [],
+  "automations": [
+    {
+      "name": "morning",
+      "steps": [
+        {
+          "tool_name": "get_system_info",
+          "arguments": {}
+        }
+      ],
+      "description": "",
+      "id": "2f1e4959951a",
+      "created_at": "2026-10-01T17:24:57.517491+05:30"
+    }
+  ]
+}

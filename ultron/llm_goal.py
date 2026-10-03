@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.goal import (
     Goal,
@@ -29,7 +29,6 @@ from ultron.goal import (
     GoalConstraint,
     GoalEngine,
     GoalPriority,
-    GoalStatus,
     SuccessCriteria,
 )
 from ultron.llm.base import LLMProvider
@@ -39,11 +38,27 @@ logger = logging.getLogger("ultron.llm_goal")
 # Valid values for validation
 _VALID_COMPLEXITY = {c.value for c in GoalComplexity}
 _VALID_PRIORITY = {p.value for p in GoalPriority}
-_VALID_CAPABILITIES = {"research", "coding", "writing", "filesystem", "browser", "analysis", "general"}
+_VALID_CAPABILITIES = {
+    "research",
+    "coding",
+    "writing",
+    "filesystem",
+    "browser",
+    "analysis",
+    "general",
+}
 _VALID_TOOLS = {
-    "create_file", "read_file", "search_files", "delete_file",
-    "open_url", "open_app", "close_app", "take_screenshot",
-    "get_system_info", "get_clipboard", "set_clipboard",
+    "create_file",
+    "read_file",
+    "search_files",
+    "delete_file",
+    "open_url",
+    "open_app",
+    "close_app",
+    "take_screenshot",
+    "get_system_info",
+    "get_clipboard",
+    "set_clipboard",
 }
 
 _GOAL_UNDERSTANDING_PROMPT = """\
@@ -92,8 +107,8 @@ class LLMGoalEngine:
     def __init__(
         self,
         provider: LLMProvider,
-        available_tools: Optional[List[str]] = None,
-        fallback: Optional[GoalEngine] = None,
+        available_tools: list[str] | None = None,
+        fallback: GoalEngine | None = None,
     ) -> None:
         self._provider = provider
         self._available_tools = available_tools or []
@@ -116,7 +131,8 @@ class LLMGoalEngine:
             if goal is not None:
                 logger.info(
                     "LLM goal understanding succeeded [id=%s, complexity=%s]",
-                    goal.id, goal.complexity.value,
+                    goal.id,
+                    goal.complexity.value,
                 )
                 return goal
         except Exception as exc:
@@ -125,7 +141,7 @@ class LLMGoalEngine:
         logger.info("Falling back to heuristic goal engine")
         return self._fallback.create_goal(user_request)
 
-    def _llm_understand(self, request: str) -> Optional[Goal]:
+    def _llm_understand(self, request: str) -> Goal | None:
         """Call LLM to understand the goal, return Goal or None."""
         tools_str = ", ".join(self._available_tools) if self._available_tools else "none specified"
 
@@ -142,7 +158,7 @@ class LLMGoalEngine:
 
         return self._parse_llm_response(result.text, request)
 
-    def _parse_llm_response(self, text: str, original_request: str) -> Optional[Goal]:
+    def _parse_llm_response(self, text: str, original_request: str) -> Goal | None:
         """Parse LLM JSON response into a Goal object."""
         cleaned = text.strip()
 
@@ -168,7 +184,7 @@ class LLMGoalEngine:
 
         return self._build_goal_from_dict(data, original_request)
 
-    def _build_goal_from_dict(self, data: Dict[str, Any], original_request: str) -> Optional[Goal]:
+    def _build_goal_from_dict(self, data: dict[str, Any], original_request: str) -> Goal | None:
         """Build a Goal from parsed LLM JSON, validating all fields."""
         # Extract and validate complexity
         complexity_str = data.get("complexity", "simple")
@@ -191,35 +207,38 @@ class LLMGoalEngine:
         success_criteria = []
         for c in data.get("success_criteria", []):
             if isinstance(c, dict) and "description" in c:
-                success_criteria.append(SuccessCriteria(
-                    description=str(c["description"]),
-                    criterion_type=str(c.get("criterion_type", "output")),
-                ))
+                success_criteria.append(
+                    SuccessCriteria(
+                        description=str(c["description"]),
+                        criterion_type=str(c.get("criterion_type", "output")),
+                    )
+                )
 
         # Extract and validate constraints
         constraints = []
         for c in data.get("constraints", []):
             if isinstance(c, dict) and "description" in c:
-                constraints.append(GoalConstraint(
-                    description=str(c["description"]),
-                    constraint_type=str(c.get("constraint_type", "general")),
-                ))
+                constraints.append(
+                    GoalConstraint(
+                        description=str(c["description"]),
+                        constraint_type=str(c.get("constraint_type", "general")),
+                    )
+                )
 
         # Extract expected outputs
-        expected_outputs = [
-            str(o) for o in data.get("expected_outputs", [])
-            if isinstance(o, str)
-        ]
+        expected_outputs = [str(o) for o in data.get("expected_outputs", []) if isinstance(o, str)]
 
         # Extract and validate capabilities
         required_capabilities = [
-            str(c) for c in data.get("required_capabilities", [])
+            str(c)
+            for c in data.get("required_capabilities", [])
             if isinstance(c, str) and c in _VALID_CAPABILITIES
         ]
 
         # Extract and validate tools
         required_tools = [
-            str(t) for t in data.get("required_tools", [])
+            str(t)
+            for t in data.get("required_tools", [])
             if isinstance(t, str) and t in _VALID_TOOLS
         ]
 

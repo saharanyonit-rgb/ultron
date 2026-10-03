@@ -12,10 +12,9 @@ Context is serializable and restorable for persistence.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("ultron.context")
 
@@ -27,12 +26,12 @@ class GoalContext:
     goal_id: str = ""
     goal_description: str = ""
     original_request: str = ""
-    success_criteria: List[str] = field(default_factory=list)
-    constraints: List[str] = field(default_factory=list)
-    expected_outputs: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    success_criteria: list[str] = field(default_factory=list)
+    constraints: list[str] = field(default_factory=list)
+    expected_outputs: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "goal_description": self.goal_description,
@@ -44,7 +43,7 @@ class GoalContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GoalContext":
+    def from_dict(cls, data: dict[str, Any]) -> GoalContext:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -55,15 +54,15 @@ class TaskContext:
     task_id: str = ""
     task_description: str = ""
     objective: str = ""
-    assigned_agent: Optional[str] = None
-    required_capabilities: List[str] = field(default_factory=list)
-    required_tools: List[str] = field(default_factory=list)
-    input_data: Dict[str, Any] = field(default_factory=dict)
-    dependencies_completed: Dict[str, Any] = field(default_factory=dict)
-    verification_criteria: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    assigned_agent: str | None = None
+    required_capabilities: list[str] = field(default_factory=list)
+    required_tools: list[str] = field(default_factory=list)
+    input_data: dict[str, Any] = field(default_factory=dict)
+    dependencies_completed: dict[str, Any] = field(default_factory=dict)
+    verification_criteria: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "task_description": self.task_description,
@@ -78,7 +77,7 @@ class TaskContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TaskContext":
+    def from_dict(cls, data: dict[str, Any]) -> TaskContext:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -87,15 +86,15 @@ class AgentContext:
     """Context for an agent's execution session."""
 
     agent_name: str = ""
-    capabilities: List[str] = field(default_factory=list)
-    available_tools: List[str] = field(default_factory=list)
-    current_task_id: Optional[str] = None
-    previous_results: List[Dict[str, Any]] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
+    available_tools: list[str] = field(default_factory=list)
+    current_task_id: str | None = None
+    previous_results: list[dict[str, Any]] = field(default_factory=list)
     max_iterations: int = 8
     iteration: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "agent_name": self.agent_name,
             "capabilities": self.capabilities,
@@ -108,7 +107,7 @@ class AgentContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentContext":
+    def from_dict(cls, data: dict[str, Any]) -> AgentContext:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -118,22 +117,24 @@ class ExecutionContext:
 
     request_id: str = ""
     task_id: str = ""
-    tool_results: List[Dict[str, Any]] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    state: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    state: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def add_tool_result(self, tool_name: str, result: Dict[str, Any], success: bool) -> None:
-        self.tool_results.append({
-            "tool_name": tool_name,
-            "result": result,
-            "success": success,
-        })
+    def add_tool_result(self, tool_name: str, result: dict[str, Any], success: bool) -> None:
+        self.tool_results.append(
+            {
+                "tool_name": tool_name,
+                "result": result,
+                "success": success,
+            }
+        )
 
     def add_error(self, error: str) -> None:
         self.errors.append(error)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
             "task_id": self.task_id,
@@ -144,7 +145,7 @@ class ExecutionContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExecutionContext":
+    def from_dict(cls, data: dict[str, Any]) -> ExecutionContext:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -153,15 +154,15 @@ class ToolResultContext:
     """Context for a specific tool execution result."""
 
     tool_name: str = ""
-    arguments: Dict[str, Any] = field(default_factory=dict)
-    output: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
+    output: dict[str, Any] = field(default_factory=dict)
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
     risk_level: str = ""
     permission_granted: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool_name": self.tool_name,
             "arguments": self.arguments,
@@ -174,7 +175,7 @@ class ToolResultContext:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ToolResultContext":
+    def from_dict(cls, data: dict[str, Any]) -> ToolResultContext:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -187,42 +188,42 @@ class ContextManager:
 
     def __init__(self, max_history: int = 50) -> None:
         self._max_history = max_history
-        self._goal_context: Optional[GoalContext] = None
-        self._task_contexts: Dict[str, TaskContext] = {}
-        self._agent_contexts: Dict[str, AgentContext] = {}
-        self._execution_contexts: Dict[str, ExecutionContext] = {}
-        self._tool_result_history: List[ToolResultContext] = []
+        self._goal_context: GoalContext | None = None
+        self._task_contexts: dict[str, TaskContext] = {}
+        self._agent_contexts: dict[str, AgentContext] = {}
+        self._execution_contexts: dict[str, ExecutionContext] = {}
+        self._tool_result_history: list[ToolResultContext] = []
 
     def set_goal_context(self, context: GoalContext) -> None:
         self._goal_context = context
 
-    def get_goal_context(self) -> Optional[GoalContext]:
+    def get_goal_context(self) -> GoalContext | None:
         return self._goal_context
 
     def set_task_context(self, task_id: str, context: TaskContext) -> None:
         self._task_contexts[task_id] = context
 
-    def get_task_context(self, task_id: str) -> Optional[TaskContext]:
+    def get_task_context(self, task_id: str) -> TaskContext | None:
         return self._task_contexts.get(task_id)
 
     def set_agent_context(self, agent_name: str, context: AgentContext) -> None:
         self._agent_contexts[agent_name] = context
 
-    def get_agent_context(self, agent_name: str) -> Optional[AgentContext]:
+    def get_agent_context(self, agent_name: str) -> AgentContext | None:
         return self._agent_contexts.get(agent_name)
 
     def set_execution_context(self, task_id: str, context: ExecutionContext) -> None:
         self._execution_contexts[task_id] = context
 
-    def get_execution_context(self, task_id: str) -> Optional[ExecutionContext]:
+    def get_execution_context(self, task_id: str) -> ExecutionContext | None:
         return self._execution_contexts.get(task_id)
 
     def add_tool_result(self, context: ToolResultContext) -> None:
         self._tool_result_history.append(context)
         if len(self._tool_result_history) > self._max_history:
-            self._tool_result_history = self._tool_result_history[-self._max_history:]
+            self._tool_result_history = self._tool_result_history[-self._max_history :]
 
-    def get_tool_result_history(self, limit: int = 10) -> List[ToolResultContext]:
+    def get_tool_result_history(self, limit: int = 10) -> list[ToolResultContext]:
         return self._tool_result_history[-limit:]
 
     def build_agent_prompt_context(self, task_context: TaskContext) -> str:
@@ -245,17 +246,19 @@ class ContextManager:
 
         return "\n".join(parts)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_context": self._goal_context.to_dict() if self._goal_context else None,
             "task_contexts": {k: v.to_dict() for k, v in self._task_contexts.items()},
             "agent_contexts": {k: v.to_dict() for k, v in self._agent_contexts.items()},
             "execution_contexts": {k: v.to_dict() for k, v in self._execution_contexts.items()},
-            "tool_result_history": [t.to_dict() for t in self._tool_result_history[-self._max_history:]],
+            "tool_result_history": [
+                t.to_dict() for t in self._tool_result_history[-self._max_history :]
+            ],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ContextManager":
+    def from_dict(cls, data: dict[str, Any]) -> ContextManager:
         mgr = cls()
         if data.get("goal_context"):
             mgr._goal_context = GoalContext.from_dict(data["goal_context"])

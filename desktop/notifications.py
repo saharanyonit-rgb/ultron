@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
+from typing import Any
 
 logger = logging.getLogger("jarvis.desktop.notifications")
 
@@ -18,7 +18,9 @@ class NotificationManager:
 
     def __init__(self, app_name: str = "JARVIS"):
         self.app_name = app_name
-        self._toast = None
+        # Either a win10toast ToastNotifier instance, the "winotify" marker
+        # string, or None when no backend is available.
+        self._toast: Any = None
         self._available = False
         self._init_backend()
 
@@ -31,6 +33,7 @@ class NotificationManager:
         # Try win10toast first
         try:
             from win10toast import ToastNotifier
+
             self._toast = ToastNotifier()
             self._available = True
             logger.info("Using win10toast for notifications")
@@ -40,7 +43,9 @@ class NotificationManager:
 
         # Try winotify (Windows 10/11 toast notifications)
         try:
-            from winotify import Notification, audio
+            # Import probe only: winotify is imported again in _notify_winotify.
+            from winotify import Notification, audio  # noqa: F401
+
             self._toast = "winotify"
             self._available = True
             logger.info("Using winotify for notifications")
@@ -55,7 +60,7 @@ class NotificationManager:
         title: str,
         message: str,
         duration: int = 5,
-        icon_path: Optional[str] = None,
+        icon_path: str | None = None,
     ) -> bool:
         """Show a Windows notification."""
         if not self._available:
@@ -72,9 +77,7 @@ class NotificationManager:
 
         return False
 
-    def _notify_winotify(
-        self, title: str, message: str, icon_path: Optional[str]
-    ) -> bool:
+    def _notify_winotify(self, title: str, message: str, icon_path: str | None) -> bool:
         """Show notification using winotify."""
         from winotify import Notification
 
@@ -88,7 +91,7 @@ class NotificationManager:
         return True
 
     def _notify_win10toast(
-        self, title: str, message: str, duration: int, icon_path: Optional[str]
+        self, title: str, message: str, duration: int, icon_path: str | None
     ) -> bool:
         """Show notification using win10toast."""
         self._toast.show_toast(

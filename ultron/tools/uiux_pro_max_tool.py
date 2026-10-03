@@ -12,12 +12,14 @@ truth and needs no bundled copy of its data.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.tools.base import Tool
 
@@ -64,7 +66,7 @@ STACKS = [
 ]
 
 
-def _find_skill_dir() -> Optional[Path]:
+def _find_skill_dir() -> Path | None:
     """Locate the UI/UX Pro Max skill install, or the repo source, if any.
 
     Search order:
@@ -81,7 +83,7 @@ def _find_skill_dir() -> Optional[Path]:
     pkg_root = Path(__file__).resolve().parent.parent.parent
     cwd = Path.cwd()
 
-    candidates: List[Path] = [
+    candidates: list[Path] = [
         pkg_root / "ultron" / "skills" / "ui-ux-pro-max",
         cwd / ".opencode" / "skills" / "ui-ux-pro-max",
         Path.home() / ".opencode" / "skills" / "ui-ux-pro-max",
@@ -99,6 +101,18 @@ class SearchUIDesignTool(Tool):
     """Search the UI/UX Pro Max design-intelligence database."""
 
     name = "search_ui_design"
+    keywords = (
+        "ui style",
+        "design system",
+        "color palette",
+        "font pairing",
+        "typography pairing",
+        "charts recommendation",
+        "ux guideline",
+        "landing page pattern",
+        "ui variations",
+    )
+    risk = RiskLevel.READ
     description = (
         "Search a local UI/UX design-intelligence database for styles, color "
         "palettes, font pairings, UX guidelines, chart types, icons, and "
@@ -177,7 +191,7 @@ class SearchUIDesignTool(Tool):
     }
     mutates = False
 
-    def _resolve_search_script(self) -> Optional[Path]:
+    def _resolve_search_script(self) -> Path | None:
         skill_dir = _find_skill_dir()
         if not skill_dir:
             return None
@@ -196,7 +210,7 @@ class SearchUIDesignTool(Tool):
         motion: int = 0,
         density: int = 0,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = (query or "").strip()
         if not query:
             return {"found": False, "error": "Missing required parameter 'query'."}
@@ -214,14 +228,20 @@ class SearchUIDesignTool(Tool):
                 ),
             }
 
-        cmd: List[str] = [sys.executable, str(script), query, "--json"]
+        cmd: list[str] = [sys.executable, str(script), query, "--json"]
         if domain:
             if domain not in DOMAINS:
-                return {"found": False, "error": f"Unknown domain '{domain}'. Choose from: {', '.join(DOMAINS)}"}
+                return {
+                    "found": False,
+                    "error": f"Unknown domain '{domain}'. Choose from: {', '.join(DOMAINS)}",
+                }
             cmd += ["--domain", domain]
         if stack:
             if stack not in STACKS:
-                return {"found": False, "error": f"Unknown stack '{stack}'. Choose from: {', '.join(STACKS)}"}
+                return {
+                    "found": False,
+                    "error": f"Unknown stack '{stack}'. Choose from: {', '.join(STACKS)}",
+                }
             cmd += ["--stack", stack]
         if max_results not in (None, 0):
             cmd += ["--max-results", str(max(1, min(int(max_results), 20)))]
@@ -229,7 +249,11 @@ class SearchUIDesignTool(Tool):
             cmd += ["--design-system"]
             if project_name:
                 cmd += ["--project-name", project_name]
-            for flag, val in (("--variance", variance), ("--motion", motion), ("--density", density)):
+            for flag, val in (
+                ("--variance", variance),
+                ("--motion", motion),
+                ("--density", density),
+            ):
                 if val in (None, 0):
                     continue
                 cmd += [flag, str(max(1, min(int(val), 10)))]
@@ -252,7 +276,9 @@ class SearchUIDesignTool(Tool):
         if proc.returncode != 0:
             return {
                 "found": False,
-                "error": proc.stderr.strip() or proc.stdout.strip() or f"Search exited with code {proc.returncode}.",
+                "error": proc.stderr.strip()
+                or proc.stdout.strip()
+                or f"Search exited with code {proc.returncode}.",
             }
 
         try:
@@ -265,10 +291,15 @@ class SearchUIDesignTool(Tool):
             if ds is None:
                 return {"found": False, "error": "Design-system generation returned no result."}
             text = str(ds.get("reasoning") or ds.get("text") or json.dumps(ds, ensure_ascii=False))
-            return {"found": True, "design_system": ds, "text": text, "skill_dir": str(script.parent)}
+            return {
+                "found": True,
+                "design_system": ds,
+                "text": text,
+                "skill_dir": str(script.parent),
+            }
 
         count = payload.get("count", 0)
-        base: Dict[str, Any] = {
+        base: dict[str, Any] = {
             "found": count > 0,
             "count": count,
             "query": payload.get("query", query),

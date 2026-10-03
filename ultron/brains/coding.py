@@ -20,10 +20,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider, ToolResult
 from ultron.tools import Tool
 
 logger = logging.getLogger("ultron.brains.coding")
@@ -51,9 +51,9 @@ class CodeChange:
     change_type: str
     description: str
     success: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "file_path": self.file_path,
             "change_type": self.change_type,
@@ -68,11 +68,11 @@ class CodingResult:
     """Result of a coding task."""
 
     task: str
-    changes: List[CodeChange]
-    findings: List[str] = field(default_factory=list)
+    changes: list[CodeChange]
+    findings: list[str] = field(default_factory=list)
     summary: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task": self.task,
             "changes": [c.to_dict() for c in self.changes],
@@ -87,9 +87,9 @@ class CodingBrain(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 10,
-        tool_executor: Optional[Any] = None,
+        tool_executor: Any | None = None,
     ) -> None:
         spec = AgentSpec(
             name="coding",
@@ -101,7 +101,7 @@ class CodingBrain(BaseAgent):
         super().__init__(provider, tools, spec)
         self._tool_executor = tool_executor
 
-    def execute(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> CodingResult:
+    def execute(self, user_text: str, context: dict[str, Any] | None = None) -> CodingResult:
         """Execute a coding task.
 
         Args:
@@ -115,8 +115,8 @@ class CodingBrain(BaseAgent):
         tool_specs = [t.spec for t in available_tools]
         tool_names = {t.name for t in available_tools}
 
-        changes: List[CodeChange] = []
-        findings: List[str] = []
+        changes: list[CodeChange] = []
+        findings: list[str] = []
 
         for iteration in range(self._spec.max_iterations):
             result = self._provider.complete(
@@ -193,7 +193,7 @@ class CodingBrain(BaseAgent):
             summary=summary,
         )
 
-    def _generate_summary(self, changes: List[CodeChange], findings: List[str]) -> str:
+    def _generate_summary(self, changes: list[CodeChange], findings: list[str]) -> str:
         successful = [c for c in changes if c.success]
         failed = [c for c in changes if not c.success]
 
@@ -207,7 +207,7 @@ class CodingBrain(BaseAgent):
 
         return "; ".join(parts) if parts else "No changes made"
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute coding task - returns JSON result as string."""
         result = self.execute(user_text, context)
         return json.dumps(result.to_dict(), ensure_ascii=False, default=str)

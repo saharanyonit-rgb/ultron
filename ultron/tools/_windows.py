@@ -7,7 +7,6 @@ Windows 10/11 (PowerShell 5.1, System.Drawing, System.Windows.Forms).
 from __future__ import annotations
 
 import subprocess
-from typing import List, Optional
 
 
 def run_powershell(

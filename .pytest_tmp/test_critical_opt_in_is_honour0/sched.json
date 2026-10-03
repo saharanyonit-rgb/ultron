@@ -1,0 +1,18 @@
+{
+  "tasks": [
+    {
+      "id": "43b7db016864",
+      "tool_name": "execute_command",
+      "arguments": {
+        "command": "echo hi"
+      },
+      "run_at": "2026-10-01T17:54:57.432953+05:30",
+      "risk": "critical",
+      "created_at": "2026-10-01T17:24:57.432953+05:30",
+      "status": "pending",
+      "result": null,
+      "error": null
+    }
+  ],
+  "automations": []
+}

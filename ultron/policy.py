@@ -18,16 +18,16 @@ The policy engine maps risk levels to actions. For example:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from enum import StrEnum
 
 from ultron.risk import RiskLevel
 
 logger = logging.getLogger("ultron.policy")
 
 
-class PolicyAction(str, Enum):
+class PolicyAction(StrEnum):
     ALLOW = "allow"
     CONFIRM = "confirm"
     DENY = "deny"

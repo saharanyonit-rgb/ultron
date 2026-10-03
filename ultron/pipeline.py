@@ -21,10 +21,8 @@ in the Brain and CLI layers.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
 
 from ultron.core.agent import Agent, RunResult, ToolEvent
 from ultron.core.router import IntentRouter, RouteDecision, RouteType
@@ -33,12 +31,9 @@ from ultron.models import (
     ExecutionStatus,
     Plan,
     PlanStep,
-    PlanStepStatus,
     RuntimeContext,
     VerificationResult,
-    VerificationStatus,
 )
-from ultron.tools import ToolExecutor, ToolExecutionResult, ToolExecutionStatus
 from ultron.verification import Verifier
 
 logger = logging.getLogger("ultron.pipeline")
@@ -50,10 +45,10 @@ class PipelineResult:
 
     context: RuntimeContext
     text: str
-    events: List[ToolEvent] = field(default_factory=list)
-    plan: Optional[Plan] = None
-    verification: Optional[VerificationResult] = None
-    error: Optional[str] = None
+    events: list[ToolEvent] = field(default_factory=list)
+    plan: Plan | None = None
+    verification: VerificationResult | None = None
+    error: str | None = None
 
 
 class Pipeline:
@@ -67,7 +62,7 @@ class Pipeline:
         self,
         agent: Agent,
         router: IntentRouter,
-        verifier: Optional[Verifier] = None,
+        verifier: Verifier | None = None,
     ) -> None:
         self._agent = agent
         self._router = router
@@ -85,7 +80,7 @@ class Pipeline:
     def verifier(self) -> Verifier:
         return self._verifier
 
-    def execute(self, user_input: str, context: Optional[RuntimeContext] = None) -> PipelineResult:
+    def execute(self, user_input: str, context: RuntimeContext | None = None) -> PipelineResult:
         """Run the full pipeline on a user request.
 
         Returns a PipelineResult with the final text, events, and verification.
@@ -147,7 +142,11 @@ class Pipeline:
 
         # 10. Determine status
         if has_limit or (has_errors and not run_result.text):
-            error_desc = "Tool iteration limit reached" if has_limit else "One or more tool executions failed"
+            error_desc = (
+                "Tool iteration limit reached"
+                if has_limit
+                else "One or more tool executions failed"
+            )
         else:
             error_desc = None
 
@@ -184,7 +183,7 @@ class Pipeline:
         # For CONVERSATIONAL / AGENT routes, the agent loop handles planning internally
         return Plan(description=decision.reasoning)
 
-    def _verify_last_execution(self, events: List[ToolEvent]) -> Optional[VerificationResult]:
+    def _verify_last_execution(self, events: list[ToolEvent]) -> VerificationResult | None:
         """Verify the last tool execution event, if any."""
         if not events:
             return None
@@ -196,7 +195,9 @@ class Pipeline:
         last = real_events[-1]
         exec_result = ExecutionResult(
             tool_name=last.name,
-            status=ExecutionStatus.SUCCESS if last.allowed and not last.error else ExecutionStatus.FAILED,
+            status=ExecutionStatus.SUCCESS
+            if last.allowed and not last.error
+            else ExecutionStatus.FAILED,
             output=last.output,
             error=last.error,
             arguments=last.arguments,

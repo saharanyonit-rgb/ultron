@@ -21,17 +21,16 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
-from ultron.llm.base import LLMProvider, ProviderResult
+from ultron.execution_state import StepState
+from ultron.llm.base import LLMProvider
 from ultron.recovery import (
-    ErrorClass,
     RecoveryAction,
     RecoveryDecision,
     RecoveryEngine,
 )
-from ultron.execution_state import StepState
 
 logger = logging.getLogger("ultron.intelligent_recovery")
 
@@ -39,15 +38,16 @@ logger = logging.getLogger("ultron.intelligent_recovery")
 @dataclass
 class RecoveryAnalysis:
     """LLM's analysis of a failure."""
+
     error_summary: str = ""
     likely_cause: str = ""
     suggested_action: str = ""
-    suggested_tool: Optional[str] = None
-    suggested_arguments: Optional[Dict[str, Any]] = None
+    suggested_tool: str | None = None
+    suggested_arguments: dict[str, Any] | None = None
     confidence: float = 0.5
     reasoning: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "error_summary": self.error_summary,
             "likely_cause": self.likely_cause,
@@ -73,9 +73,9 @@ class IntelligentRecoveryEngine(RecoveryEngine):
 
     def __init__(
         self,
-        provider: Optional[LLMProvider] = None,
+        provider: LLMProvider | None = None,
         max_retries: int = 3,
-        available_tools: Optional[List[str]] = None,
+        available_tools: list[str] | None = None,
     ) -> None:
         super().__init__(max_retries=max_retries)
         self._provider = provider
@@ -86,7 +86,7 @@ class IntelligentRecoveryEngine(RecoveryEngine):
         step: StepState,
         error: Exception | str,
         task_description: str = "",
-        previous_attempts: Optional[List[Dict[str, Any]]] = None,
+        previous_attempts: list[dict[str, Any]] | None = None,
     ) -> RecoveryAnalysis:
         """Use LLM to analyze a failure and suggest recovery."""
         if not self._provider:
@@ -131,7 +131,7 @@ class IntelligentRecoveryEngine(RecoveryEngine):
         step: StepState,
         error: Exception | str,
         task_description: str = "",
-        previous_attempts: Optional[List[Dict[str, Any]]] = None,
+        previous_attempts: list[dict[str, Any]] | None = None,
     ) -> RecoveryDecision:
         """Make a recovery decision using LLM analysis."""
         # Get base decision

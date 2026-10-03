@@ -5,27 +5,26 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 logger = logging.getLogger("ultron.services")
 
 
-class BaseService(ABC):
+class BaseService:
     """Base class for JSON-file-backed service persistence."""
 
     _data_file: str = ""
 
-    def __init__(self, data_dir: Optional[Path] = None) -> None:
+    def __init__(self, data_dir: Path | None = None) -> None:
         if data_dir is None:
             data_dir = Path.home() / ".jarvis"
         self._data_dir = data_dir
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._file_path = self._data_dir / self._data_file
         self._lock_file = self._data_dir / (self._data_file + ".lock")
-        self._data: Dict[str, Any] = {"items": [], "updated_at": None}
+        self._data: dict[str, Any] = {"items": [], "updated_at": None}
         self._load()
 
     def _load(self) -> None:
@@ -39,7 +38,7 @@ class BaseService(ABC):
             self._data = {"items": [], "updated_at": None}
 
     def _persist(self) -> None:
-        self._data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._data["updated_at"] = datetime.now(UTC).isoformat()
         try:
             with self._file_path.open("w", encoding="utf-8") as fh:
                 json.dump(self._data, fh, indent=2, ensure_ascii=False)
@@ -50,7 +49,7 @@ class BaseService(ABC):
         return str(uuid.uuid4())[:12]
 
     def _now_iso(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
-    def _items(self) -> List[Dict[str, Any]]:
-        return self._data.get("items", [])
+    def _items(self) -> list[dict[str, Any]]:
+        return cast("list[dict[str, Any]]", self._data.get("items", []))

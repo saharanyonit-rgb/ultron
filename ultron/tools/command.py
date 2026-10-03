@@ -11,15 +11,15 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from ultron.risk import RiskLevel
 
 logger = logging.getLogger("ultron.command")
 
 
-class CommandStatus(str, Enum):
+class CommandStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     TIMEOUT = "timeout"
@@ -43,7 +43,7 @@ class CommandResult:
     def success(self) -> bool:
         return self.status == CommandStatus.SUCCESS and self.exit_code == 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "command": self.command,
             "status": self.status.value,
@@ -63,8 +63,8 @@ class CommandExecutor:
         self,
         timeout: int = 120,
         working_directory: str | None = None,
-        blocked_commands: List[str] | None = None,
-        allowed_commands: List[str] | None = None,
+        blocked_commands: list[str] | None = None,
+        allowed_commands: list[str] | None = None,
         max_output_size: int = 1024 * 1024,
         unrestricted: bool | None = None,
     ) -> None:
@@ -84,8 +84,13 @@ class CommandExecutor:
             self._unrestricted = True
         elif unrestricted is False:
             self._blocked_commands = [
-                "format", "del /s", "rmdir /s", "rd /s",
-                "Remove-Item -Recurse", "shutdown", "reboot",
+                "format",
+                "del /s",
+                "rmdir /s",
+                "rd /s",
+                "Remove-Item -Recurse",
+                "shutdown",
+                "reboot",
             ]
             self._unrestricted = False
         else:
@@ -98,7 +103,7 @@ class CommandExecutor:
         command: str,
         working_directory: str | None = None,
         timeout: int | None = None,
-        env: Dict[str, str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> CommandResult:
         """Execute a command. In unrestricted mode, no commands are blocked."""
         start_time = time.time()
@@ -156,9 +161,9 @@ class CommandExecutor:
             duration = (time.time() - start_time) * 1000
 
             if len(stdout) > self._max_output_size:
-                stdout = stdout[:self._max_output_size] + "\n... (truncated)"
+                stdout = stdout[: self._max_output_size] + "\n... (truncated)"
             if len(stderr) > self._max_output_size:
-                stderr = stderr[:self._max_output_size] + "\n... (truncated)"
+                stderr = stderr[: self._max_output_size] + "\n... (truncated)"
 
             status = CommandStatus.SUCCESS if process.returncode == 0 else CommandStatus.FAILED
 

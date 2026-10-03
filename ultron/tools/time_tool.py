@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict
+from ultron.risk import RiskLevel
+
+from datetime import datetime
+from typing import Any
 
 from ultron.tools.base import Tool
 
 
 class GetCurrentTime(Tool):
     """Get the current date and time in any timezone."""
+
     name = "get_current_time"
+    keywords = (
+        "current time",
+        "what time is it",
+        "what is the time",
+        "today date",
+        "what is the date",
+    )
+    risk = RiskLevel.READ
     description = (
         "Get the current date and time. Optionally specify a timezone "
         "(e.g. 'Asia/Kolkata', 'US/Eastern', 'UTC'). Default is local time."
@@ -53,7 +64,7 @@ class GetCurrentTime(Tool):
         "australia": "Australia/Sydney",
     }
 
-    def run(self, timezone: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, timezone: str = "", **kwargs: Any) -> dict[str, Any]:
         tz_name = (timezone or kwargs.get("tz") or "").strip().lower()
 
         if tz_name and tz_name in self._TZ_MAP:
@@ -64,6 +75,7 @@ class GetCurrentTime(Tool):
         if tz_name:
             try:
                 import zoneinfo
+
                 tz = zoneinfo.ZoneInfo(tz_name)
                 now = now.astimezone(tz)
             except Exception:

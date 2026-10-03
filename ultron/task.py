@@ -8,18 +8,18 @@ tasks, dependency validation, cycle detection, and graph serialization.
 from __future__ import annotations
 
 import json
-import uuid
 import logging
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.task")
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     PENDING = "pending"
     READY = "ready"
     RUNNING = "running"
@@ -30,7 +30,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class TaskPriority(str, Enum):
+class TaskPriority(StrEnum):
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
@@ -50,31 +50,31 @@ class Task:
     objective: str = ""
     status: TaskStatus = TaskStatus.PENDING
 
-    dependencies: List[str] = field(default_factory=list)
-    dependents: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    dependents: list[str] = field(default_factory=list)
 
-    assigned_agent: Optional[str] = None
-    required_capabilities: List[str] = field(default_factory=list)
-    required_tools: List[str] = field(default_factory=list)
+    assigned_agent: str | None = None
+    required_capabilities: list[str] = field(default_factory=list)
+    required_tools: list[str] = field(default_factory=list)
 
-    input_data: Dict[str, Any] = field(default_factory=dict)
-    output_data: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    input_data: dict[str, Any] = field(default_factory=dict)
+    output_data: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
 
     retry_count: int = 0
     max_retries: int = 3
 
     priority: TaskPriority = TaskPriority.NORMAL
 
-    verification_state: Optional[str] = None
-    verification_criteria: List[str] = field(default_factory=list)
+    verification_state: str | None = None
+    verification_criteria: list[str] = field(default_factory=list)
 
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+    started_at: str | None = None
+    completed_at: str | None = None
+    updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_terminal(self) -> bool:
@@ -96,7 +96,7 @@ class Task:
         return self.status == TaskStatus.FAILED and self.retry_count < self.max_retries
 
     @property
-    def duration_seconds(self) -> Optional[float]:
+    def duration_seconds(self) -> float | None:
         """Calculate task duration if start and completion times exist."""
         if not self.started_at or not self.completed_at:
             return None
@@ -110,35 +110,35 @@ class Task:
     def mark_running(self) -> None:
         """Transition task to running state."""
         self.status = TaskStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc).isoformat()
+        self.started_at = datetime.now(UTC).isoformat()
         self.updated_at = self.started_at
 
-    def mark_completed(self, output_data: Optional[Dict[str, Any]] = None) -> None:
+    def mark_completed(self, output_data: dict[str, Any] | None = None) -> None:
         """Transition task to completed state."""
         self.status = TaskStatus.COMPLETED
         if output_data:
             self.output_data = output_data
-        self.completed_at = datetime.now(timezone.utc).isoformat()
+        self.completed_at = datetime.now(UTC).isoformat()
         self.updated_at = self.completed_at
 
     def mark_failed(self, error: str) -> None:
         """Transition task to failed state."""
         self.status = TaskStatus.FAILED
         self.error = error
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
 
     def mark_blocked(self, reason: str) -> None:
         """Transition task to blocked state."""
         self.status = TaskStatus.BLOCKED
         self.error = reason
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
 
     def mark_cancelled(self) -> None:
         """Transition task to cancelled state."""
         self.status = TaskStatus.CANCELLED
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = datetime.now(UTC).isoformat()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "description": self.description,
@@ -165,7 +165,7 @@ class Task:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+    def from_dict(cls, data: dict[str, Any]) -> Task:
         return cls(
             id=data.get("id", str(uuid.uuid4())[:10]),
             description=data.get("description", ""),
@@ -206,11 +206,11 @@ class TaskGraph:
     def __init__(self, goal_id: str = "", description: str = "") -> None:
         self.goal_id = goal_id
         self.description = description
-        self._tasks: Dict[str, Task] = {}
-        self._created_at = datetime.now(timezone.utc).isoformat()
+        self._tasks: dict[str, Task] = {}
+        self._created_at = datetime.now(UTC).isoformat()
 
     @property
-    def tasks(self) -> List[Task]:
+    def tasks(self) -> list[Task]:
         return list(self._tasks.values())
 
     @property
@@ -249,7 +249,7 @@ class TaskGraph:
             if dep_id in self._tasks:
                 self._tasks[dep_id].dependents.append(task.id)
 
-    def get_task(self, task_id: str) -> Optional[Task]:
+    def get_task(self, task_id: str) -> Task | None:
         return self._tasks.get(task_id)
 
     def remove_task(self, task_id: str) -> bool:
@@ -291,7 +291,7 @@ class TaskGraph:
 
     def has_cycle(self) -> bool:
         """Detect cycles using Kahn's algorithm (BFS topological sort)."""
-        in_degree: Dict[str, int] = {tid: 0 for tid in self._tasks}
+        in_degree: dict[str, int] = dict.fromkeys(self._tasks, 0)
         for task in self._tasks.values():
             for dep in task.dependencies:
                 if dep in in_degree:
@@ -315,7 +315,7 @@ class TaskGraph:
 
         return visited != len(self._tasks)
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """Validate graph structure. Returns list of error messages."""
         errors = []
 
@@ -338,12 +338,9 @@ class TaskGraph:
 
         return errors
 
-    def ready_tasks(self) -> List[Task]:
+    def ready_tasks(self) -> list[Task]:
         """Return tasks that are PENDING with all dependencies satisfied."""
-        completed_ids = {
-            tid for tid, t in self._tasks.items()
-            if t.status == TaskStatus.COMPLETED
-        }
+        completed_ids = {tid for tid, t in self._tasks.items() if t.status == TaskStatus.COMPLETED}
 
         ready = []
         for task in self._tasks.values():
@@ -355,7 +352,9 @@ class TaskGraph:
 
         return ready
 
-    def on_task_completed(self, task_id: str, output_data: Optional[Dict[str, Any]] = None) -> List[Task]:
+    def on_task_completed(
+        self, task_id: str, output_data: dict[str, Any] | None = None
+    ) -> list[Task]:
         """Mark task completed and return newly ready tasks."""
         task = self._tasks.get(task_id)
         if not task:
@@ -368,8 +367,7 @@ class TaskGraph:
             dep_task = self._tasks.get(dep_id)
             if dep_task and dep_task.status == TaskStatus.PENDING:
                 completed_ids = {
-                    tid for tid, t in self._tasks.items()
-                    if t.status == TaskStatus.COMPLETED
+                    tid for tid, t in self._tasks.items() if t.status == TaskStatus.COMPLETED
                 }
                 all_deps_met = all(dep in completed_ids for dep in dep_task.dependencies)
                 if all_deps_met:
@@ -377,7 +375,7 @@ class TaskGraph:
 
         return newly_ready
 
-    def on_task_failed(self, task_id: str, error: str, propagate: bool = True) -> List[str]:
+    def on_task_failed(self, task_id: str, error: str, propagate: bool = True) -> list[str]:
         """Mark task failed and optionally block dependents. Returns blocked task IDs."""
         task = self._tasks.get(task_id)
         if not task:
@@ -390,7 +388,7 @@ class TaskGraph:
 
         blocked = []
         queue: deque[str] = deque(task.dependents)
-        visited: Set[str] = set()
+        visited: set[str] = set()
 
         while queue:
             dep_id = queue.popleft()
@@ -406,17 +404,17 @@ class TaskGraph:
 
         return blocked
 
-    def get_tasks_by_status(self, status: TaskStatus) -> List[Task]:
+    def get_tasks_by_status(self, status: TaskStatus) -> list[Task]:
         return [t for t in self._tasks.values() if t.status == status]
 
-    def get_parallel_groups(self) -> List[List[Task]]:
+    def get_parallel_groups(self) -> list[list[Task]]:
         """Return groups of tasks that can execute in parallel at each stage."""
         if not self._tasks:
             return []
 
         groups = []
         remaining = set(self._tasks.keys())
-        completed: Set[str] = set()
+        completed: set[str] = set()
 
         max_iterations = len(self._tasks) + 1
         iteration = 0
@@ -440,7 +438,7 @@ class TaskGraph:
 
         return groups
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
             "description": self.description,
@@ -449,7 +447,7 @@ class TaskGraph:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TaskGraph":
+    def from_dict(cls, data: dict[str, Any]) -> TaskGraph:
         graph = cls(
             goal_id=data.get("goal_id", ""),
             description=data.get("description", ""),
@@ -464,13 +462,13 @@ class TaskGraph:
         return json.dumps(self.to_dict(), ensure_ascii=False, default=str)
 
     @classmethod
-    def deserialize(cls, data: str) -> "TaskGraph":
+    def deserialize(cls, data: str) -> TaskGraph:
         """Deserialize graph from JSON string."""
         return cls.from_dict(json.loads(data))
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """Return a summary of the graph state."""
-        status_counts = {}
+        status_counts: dict[str, int] = {}
         for task in self._tasks.values():
             status = task.status.value
             status_counts[status] = status_counts.get(status, 0) + 1

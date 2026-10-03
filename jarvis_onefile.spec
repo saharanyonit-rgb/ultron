@@ -14,7 +14,16 @@ hiddenimports = [
     "desktop.tray",
     "desktop.notifications",
     "desktop.startup",
+    "desktop.window",
     "desktop.main",
+    # Native UI host (WebView2 on Windows)
+    "webview",
+    "webview.guilib",
+    "webview.util",
+    "webview.http",
+    "webview.platforms.winforms",
+    "webview.platforms.edgechromium",
+    "clr_loader",
 ]
 
 for package in [

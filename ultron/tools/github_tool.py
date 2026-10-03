@@ -8,14 +8,18 @@ included in tool output and is never written into a git remote URL.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 API_BASE = "https://api.github.com"
 
@@ -24,7 +28,7 @@ def _env_token() -> str:
     return os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN", "")
 
 
-def _api(method: str, path: str, token: str, json: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _api(method: str, path: str, token: str, json: dict[str, Any] | None = None) -> dict[str, Any]:
     """Call the GitHub REST API. Returns (status_code, payload) as a dict."""
     try:
         headers = {
@@ -45,12 +49,17 @@ def _api(method: str, path: str, token: str, json: Optional[Dict[str, Any]] = No
             "success": 200 <= response.status_code < 300,
         }
     except httpx.RequestError as exc:
-        return {"status_code": 0, "data": {}, "success": False, "error": f"GitHub API unreachable: {exc}"}
+        return {
+            "status_code": 0,
+            "data": {},
+            "success": False,
+            "error": f"GitHub API unreachable: {exc}",
+        }
     except Exception as exc:
         return {"status_code": 0, "data": {}, "success": False, "error": f"GitHub API error: {exc}"}
 
 
-def _git(cwd: str, *args: str, timeout: int = 120) -> Dict[str, Any]:
+def _git(cwd: str, *args: str, timeout: int = 120) -> dict[str, Any]:
     try:
         result = subprocess.run(
             ["git"] + list(args),
@@ -82,12 +91,21 @@ def _normalize_repo(repo: str) -> str:
         repo = repo[:-4]
     for prefix in ("https://github.com/", "http://github.com/", "git@github.com:"):
         if repo.startswith(prefix):
-            repo = repo[len(prefix):]
+            repo = repo[len(prefix) :]
     return repo.rstrip("/")
 
 
 class GitHubSearchTool(Tool):
     name = "github_search"
+    keywords = (
+        "search github",
+        "find repos",
+        "github repos",
+        "search repositories",
+        "find code on github",
+        "github repositories",
+    )
+    risk = RiskLevel.READ
     description = (
         "Search GitHub for public repositories matching a query. "
         "Returns the top repositories with stars, language, description, and clone URL. "
@@ -121,17 +139,30 @@ class GitHubSearchTool(Tool):
         },
     }
 
-    def run(self, query: str, limit: int = 8, token: str = "", **_: Any) -> Dict[str, Any]:
+    def run(self, query: str, limit: int = 8, token: str = "", **_: Any) -> dict[str, Any]:
         query = (query or "").strip()
         if not query:
             return {"success": False, "error": "Missing 'query' parameter."}
         token = token or _env_token()
 
-        result = _api("GET", f"/search/repositories?q={quote(query)}&per_page={min(max(int(limit), 1), 30)}", token)
+        result = _api(
+            "GET",
+            f"/search/repositories?q={quote(query)}&per_page={min(max(int(limit), 1), 30)}",
+            token,
+        )
         if not result.get("success", False):
             code = result.get("status_code", 0)
-            msg = result.get("data", {}).get("message", "Search failed") if isinstance(result.get("data"), dict) else "Search failed"
-            return {"success": False, "error": f"GitHub API error ({code}): {msg}", "repositories": [], "total": 0}
+            msg = (
+                result.get("data", {}).get("message", "Search failed")
+                if isinstance(result.get("data"), dict)
+                else "Search failed"
+            )
+            return {
+                "success": False,
+                "error": f"GitHub API error ({code}): {msg}",
+                "repositories": [],
+                "total": 0,
+            }
 
         items = result["data"].get("items", []) if isinstance(result.get("data"), dict) else []
         repos = [
@@ -153,6 +184,14 @@ class GitHubSearchTool(Tool):
 
 class GitHubCloneTool(Tool):
     name = "github_clone"
+    keywords = (
+        "clone repo",
+        "clone repository",
+        "download repo",
+        "clone from github",
+        "clone github",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Clone (download) a GitHub repository to local disk. "
         "Accept an 'owner/repo' name or a full URL. Optionally specify a target directory."
@@ -186,10 +225,13 @@ class GitHubCloneTool(Tool):
     }
     mutates = True
 
-    def run(self, repo: str, target_dir: str = "", depth: int = 1, **_: Any) -> Dict[str, Any]:
+    def run(self, repo: str, target_dir: str = "", depth: int = 1, **_: Any) -> dict[str, Any]:
         repo = _normalize_repo(repo)
         if not repo or "/" not in repo:
-            return {"success": False, "error": "Provide a repository as 'owner/repo' or a full GitHub URL."}
+            return {
+                "success": False,
+                "error": "Provide a repository as 'owner/repo' or a full GitHub URL.",
+            }
 
         base = Path(target_dir).expanduser() if target_dir else Path.cwd()
         base.mkdir(parents=True, exist_ok=True)
@@ -202,12 +244,23 @@ class GitHubCloneTool(Tool):
 
         result = _git(str(base), *args)
         if result.get("return_code", 1) != 0:
-            return {"success": False, "error": result.get("stderr") or result.get("stdout") or "Clone failed"}
+            return {
+                "success": False,
+                "error": result.get("stderr") or result.get("stdout") or "Clone failed",
+            }
         return {"success": True, "output_file": str(dest), "repo": repo}
 
 
 class GitHubCreateRepoTool(Tool):
     name = "github_create_repo"
+    keywords = (
+        "create a github repo",
+        "create github repository",
+        "publish to github",
+        "new repository on github",
+        "upload to github",
+    )
+    risk = RiskLevel.HIGH
     description = (
         "Create a new repository on GitHub, optionally pushing an existing local folder to it. "
         "Requires a GITHUB_TOKEN environment variable (or pass 'token'). "
@@ -259,7 +312,7 @@ class GitHubCreateRepoTool(Tool):
         private: bool = True,
         token: str = "",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         name = (name or "").strip()
         if not name:
             return {"success": False, "error": "Missing 'name' parameter."}
@@ -282,7 +335,11 @@ class GitHubCreateRepoTool(Tool):
         )
         if not result.get("success", False):
             code = result.get("status_code", 0)
-            msg = result.get("data", {}).get("message", "Could not create repository") if isinstance(result.get("data"), dict) else "Could not create repository"
+            msg = (
+                result.get("data", {}).get("message", "Could not create repository")
+                if isinstance(result.get("data"), dict)
+                else "Could not create repository"
+            )
             return {"success": False, "error": f"GitHub API error ({code}): {msg}"}
 
         html_url = result["data"].get("html_url", "")
@@ -316,11 +373,19 @@ class GitHubCreateRepoTool(Tool):
         _git(str(path), "remote", "remove", "origin")
         _git(str(path), "remote", "add", "origin", clone_url)
         push = _git(str(path), "push", "-u", "origin", head)
-        return push.get("return_code", 1) == 0
+        return bool(push.get("return_code", 1) == 0)
 
 
 class GitHubPushTool(Tool):
     name = "github_push"
+    keywords = (
+        "push to github",
+        "push to remote",
+        "git push",
+        "push changes",
+        "upload commits",
+    )
+    risk = RiskLevel.HIGH
     description = (
         "Push local commits in a repository to its remote (origin) on GitHub. "
         "Git authentication uses your configured git credentials / credential manager."
@@ -358,7 +423,14 @@ class GitHubPushTool(Tool):
     }
     mutates = True
 
-    def run(self, repo_path: str, remote: str = "origin", branch: str = "", force: bool = False, **_: Any) -> Dict[str, Any]:
+    def run(
+        self,
+        repo_path: str,
+        remote: str = "origin",
+        branch: str = "",
+        force: bool = False,
+        **_: Any,
+    ) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.is_dir():
             return {"success": False, "error": f"Path not found: {path}"}
@@ -374,12 +446,23 @@ class GitHubPushTool(Tool):
 
         result = _git(str(path), *args)
         if result.get("return_code", 1) != 0:
-            return {"success": False, "pushed": False, "error": result.get("stderr") or result.get("stdout") or "Push failed"}
+            return {
+                "success": False,
+                "pushed": False,
+                "error": result.get("stderr") or result.get("stdout") or "Push failed",
+            }
         return {"success": True, "pushed": True, "stdout": result.get("stdout", "")[:400]}
 
 
 class GitHubPullTool(Tool):
     name = "github_pull"
+    keywords = (
+        "pull from github",
+        "pull latest",
+        "git pull",
+        "update from remote",
+    )
+    risk = RiskLevel.MEDIUM
     description = (
         "Update a local git repository from its remote (origin) on GitHub "
         "using a fast-forward pull. Fails safely if local changes would conflict."
@@ -409,14 +492,18 @@ class GitHubPullTool(Tool):
     }
     mutates = True
 
-    def run(self, repo_path: str, remote: str = "origin", **_: Any) -> Dict[str, Any]:
+    def run(self, repo_path: str, remote: str = "origin", **_: Any) -> dict[str, Any]:
         path = Path(repo_path).expanduser()
         if not path.is_dir():
             return {"success": False, "error": f"Path not found: {path}"}
 
         result = _git(str(path), "pull", "--ff-only", remote)
         if result.get("return_code", 1) != 0:
-            return {"success": False, "updated": False, "error": result.get("stderr") or result.get("stdout") or "Pull failed"}
+            return {
+                "success": False,
+                "updated": False,
+                "error": result.get("stderr") or result.get("stdout") or "Pull failed",
+            }
         return {"success": True, "updated": True, "stdout": result.get("stdout", "")[:400]}
 
 

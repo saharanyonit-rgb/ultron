@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.tools._termux import run_termux, run_am, run_cmd
+from typing import Any
+
+from ultron.tools._termux import run_am, run_cmd, run_termux
 from ultron.tools.base import Tool
 
 
@@ -12,6 +14,7 @@ class MakeCall(Tool):
     """Initiate a phone call."""
 
     name = "make_call"
+    risk = RiskLevel.MEDIUM
     description = "Initiate a phone call to a number or contact name."
     parameters = {
         "type": "object",
@@ -32,18 +35,23 @@ class MakeCall(Tool):
     }
     mutates = True
 
-    def run(self, number: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, number: str = "", **kwargs: Any) -> dict[str, Any]:
         target = number or kwargs.get("phone") or kwargs.get("contact") or ""
         if not target:
             return {"error": "No number or contact provided", "success": False}
 
         import urllib.parse
+
         encoded = urllib.parse.quote(target)
-        result = run_am([
-            "start",
-            "-a", "android.intent.action.CALL",
-            "-d", f"tel:{encoded}",
-        ])
+        result = run_am(
+            [
+                "start",
+                "-a",
+                "android.intent.action.CALL",
+                "-d",
+                f"tel:{encoded}",
+            ]
+        )
         return {"success": result.ok, "number": target, "error": result.stderr or None}
 
 
@@ -51,6 +59,7 @@ class AnswerCall(Tool):
     """Answer an incoming phone call."""
 
     name = "answer_call"
+    risk = RiskLevel.MEDIUM
     description = "Answer the current incoming phone call."
     parameters = {
         "type": "object",
@@ -65,7 +74,7 @@ class AnswerCall(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["input", "keyevent", "5"])
         return {"success": result.ok}
 
@@ -74,6 +83,7 @@ class HangUp(Tool):
     """End a phone call."""
 
     name = "hang_up"
+    risk = RiskLevel.LOW
     description = "End/hang up the current phone call."
     parameters = {
         "type": "object",
@@ -88,7 +98,7 @@ class HangUp(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["input", "keyevent", "6"])
         return {"success": result.ok}
 
@@ -97,6 +107,7 @@ class GetCallLog(Tool):
     """Retrieve recent call history."""
 
     name = "get_call_log"
+    risk = RiskLevel.READ
     description = "Get recent call history (incoming, outgoing, missed)."
     parameters = {
         "type": "object",
@@ -117,7 +128,7 @@ class GetCallLog(Tool):
         },
     }
 
-    def run(self, limit: int = 10, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, limit: int = 10, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("call-log", args=[], parse_json=True)
         if not result.ok:
             return {"calls": [], "count": 0, "error": result.stderr}
@@ -132,6 +143,7 @@ class RejectCall(Tool):
     """Reject/decline an incoming call."""
 
     name = "reject_call"
+    risk = RiskLevel.LOW
     description = "Reject or decline an incoming phone call."
     parameters = {
         "type": "object",
@@ -146,7 +158,7 @@ class RejectCall(Tool):
     }
     mutates = True
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["input", "keyevent", "6"])
         return {"success": result.ok}
 

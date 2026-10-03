@@ -14,14 +14,36 @@ class JarvisError(Exception):
 
 # ── Configuration ──────────────────────────────────────────────────
 
+
 class ConfigurationError(JarvisError):
     """Raised when the environment is unusable (missing key, bad value, etc.)."""
 
 
 # ── Provider / LLM ────────────────────────────────────────────────
 
+
 class ProviderError(JarvisError):
-    """Base for all LLM-provider errors."""
+    """Base for all LLM-provider errors.
+
+    Carries optional provider diagnostics so callers and logs can attribute a
+    failure without re-parsing the message. All of these are optional so the
+    plain ``ProviderError("boom")`` form keeps working. Values are stored
+    as-is; they are never interpolated into a message that could echo a secret.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+        retryable: bool | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.provider = provider
+        self.model = model
+        self.retryable = retryable
 
 
 class AuthenticationError(ProviderError):
@@ -62,17 +84,20 @@ class ProviderServerError(ProviderError):
 
 # ── Verification ───────────────────────────────────────────────────
 
+
 class VerificationError(JarvisError):
     """Raised when verification of a tool result fails."""
 
 
 # ── Pipeline / Execution ───────────────────────────────────────────
 
+
 class ExecutionError(JarvisError):
     """Raised when the pipeline or agent loop encounters a fatal execution fault."""
 
 
 # ── Tool ───────────────────────────────────────────────────────────
+
 
 class ToolError(JarvisError):
     """Base for all tool-related errors."""
@@ -103,6 +128,7 @@ class ToolExecutionError(ToolError):
 
 
 # ── Recovery ───────────────────────────────────────────────────────
+
 
 class RecoveryError(JarvisError):
     """Raised when recovery/replanning fails."""

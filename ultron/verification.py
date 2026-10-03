@@ -13,7 +13,6 @@ Phase 3 adds SemanticVerifier for keyword-based semantic checks.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
 from ultron.models import (
     ExecutionResult,
@@ -31,27 +30,24 @@ class Verifier:
     def verify(
         self,
         execution_result: ExecutionResult,
-        expected_output_keys: Optional[List[str]] = None,
+        expected_output_keys: list[str] | None = None,
     ) -> VerificationResult:
         """Run all verification checks against an execution result.
 
         Returns a VerificationResult with per-check outcomes.
         """
-        checks: Dict[str, bool] = {}
+        checks: dict[str, bool] = {}
 
         # Check 1: Was the operation executed at all?
         checks["executed"] = execution_result.status != ExecutionStatus.NOT_FOUND
 
         # Check 2: Did the tool report success?
         checks["no_error"] = (
-            execution_result.error is None
-            and execution_result.status == ExecutionStatus.SUCCESS
+            execution_result.error is None and execution_result.status == ExecutionStatus.SUCCESS
         )
 
         # Check 3: Is the result structurally valid?
-        checks["valid_structure"] = self._check_structure(
-            execution_result, expected_output_keys
-        )
+        checks["valid_structure"] = self._check_structure(execution_result, expected_output_keys)
 
         # Check 4: Does the result satisfy the request?
         checks["satisfies_request"] = self._check_satisfaction(execution_result)
@@ -78,7 +74,7 @@ class Verifier:
     def _check_structure(
         self,
         result: ExecutionResult,
-        expected_keys: Optional[List[str]] = None,
+        expected_keys: list[str] | None = None,
     ) -> bool:
         """Verify the output dict has expected keys (if specified)."""
         if not expected_keys:
@@ -96,7 +92,7 @@ class Verifier:
             return False
         return True
 
-    def _build_message(self, checks: Dict[str, bool], status: VerificationStatus) -> str:
+    def _build_message(self, checks: dict[str, bool], status: VerificationStatus) -> str:
         failed = [k for k, v in checks.items() if not v]
         if status == VerificationStatus.PASSED:
             return "All verification checks passed."
@@ -116,7 +112,7 @@ class SemanticVerifier:
         self,
         execution_result: ExecutionResult,
         objective: str,
-        expected_keywords: Optional[List[str]] = None,
+        expected_keywords: list[str] | None = None,
     ) -> VerificationResult:
         """Verify if the result satisfies the given objective."""
         structural = self._structural_verifier.verify(execution_result)

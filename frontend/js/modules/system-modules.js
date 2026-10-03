@@ -4,7 +4,6 @@
  */
 
 import { el, fmtBytes, fmtDuration, fmtNumber } from '../lib/dom.js';
-import { on } from '../lib/bus.js';
 import { get } from '../core/store.js';
 import * as api from '../lib/api.js';
 import * as log from '../core/activity-log.js';
@@ -222,53 +221,3 @@ export const tools = {
   available: true,
   render: toolsView,
 };
-
-/* ── EXECUTION CONTROL ────────────────────────────────────────────── */
-export function initExecutionControls(root) {
-  const bind = (id, fn, label) => {
-    const button = root.querySelector(id);
-    if (!button) return;
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      try {
-        const result = await fn();
-        if (result?.status === 'no_controller') {
-          toast.warning('NO CONTROLLER', 'The orchestrator is not attached to this server');
-          log.push('warning', `${label}: backend reported no execution controller`);
-        } else {
-          toast.success(`${label.toUpperCase()}`, 'Backend acknowledged the request');
-          log.push('system', `${label} sent to orchestrator`);
-        }
-      } catch (err) {
-        reportError(label, err);
-      } finally {
-        button.disabled = false;
-      }
-    });
-  };
-
-  bind('#btn-pause', api.pauseExecution, 'Pause');
-  bind('#btn-resume', api.resumeExecution, 'Resume');
-  bind('#btn-stop', api.stopExecution, 'Stop');
-
-  on('sse:execution_paused', () => setControlState('paused'));
-  on('sse:execution_resumed', () => setControlState('executing'));
-  on('sse:execution_stopped', () => setControlState('idle'));
-  on('sse:completed', () => setControlState('idle'));
-  on('sse:failed', () => setControlState('idle'));
-}
-
-function setControlState(state) {
-  const map = {
-    idle: ['IDLE', 'ok'],
-    executing: ['RUNNING', 'ok'],
-    paused: ['PAUSED', 'warn'],
-    error: ['FAULT', 'crit'],
-  };
-  const [text, tone] = map[state] || ['UNKNOWN', 'is-unknown'];
-  const node = document.getElementById('t-state');
-  if (!node) return;
-  node.textContent = text;
-  node.classList.remove('is-unknown', 'ok', 'warn', 'crit');
-  node.classList.add(tone);
-}

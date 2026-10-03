@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 
 class QueryDatabase(Tool):
     name = "query_database"
+    risk = RiskLevel.MEDIUM
     description = (
         "Execute a SQL query on a SQLite database. "
         "Use this to read data, list tables, or explore database schema. "
@@ -50,9 +55,9 @@ class QueryDatabase(Tool):
         self,
         database_path: str,
         query: str,
-        params: Optional[List[str]] = None,
+        params: list[str] | None = None,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         import time
 
         start = time.time()
@@ -110,6 +115,7 @@ class QueryDatabase(Tool):
 
 class ListTables(Tool):
     name = "list_tables"
+    risk = RiskLevel.READ
     description = "List all tables in a SQLite database with their schema."
     parameters = {
         "type": "object",
@@ -128,7 +134,7 @@ class ListTables(Tool):
         },
     }
 
-    def run(self, database_path: str, **_: Any) -> Dict[str, Any]:
+    def run(self, database_path: str, **_: Any) -> dict[str, Any]:
         db = Path(database_path).expanduser()
 
         if not db.exists():
@@ -163,6 +169,7 @@ class ListTables(Tool):
 
 class CreateTable(Tool):
     name = "create_table"
+    risk = RiskLevel.MEDIUM
     description = "Create a new table in a SQLite database."
     parameters = {
         "type": "object",
@@ -197,12 +204,13 @@ class CreateTable(Tool):
         table_name: str,
         columns: str,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         db = Path(database_path).expanduser()
 
         # table_name comes from the LLM — validate the identifier before
         # interpolating it into the DDL to prevent SQL injection.
         import re
+
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
             return {"error": f"Invalid table name: {table_name!r}"}
 

@@ -7,8 +7,10 @@ citations. Vane runs SearxNG + an LLM/embedding provider on your own machine.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -29,6 +31,13 @@ class VaneSearchTool(Tool):
     """Search via the local Vane AI answering engine and get a cited answer."""
 
     name = "vane_search"
+    keywords = (
+        "vane search",
+        "search with sources",
+        "cited search",
+        "research this topic",
+    )
+    risk = RiskLevel.LOW
     description = (
         "Run a Perplexity-style AI web search through the local Vane engine. Returns a "
         "cited, LLM-written answer synthesized from live search results. Use for open-ended "
@@ -80,7 +89,7 @@ class VaneSearchTool(Tool):
     }
     mutates = False
 
-    def _discover_models(self, client: httpx.Client, base: str) -> Optional[Dict[str, Dict[str, str]]]:
+    def _discover_models(self, client: httpx.Client, base: str) -> dict[str, dict[str, str]] | None:
         """Find the first configured chat + embedding model from Vane's API."""
         try:
             resp = client.get(f"{base}/api/providers", timeout=10.0)
@@ -91,8 +100,8 @@ class VaneSearchTool(Tool):
 
         for prov in providers:
             pid = prov.get("id")
-            chat = (prov.get("chatModels") or [])
-            embed = (prov.get("embeddingModels") or [])
+            chat = prov.get("chatModels") or []
+            embed = prov.get("embeddingModels") or []
             if pid and chat and embed:
                 return {
                     "chatModel": {"providerId": pid, "key": chat[0].get("key")},
@@ -104,11 +113,11 @@ class VaneSearchTool(Tool):
         self,
         query: str,
         optimization_mode: str = "balanced",
-        sources: Optional[List[str]] = None,
+        sources: list[str] | None = None,
         max_sources: int = 5,
         base_url: str = "",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = (query or "").strip()
         if not query:
             return {"success": False, "error": "Missing required parameter 'query'."}
@@ -121,7 +130,10 @@ class VaneSearchTool(Tool):
 
         srcs = [s for s in (sources or ["web"]) if s in SOURCE_TYPES]
         if not srcs:
-            return {"success": False, "error": f"Unknown sources. Choose from: {', '.join(SOURCE_TYPES)}"}
+            return {
+                "success": False,
+                "error": f"Unknown sources. Choose from: {', '.join(SOURCE_TYPES)}",
+            }
 
         base = (base_url or _get_base_url()).rstrip("/")
         max_sources = max(1, min(int(max_sources or 5), 10))
@@ -141,7 +153,10 @@ class VaneSearchTool(Tool):
                         ),
                     }
                 except httpx.HTTPStatusError as exc:
-                    return {"success": False, "error": f"Vane at {base} returned HTTP {exc.response.status_code}."}
+                    return {
+                        "success": False,
+                        "error": f"Vane at {base} returned HTTP {exc.response.status_code}.",
+                    }
 
                 models = self._discover_models(client, base)
                 if models is None:
@@ -162,7 +177,11 @@ class VaneSearchTool(Tool):
                 }
                 resp = client.post(f"{base}/api/search", json=payload, timeout=300.0)
                 if resp.status_code >= 400:
-                    body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    body = (
+                        resp.json()
+                        if resp.headers.get("content-type", "").startswith("application/json")
+                        else {}
+                    )
                     return {
                         "success": False,
                         "error": f"Vane search failed (HTTP {resp.status_code}): {body.get('message') or resp.text[:500]}",
@@ -174,7 +193,7 @@ class VaneSearchTool(Tool):
                     return {"success": False, "error": "Vane returned an empty answer."}
 
                 raw_sources = data.get("sources") or []
-                sources_out: List[Dict[str, str]] = []
+                sources_out: list[dict[str, str]] = []
                 for src in raw_sources[:max_sources]:
                     meta = src.get("metadata") or {}
                     sources_out.append(
@@ -191,6 +210,9 @@ class VaneSearchTool(Tool):
                     "mode": optimization_mode,
                 }
         except httpx.TimeoutException:
-            return {"success": False, "error": "Vane search timed out (300s). Try optimization_mode 'speed'."}
+            return {
+                "success": False,
+                "error": "Vane search timed out (300s). Try optimization_mode 'speed'.",
+            }
         except Exception as exc:
             return {"success": False, "error": f"Vane search error: {exc}"}

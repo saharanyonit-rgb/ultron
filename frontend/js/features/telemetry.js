@@ -14,7 +14,6 @@ import * as log from '../core/activity-log.js';
 const TASKS = [
   { name: 'orchestrator', fn: api.orchestrator, key: 'orchestrator', interval: 2000, critical: true },
   { name: 'metrics', fn: api.systemMetrics, key: 'metrics', interval: 3000, critical: true },
-  { name: 'computer', fn: api.computerState, key: 'computer', interval: 6000 },
   { name: 'network', fn: api.networkStatus, key: 'network', interval: 10000 },
   { name: 'security', fn: api.securityStatus, key: 'security', interval: 12000 },
   { name: 'sysinfo', fn: api.systemInfo, key: 'systemInfo', interval: 120000 },

@@ -9,19 +9,18 @@ from __future__ import annotations
 import http.client
 import logging
 import os
-import signal
 import socket
 import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Callable
 
 logger = logging.getLogger("jarvis.desktop.process")
 
 
-def _find_backend_executable() -> Optional[Path]:
+def _find_backend_executable() -> Path | None:
     """Find the backend executable (PyInstaller bundle or dev Python)."""
     # If running as PyInstaller bundle
     if getattr(sys, "frozen", False):
@@ -73,7 +72,7 @@ def _find_available_port(preferred: int = 8080, host: str = "127.0.0.1") -> int:
     for port in range(8081, 8100):
         if _is_port_available(port, host):
             return port
-    raise RuntimeError(f"No available port found in range 8080-8099")
+    raise RuntimeError("No available port found in range 8080-8099")
 
 
 class BackendProcess:
@@ -84,16 +83,16 @@ class BackendProcess:
         host: str = "127.0.0.1",
         port: int = 8080,
         start_timeout: int = 30,
-        on_status_change: Optional[Callable[[str], None]] = None,
+        on_status_change: Callable[[str], None] | None = None,
     ):
         self.host = host
         self.port = port
         self.start_timeout = start_timeout
         self.on_status_change = on_status_change
 
-        self._process: Optional[subprocess.Popen] = None
-        self._thread: Optional[threading.Thread] = None
-        self._health_thread: Optional[threading.Thread] = None
+        self._process: subprocess.Popen | None = None
+        self._thread: threading.Thread | None = None
+        self._health_thread: threading.Thread | None = None
         self._running = False
         self._status = "stopped"
         self._lock = threading.Lock()
@@ -172,12 +171,30 @@ class BackendProcess:
             if backend_exe.suffix == ".exe":
                 cmd = [str(backend_exe)]
             else:
-                cmd = [str(backend_exe), "-m", "ultron", "--web", "--headless",
-                       "--port", str(self.port), "--host", self.host]
+                cmd = [
+                    str(backend_exe),
+                    "-m",
+                    "ultron",
+                    "--web",
+                    "--headless",
+                    "--port",
+                    str(self.port),
+                    "--host",
+                    self.host,
+                ]
         else:
             # Development mode
-            cmd = [str(backend_exe), "-m", "ultron", "--web", "--headless",
-                   "--port", str(self.port), "--host", self.host]
+            cmd = [
+                str(backend_exe),
+                "-m",
+                "ultron",
+                "--web",
+                "--headless",
+                "--port",
+                str(self.port),
+                "--host",
+                self.host,
+            ]
 
         # Set environment
         env = os.environ.copy()
@@ -245,7 +262,9 @@ class BackendProcess:
                 else:
                     consecutive_failures += 1
                     if consecutive_failures >= 5:
-                        logger.warning(f"Backend health check failed ({consecutive_failures} consecutive)")
+                        logger.warning(
+                            f"Backend health check failed ({consecutive_failures} consecutive)"
+                        )
             except Exception:
                 consecutive_failures += 1
                 if consecutive_failures >= 5:

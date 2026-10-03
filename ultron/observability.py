@@ -6,18 +6,17 @@ for understanding autonomous execution behavior.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.observability")
 
 
-class SpanStatus(str, Enum):
+class SpanStatus(StrEnum):
     OK = "ok"
     ERROR = "error"
     TIMEOUT = "timeout"
@@ -27,15 +26,16 @@ class SpanStatus(str, Enum):
 @dataclass
 class Span:
     """A single trace span."""
+
     span_id: str = ""
     trace_id: str = ""
     parent_id: str = ""
     name: str = ""
     start_time: float = field(default_factory=time.time)
-    end_time: Optional[float] = None
+    end_time: float | None = None
     status: str = SpanStatus.OK.value
-    attributes: Dict[str, Any] = field(default_factory=dict)
-    events: List[Dict[str, Any]] = field(default_factory=list)
+    attributes: dict[str, Any] = field(default_factory=dict)
+    events: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def duration_ms(self) -> float:
@@ -47,14 +47,16 @@ class Span:
         self.end_time = time.time()
         self.status = status
 
-    def add_event(self, name: str, attributes: Optional[Dict[str, Any]] = None) -> None:
-        self.events.append({
-            "name": name,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "attributes": attributes or {},
-        })
+    def add_event(self, name: str, attributes: dict[str, Any] | None = None) -> None:
+        self.events.append(
+            {
+                "name": name,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "attributes": attributes or {},
+            }
+        )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "span_id": self.span_id,
             "trace_id": self.trace_id,
@@ -72,11 +74,12 @@ class Span:
 @dataclass
 class Trace:
     """A complete trace containing multiple spans."""
+
     trace_id: str = ""
-    spans: List[Span] = field(default_factory=list)
+    spans: list[Span] = field(default_factory=list)
     goal_id: str = ""
     start_time: float = field(default_factory=time.time)
-    end_time: Optional[float] = None
+    end_time: float | None = None
 
     @property
     def duration_ms(self) -> float:
@@ -84,7 +87,7 @@ class Trace:
             return (self.end_time - self.start_time) * 1000
         return 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "trace_id": self.trace_id,
             "goal_id": self.goal_id,
@@ -99,9 +102,9 @@ class TraceCollector:
     """Collects and manages execution traces."""
 
     def __init__(self, max_traces: int = 100) -> None:
-        self._traces: Dict[str, Trace] = {}
-        self._current_trace: Optional[Trace] = None
-        self._current_span: Optional[Span] = None
+        self._traces: dict[str, Trace] = {}
+        self._current_trace: Trace | None = None
+        self._current_span: Span | None = None
         self._max_traces = max_traces
 
     def start_trace(self, trace_id: str, goal_id: str = "") -> Trace:
@@ -119,15 +122,14 @@ class TraceCollector:
     def start_span(
         self,
         name: str,
-        trace_id: Optional[str] = None,
-        parent_id: Optional[str] = None,
-        attributes: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        parent_id: str | None = None,
+        attributes: dict[str, Any] | None = None,
     ) -> Span:
         """Start a new span within a trace."""
         import hashlib
-        span_id = hashlib.md5(
-            f"{name}:{time.time()}".encode()
-        ).hexdigest()[:12]
+
+        span_id = hashlib.md5(f"{name}:{time.time()}".encode()).hexdigest()[:12]
 
         tid = trace_id or (self._current_trace.trace_id if self._current_trace else "")
         span = Span(
@@ -149,7 +151,7 @@ class TraceCollector:
         if self._current_span:
             self._current_span.finish(status)
             if self._current_span.parent_id:
-                for s in (self._current_trace.spans if self._current_trace else []):
+                for s in self._current_trace.spans if self._current_trace else []:
                     if s.span_id == self._current_span.parent_id:
                         self._current_span = s
                         return
@@ -162,13 +164,13 @@ class TraceCollector:
             self._current_trace = None
             self._current_span = None
 
-    def get_trace(self, trace_id: str) -> Optional[Trace]:
+    def get_trace(self, trace_id: str) -> Trace | None:
         return self._traces.get(trace_id)
 
-    def get_all_traces(self) -> List[Trace]:
+    def get_all_traces(self) -> list[Trace]:
         return list(self._traces.values())
 
-    def get_trace_summary(self, trace_id: str) -> Dict[str, Any]:
+    def get_trace_summary(self, trace_id: str) -> dict[str, Any]:
         """Get a summary of a trace."""
         trace = self._traces.get(trace_id)
         if not trace:
@@ -179,9 +181,9 @@ class TraceCollector:
             "goal_id": trace.goal_id,
             "span_count": len(trace.spans),
             "duration_ms": trace.duration_ms,
-            "status": "ok" if all(
-                s.status == SpanStatus.OK.value for s in trace.spans
-            ) else "error",
+            "status": "ok"
+            if all(s.status == SpanStatus.OK.value for s in trace.spans)
+            else "error",
         }
 
 
@@ -189,9 +191,9 @@ class MetricsCollector:
     """Collects execution metrics."""
 
     def __init__(self) -> None:
-        self._counters: Dict[str, int] = {}
-        self._gauges: Dict[str, float] = {}
-        self._histograms: Dict[str, List[float]] = {}
+        self._counters: dict[str, int] = {}
+        self._gauges: dict[str, float] = {}
+        self._histograms: dict[str, list[float]] = {}
 
     def increment(self, name: str, value: int = 1) -> None:
         self._counters[name] = self._counters.get(name, 0) + value
@@ -212,7 +214,7 @@ class MetricsCollector:
     def get_gauge(self, name: str) -> float:
         return self._gauges.get(name, 0.0)
 
-    def get_histogram_stats(self, name: str) -> Dict[str, float]:
+    def get_histogram_stats(self, name: str) -> dict[str, float]:
         values = self._histograms.get(name, [])
         if not values:
             return {"count": 0}
@@ -223,14 +225,11 @@ class MetricsCollector:
             "avg": sum(values) / len(values),
         }
 
-    def get_all_metrics(self) -> Dict[str, Any]:
+    def get_all_metrics(self) -> dict[str, Any]:
         return {
             "counters": dict(self._counters),
             "gauges": dict(self._gauges),
-            "histograms": {
-                k: self.get_histogram_stats(k)
-                for k in self._histograms
-            },
+            "histograms": {k: self.get_histogram_stats(k) for k in self._histograms},
         }
 
     def reset(self) -> None:
@@ -239,7 +238,7 @@ class MetricsCollector:
         self._histograms.clear()
 
 
-class BrainEventType(str, Enum):
+class BrainEventType(StrEnum):
     AGENT_SELECTED = "agent.selected"
     AGENT_STARTED = "agent.started"
     AGENT_PROGRESS = "agent.progress"
@@ -261,10 +260,10 @@ class BrainEvent:
     goal_id: str = ""
     status: str = ""
     message: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    metadata: dict[str, Any] = field(default_factory=dict)
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event_type": self.event_type,
             "brain_type": self.brain_type,
@@ -281,20 +280,20 @@ class BrainEventCollector:
     """Collects and manages brain orchestration events."""
 
     def __init__(self, max_events: int = 1000) -> None:
-        self._events: List[BrainEvent] = []
+        self._events: list[BrainEvent] = []
         self._max_events = max_events
 
     def add_event(self, event: BrainEvent) -> None:
         self._events.append(event)
         if len(self._events) > self._max_events:
-            self._events = self._events[-self._max_events:]
+            self._events = self._events[-self._max_events :]
 
     def get_events(
         self,
-        goal_id: Optional[str] = None,
-        brain_type: Optional[str] = None,
+        goal_id: str | None = None,
+        brain_type: str | None = None,
         limit: int = 100,
-    ) -> List[BrainEvent]:
+    ) -> list[BrainEvent]:
         filtered = self._events
 
         if goal_id:

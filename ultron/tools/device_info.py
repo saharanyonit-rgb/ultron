@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.tools._termux import run_termux, run_cmd, run_settings, run_dumpsys
+from typing import Any
+
+from ultron.tools._termux import run_cmd, run_termux
 from ultron.tools.base import Tool
 
 
@@ -12,6 +14,7 @@ class GetDeviceInfo(Tool):
     """Get device model, manufacturer, Android version, and more."""
 
     name = "get_device_info"
+    risk = RiskLevel.READ
     description = "Get Android device info: model, manufacturer, Android version, SDK, screen size."
     parameters = {
         "type": "object",
@@ -29,7 +32,7 @@ class GetDeviceInfo(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         model = run_cmd(["getprop", "ro.product.model"])
         manufacturer = run_cmd(["getprop", "ro.product.manufacturer"])
         android_ver = run_cmd(["getprop", "ro.build.version.release"])
@@ -49,6 +52,7 @@ class GetNetworkInfo(Tool):
     """Get WiFi connection details and network info."""
 
     name = "get_network_info"
+    risk = RiskLevel.READ
     description = "Get current WiFi SSID, IP address, MAC address, and signal strength."
     parameters = {
         "type": "object",
@@ -67,7 +71,7 @@ class GetNetworkInfo(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("wifi-connectioninfo", parse_json=True)
         if not result.ok:
             return {"error": result.stderr}
@@ -87,6 +91,7 @@ class GetLocation(Tool):
     """Get the current GPS location."""
 
     name = "get_location"
+    risk = RiskLevel.MEDIUM
     description = "Get current GPS location (latitude, longitude, accuracy). Requires GPS or network location."
     parameters = {
         "type": "object",
@@ -109,7 +114,7 @@ class GetLocation(Tool):
         },
     }
 
-    def run(self, provider: str = "network", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, provider: str = "network", **kwargs: Any) -> dict[str, Any]:
         p = kwargs.get("mode") or provider
         result = run_termux("location", args=["-p", p, "-r", "once"], parse_json=True)
         if not result.ok:
@@ -128,6 +133,7 @@ class ScanWifi(Tool):
     """Scan for available WiFi networks."""
 
     name = "scan_wifi"
+    risk = RiskLevel.MEDIUM
     description = "Scan for available WiFi networks and return list with SSIDs and signal strength."
     parameters = {
         "type": "object",
@@ -142,7 +148,7 @@ class ScanWifi(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_termux("wifi-scaninfo", parse_json=True)
         if not result.ok:
             return {"networks": [], "count": 0, "error": result.stderr}
@@ -155,6 +161,7 @@ class GetRunningApps(Tool):
     """Get list of currently running apps/processes."""
 
     name = "get_running_apps"
+    risk = RiskLevel.READ
     description = "List currently running apps or processes on the device."
     parameters = {
         "type": "object",
@@ -174,7 +181,7 @@ class GetRunningApps(Tool):
         },
     }
 
-    def run(self, filter: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, filter: str = "", **kwargs: Any) -> dict[str, Any]:
         f = kwargs.get("query") or filter or ""
         result = run_cmd(["ps"])
         if not result.ok:
@@ -204,6 +211,7 @@ class GetInstalledApps(Tool):
     """List all installed apps on the device."""
 
     name = "get_installed_apps"
+    risk = RiskLevel.READ
     description = "List all installed packages/apps on the Android device."
     parameters = {
         "type": "object",
@@ -223,7 +231,7 @@ class GetInstalledApps(Tool):
         },
     }
 
-    def run(self, filter: str = "", **kwargs: Any) -> Dict[str, Any]:
+    def run(self, filter: str = "", **kwargs: Any) -> dict[str, Any]:
         f = kwargs.get("query") or filter or ""
         result = run_cmd(["pm", "list", "packages", "-3"])  # third-party apps
         if not result.ok:
@@ -244,6 +252,7 @@ class GetStorageInfo(Tool):
     """Get device storage information."""
 
     name = "get_storage"
+    risk = RiskLevel.READ
     description = "Get device storage info: total, used, available space."
     parameters = {
         "type": "object",
@@ -261,7 +270,7 @@ class GetStorageInfo(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["df", "/sdcard"])
         if not result.ok:
             return {"error": result.stderr}
@@ -294,6 +303,7 @@ class GetMemoryInfo(Tool):
     """Get device RAM/memory information."""
 
     name = "get_memory"
+    risk = RiskLevel.READ
     description = "Get device RAM/memory usage: total, available, and used."
     parameters = {
         "type": "object",
@@ -309,7 +319,7 @@ class GetMemoryInfo(Tool):
         },
     }
 
-    def run(self, **kwargs: Any) -> Dict[str, Any]:
+    def run(self, **kwargs: Any) -> dict[str, Any]:
         result = run_cmd(["cat", "/proc/meminfo"])
         if not result.ok:
             return {"error": result.stderr}
@@ -328,11 +338,12 @@ class GetMemoryInfo(Tool):
 
 
 def _human_size(n: int) -> str:
+    value: float = float(n)
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if abs(n) < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} PB"
+        if abs(value) < 1024:
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} PB"
 
 
 __all__ = [

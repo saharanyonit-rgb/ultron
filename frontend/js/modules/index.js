@@ -3,7 +3,7 @@
  * Single source of truth for what the dock renders and what the drawer opens.
  */
 
-import { system, uptime, armor, tools, initExecutionControls } from './system-modules.js';
+import { system, uptime, armor, tools } from './system-modules.js';
 import { notes, weather, news } from './data-modules.js';
 import { camera, focus, telegram } from './media-modules.js';
 import { chat, logModule } from './intel-modules.js';
@@ -76,5 +76,3 @@ export function initModuleRouter() {
     openModule(id);
   });
 }
-
-export { initExecutionControls };

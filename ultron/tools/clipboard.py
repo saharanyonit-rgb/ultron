@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
-import subprocess
-from typing import Any, Dict
+from ultron.risk import RiskLevel
 
-from ultron.platform import is_windows, is_posix
+import subprocess
+from typing import Any
+
+from ultron.platform import is_windows
 from ultron.tools.base import Tool
 
 
 class GetClipboard(Tool):
     name = "get_clipboard"
+    keywords = (
+        "get clipboard",
+        "read clipboard",
+        "clipboard content",
+        "paste clipboard",
+    )
+    risk = RiskLevel.READ
     description = "Return the current clipboard text, or null if the clipboard holds non-text."
     parameters = {
         "type": "object",
@@ -24,12 +33,12 @@ class GetClipboard(Tool):
         },
     }
 
-    def run(self, **_: Any) -> Dict[str, Any]:
+    def run(self, **_: Any) -> dict[str, Any]:
         if is_windows():
             return self._get_windows()
         return self._get_posix()
 
-    def _get_windows(self) -> Dict[str, Any]:
+    def _get_windows(self) -> dict[str, Any]:
         from ultron.tools._windows import ps_error, ps_ok, ps_stdout, run_powershell, unb64
 
         script = (
@@ -48,13 +57,18 @@ class GetClipboard(Tool):
         except Exception as exc:
             return {"error": f"clipboard decode failed: {exc}"}
 
-    def _get_posix(self) -> Dict[str, Any]:
+    def _get_posix(self) -> dict[str, Any]:
         """Get clipboard via xclip or xsel."""
-        for cmd in [["xclip", "-selection", "clipboard", "-o"],
-                     ["xsel", "--clipboard", "--output"]]:
+        for cmd in [
+            ["xclip", "-selection", "clipboard", "-o"],
+            ["xsel", "--clipboard", "--output"],
+        ]:
             try:
                 proc = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=5,
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if proc.returncode == 0:
                     return {"text": proc.stdout}
@@ -65,6 +79,12 @@ class GetClipboard(Tool):
 
 class SetClipboard(Tool):
     name = "set_clipboard"
+    keywords = (
+        "set clipboard",
+        "copy to clipboard",
+        "write clipboard",
+    )
+    risk = RiskLevel.LOW
     description = "Replace the clipboard contents with the given text."
     parameters = {
         "type": "object",
@@ -82,12 +102,12 @@ class SetClipboard(Tool):
     }
     mutates = True
 
-    def run(self, text: str, **_: Any) -> Dict[str, Any]:
+    def run(self, text: str, **_: Any) -> dict[str, Any]:
         if is_windows():
             return self._set_windows(text)
         return self._set_posix(text)
 
-    def _set_windows(self, text: str) -> Dict[str, Any]:
+    def _set_windows(self, text: str) -> dict[str, Any]:
         from ultron.tools._windows import b64, ps_error, ps_ok, run_powershell
 
         script = (
@@ -100,13 +120,16 @@ class SetClipboard(Tool):
             return {"error": f"set_clipboard failed: {ps_error(proc)}"}
         return {"set": True, "characters": len(text)}
 
-    def _set_posix(self, text: str) -> Dict[str, Any]:
+    def _set_posix(self, text: str) -> dict[str, Any]:
         """Set clipboard via xclip or xsel."""
-        for cmd in [["xclip", "-selection", "clipboard"],
-                     ["xsel", "--clipboard", "--input"]]:
+        for cmd in [["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]:
             try:
                 proc = subprocess.run(
-                    cmd, input=text, capture_output=True, text=True, timeout=5,
+                    cmd,
+                    input=text,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if proc.returncode == 0:
                     return {"set": True, "characters": len(text)}

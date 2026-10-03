@@ -15,7 +15,6 @@ const state = {
   network: null,               // GET /api/system/network
   systemInfo: null,            // GET /api/system/info
   security: null,              // GET /api/security
-  computer: null,              // GET /api/computer
   orchestrator: null,          // GET /api/orchestrator
   voice: { state: 'idle', available: null },
   tools: [],

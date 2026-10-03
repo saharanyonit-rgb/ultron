@@ -6,18 +6,22 @@ Can read, write, delete, copy, move any file on the system.
 
 from __future__ import annotations
 
-import os
+from ultron.risk import RiskLevel
+
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ultron.tools.base import Tool
+
+# only ever calls `run(**validated_kwargs)` — hence the `override` ignores.
 
 
 class ReadFileUnrestricted(Tool):
     """Read any file on the system."""
 
     name = "read_file_full"
+    risk = RiskLevel.READ
     description = "Read the contents of any file on the system. Full access, no restrictions."
     parameters = {
         "type": "object",
@@ -38,7 +42,9 @@ class ReadFileUnrestricted(Tool):
         },
     }
 
-    def run(self, path: str, encoding: str = "utf-8", max_lines: int = 5000, **_: Any) -> Dict[str, Any]:
+    def run(
+        self, path: str, encoding: str = "utf-8", max_lines: int = 5000, **_: Any
+    ) -> dict[str, Any]:
         try:
             p = Path(path).expanduser()
             if not p.is_file():
@@ -48,7 +54,9 @@ class ReadFileUnrestricted(Tool):
             lines = content.splitlines()
             truncated = len(lines) > max_lines
             if truncated:
-                content = "\n".join(lines[:max_lines]) + f"\n... ({len(lines)} total lines, truncated)"
+                content = (
+                    "\n".join(lines[:max_lines]) + f"\n... ({len(lines)} total lines, truncated)"
+                )
             return {
                 "path": str(p),
                 "content": content,
@@ -63,13 +71,20 @@ class WriteFileUnrestricted(Tool):
     """Write any file on the system."""
 
     name = "write_file_full"
-    description = "Write content to any file on the system. Creates parent directories automatically."
+    risk = RiskLevel.HIGH
+    description = (
+        "Write content to any file on the system. Creates parent directories automatically."
+    )
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Absolute path to the file."},
             "content": {"type": "string", "description": "Content to write."},
-            "append": {"type": "boolean", "default": False, "description": "Append to file instead of overwrite."},
+            "append": {
+                "type": "boolean",
+                "default": False,
+                "description": "Append to file instead of overwrite.",
+            },
         },
         "required": ["path", "content"],
     }
@@ -83,7 +98,7 @@ class WriteFileUnrestricted(Tool):
     }
     mutates = True
 
-    def run(self, path: str, content: str, append: bool = False, **_: Any) -> Dict[str, Any]:
+    def run(self, path: str, content: str, append: bool = False, **_: Any) -> dict[str, Any]:
         try:
             p = Path(path).expanduser()
             existed = p.exists()
@@ -105,6 +120,7 @@ class ListDirectoryUnrestricted(Tool):
     """List any directory on the system."""
 
     name = "list_directory_full"
+    risk = RiskLevel.READ
     description = "List the contents of any directory on the system."
     parameters = {
         "type": "object",
@@ -123,7 +139,7 @@ class ListDirectoryUnrestricted(Tool):
         },
     }
 
-    def run(self, path: str, pattern: str | None = None, **_: Any) -> Dict[str, Any]:
+    def run(self, path: str, pattern: str | None = None, **_: Any) -> dict[str, Any]:
         try:
             p = Path(path).expanduser()
             if not p.is_dir():
@@ -133,14 +149,18 @@ class ListDirectoryUnrestricted(Tool):
             for item in sorted(items):
                 try:
                     stat = item.stat()
-                    entries.append({
-                        "name": item.name,
-                        "type": "directory" if item.is_dir() else "file",
-                        "size": stat.st_size if item.is_file() else 0,
-                        "modified": stat.st_mtime,
-                    })
+                    entries.append(
+                        {
+                            "name": item.name,
+                            "type": "directory" if item.is_dir() else "file",
+                            "size": stat.st_size if item.is_file() else 0,
+                            "modified": stat.st_mtime,
+                        }
+                    )
                 except PermissionError:
-                    entries.append({"name": item.name, "type": "unknown", "error": "permission denied"})
+                    entries.append(
+                        {"name": item.name, "type": "unknown", "error": "permission denied"}
+                    )
             return {"path": str(p), "entries": entries, "count": len(entries)}
         except Exception as e:
             return {"error": str(e)}
@@ -150,12 +170,17 @@ class DeleteFileUnrestricted(Tool):
     """Delete any file or directory."""
 
     name = "delete_file_full"
+    risk = RiskLevel.HIGH
     description = "Delete any file or directory. USE WITH CAUTION. No undo."
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to delete."},
-            "recursive": {"type": "boolean", "default": False, "description": "Delete directories recursively."},
+            "recursive": {
+                "type": "boolean",
+                "default": False,
+                "description": "Delete directories recursively.",
+            },
         },
         "required": ["path"],
     }
@@ -168,7 +193,7 @@ class DeleteFileUnrestricted(Tool):
     }
     mutates = True
 
-    def run(self, path: str, recursive: bool = False, **_: Any) -> Dict[str, Any]:
+    def run(self, path: str, recursive: bool = False, **_: Any) -> dict[str, Any]:
         try:
             p = Path(path).expanduser()
             if not p.exists():
@@ -189,6 +214,7 @@ class CopyFileUnrestricted(Tool):
     """Copy files or directories."""
 
     name = "copy_file_full"
+    risk = RiskLevel.MEDIUM
     description = "Copy a file or directory to a new location."
     parameters = {
         "type": "object",
@@ -208,7 +234,7 @@ class CopyFileUnrestricted(Tool):
     }
     mutates = True
 
-    def run(self, source: str, destination: str, **_: Any) -> Dict[str, Any]:
+    def run(self, source: str, destination: str, **_: Any) -> dict[str, Any]:
         try:
             src = Path(source).expanduser()
             dst = Path(destination).expanduser()
@@ -228,6 +254,7 @@ class MoveFileUnrestricted(Tool):
     """Move/rename files or directories."""
 
     name = "move_file_full"
+    risk = RiskLevel.HIGH
     description = "Move or rename a file or directory."
     parameters = {
         "type": "object",
@@ -247,7 +274,7 @@ class MoveFileUnrestricted(Tool):
     }
     mutates = True
 
-    def run(self, source: str, destination: str, **_: Any) -> Dict[str, Any]:
+    def run(self, source: str, destination: str, **_: Any) -> dict[str, Any]:
         try:
             src = Path(source).expanduser()
             dst = Path(destination).expanduser()
@@ -264,14 +291,22 @@ class SearchFilesUnrestricted(Tool):
     """Search for files by name or content pattern."""
 
     name = "search_files_full"
+    risk = RiskLevel.READ
     description = "Search for files by name pattern or content. Full system access."
     parameters = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Root directory to search from."},
-            "pattern": {"type": "string", "description": "Glob pattern for filenames (e.g. '*.py', '*.txt')."},
+            "pattern": {
+                "type": "string",
+                "description": "Glob pattern for filenames (e.g. '*.py', '*.txt').",
+            },
             "content": {"type": "string", "description": "Text to search for inside files."},
-            "max_results": {"type": "integer", "default": 50, "description": "Max results to return."},
+            "max_results": {
+                "type": "integer",
+                "default": 50,
+                "description": "Max results to return.",
+            },
         },
         "required": ["path"],
     }
@@ -283,14 +318,20 @@ class SearchFilesUnrestricted(Tool):
         },
     }
 
-    def run(self, path: str, pattern: str | None = None, content: str | None = None,
-            max_results: int = 50, **_: Any) -> Dict[str, Any]:
+    def run(
+        self,
+        path: str,
+        pattern: str | None = None,
+        content: str | None = None,
+        max_results: int = 50,
+        **_: Any,
+    ) -> dict[str, Any]:
         try:
             root = Path(path).expanduser()
             if not root.is_dir():
                 return {"error": f"Not a directory: {path}"}
 
-            results = []
+            results: list[dict[str, str]] = []
             glob_pattern = pattern or "**/*"
 
             for file_path in root.glob(glob_pattern):

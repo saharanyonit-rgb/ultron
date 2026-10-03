@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ultron.web import JarvisAPI
 
 logger = logging.getLogger("jarvis.desktop.server")
 
@@ -19,7 +22,7 @@ class InProcessBackend:
     def __init__(self, host: str = "127.0.0.1", port: int = 8080):
         self.host = host
         self.port = port
-        self._server: Optional[object] = None
+        self._server: JarvisAPI | None = None
         self._running = False
         self._lock = threading.Lock()
 
@@ -39,13 +42,14 @@ class InProcessBackend:
                 return True
 
             try:
-                self._server = self._build_server()
+                server = self._build_server()
             except Exception as e:
                 logger.error(f"Failed to initialize backend: {e}", exc_info=True)
                 return False
+            self._server = server
 
             try:
-                self._server.start(daemon=True)
+                server.start(daemon=True)
                 self._running = True
                 logger.info(f"Backend started at {self.url}")
                 return True
@@ -53,21 +57,22 @@ class InProcessBackend:
                 logger.error(f"Failed to start backend server: {e}", exc_info=True)
                 return False
 
-    def _build_server(self):
+    def _build_server(self) -> JarvisAPI:
         """Build the JarvisAPI server with all dependencies wired."""
-        from ultron.config import load_config
-        from ultron.llm import build_provider
-        from ultron.tools import ToolRegistry
-        from ultron.audit import AuditLogger
-        from ultron.actions.audit_log import AuditLog
         from ultron.actions import PermissionGate
+        from ultron.actions.audit_log import AuditLog
+        from ultron.audit import AuditLogger
+        from ultron.config import load_config
         from ultron.core.agent import Agent
         from ultron.core.brain import Brain
+        from ultron.llm import build_provider
+        from ultron.tools import ToolRegistry
 
         config = load_config()
 
         # Override host/port from desktop config
         import os
+
         if os.environ.get("JARVIS_HOST"):
             self.host = os.environ["JARVIS_HOST"]
         if os.environ.get("JARVIS_PORT"):
@@ -86,8 +91,6 @@ class InProcessBackend:
         agent_audit = AuditLog(config.audit_log_path)
 
         # Build permission gate (web-friendly, allows remote decisions)
-        from ultron.permission_manager import WebPermissionEngine
-        from ultron.policy import PolicyEngine
 
         gate = PermissionGate()
 
@@ -115,17 +118,27 @@ class InProcessBackend:
         brain = Brain(agent=agent, memory=memory)
 
         # Build web server with orchestrator
-        from ultron.web import JarvisAPI, BrainExecutionController
-        from ultron.orchestrator import Orchestrator, OrchestratorConfig
-        from ultron.autonomous import AutonomousExecutor, AutonomousConfig
-        from ultron.tools import ToolExecutor
         from ultron.agent_manager import AgentManager
-        from ultron.status import StatusReporter
+        from ultron.autonomous import AutonomousConfig, AutonomousExecutor
         from ultron.brains import BrainOrchestrator
+        from ultron.orchestrator import Orchestrator, OrchestratorConfig
+        from ultron.status import StatusReporter
+        from ultron.tools import ToolExecutor
+        from ultron.web import BrainExecutionController, JarvisAPI
 
         execution_controller = BrainExecutionController(brain)
 
-        tool_executor = ToolExecutor(registry)
+        # Shared with the specialized brains and the autonomous executor, so it
+        # must use the same gate and audit log as the main agent. A bare
+        # ToolExecutor(registry) meant a pass-through gate and no audit trail,
+        # bypassing secure mode for every goal-mode request.
+        tool_executor = ToolExecutor(registry, gate=gate, audit_log=agent_audit)
+
+        # Deferred tool calls must share this gated, audited executor so
+        # scheduled work is not executed outside the user's permission checks.
+        from ultron.tools.scheduling import set_executor as _set_schedule_executor
+
+        _set_schedule_executor(tool_executor)
         status_reporter = StatusReporter()
         agent_manager = AgentManager()
 
@@ -172,6 +185,7 @@ class InProcessBackend:
 
         # Wire reminder notifications to SSE broadcaster
         from ultron.services import get_reminders_service
+
         reminders_svc = get_reminders_service()
         reminders_svc.set_notification_callback(
             lambda r: server.broadcast_event("reminder_fired", r.to_dict())
@@ -185,8 +199,13 @@ class InProcessBackend:
             if not self._running:
                 return
 
+            server = self._server
+            if server is None:
+                self._running = False
+                return
+
             try:
-                self._server.shutdown()
+                server.shutdown()
                 logger.info("Backend stopped")
             except Exception as e:
                 logger.error(f"Error stopping backend: {e}")

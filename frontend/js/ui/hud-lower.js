@@ -23,6 +23,7 @@ const Radar = {
   smooth: 0,
   running: false,
   available: null, // null = untested, false = denied/unavailable, true = live
+  lastFailure: null, // why the last start() failed, for callers with no panel
   bound: false,
 
   /** Size the backing store. Safe to call repeatedly (e.g. on resize). */
@@ -95,6 +96,7 @@ const Radar = {
 
     this.running = true;
     this.available = true;
+    this.lastFailure = null;
     setClass($('#radar'), 'is-offline', false);
     setText($('#scan-state-text'), 'SCANNING');
     setText($('#scan-note'), 'Live microphone spectrum');
@@ -126,6 +128,7 @@ const Radar = {
 
   fail(stateLabel, note) {
     this.available = false;
+    this.lastFailure = note;
     setClass($('#radar'), 'is-offline', true);
     setText($('#scan-state-text'), stateLabel);
     setText($('#scan-note'), note);

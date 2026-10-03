@@ -30,11 +30,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import Enum, StrEnum
+from typing import Any
 
 from ultron.agents import AgentCapability, AgentSpec, BaseAgent
-from ultron.llm.base import LLMProvider, ToolCall, ToolResult
+from ultron.llm.base import LLMProvider
 from ultron.tools import Tool
 
 logger = logging.getLogger("ultron.brains.verification")
@@ -67,13 +67,13 @@ Rules:
 - Recommend abort only for critical failures"""
 
 
-class VerificationStatus(str, Enum):
+class VerificationStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     INCONCLUSIVE = "inconclusive"
 
 
-class VerificationRecommendation(str, Enum):
+class VerificationRecommendation(StrEnum):
     COMPLETE = "complete"
     RETRY = "retry"
     REPLAN = "replan"
@@ -88,18 +88,20 @@ class VerificationResult:
 
     status: VerificationStatus
     confidence: float
-    evidence: List[str] = field(default_factory=list)
-    failures: List[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
     recommendation: VerificationRecommendation = VerificationRecommendation.COMPLETE
     reasoning: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status.value if isinstance(self.status, Enum) else self.status,
             "confidence": self.confidence,
             "evidence": self.evidence,
             "failures": self.failures,
-            "recommendation": self.recommendation.value if isinstance(self.recommendation, Enum) else self.recommendation,
+            "recommendation": self.recommendation.value
+            if isinstance(self.recommendation, Enum)
+            else self.recommendation,
             "reasoning": self.reasoning,
         }
 
@@ -110,7 +112,7 @@ class VerificationBrain(BaseAgent):
     def __init__(
         self,
         provider: LLMProvider,
-        tools: List[Tool],
+        tools: list[Tool],
         max_iterations: int = 5,
     ) -> None:
         spec = AgentSpec(
@@ -127,7 +129,7 @@ class VerificationBrain(BaseAgent):
         task_description: str,
         expected_outcome: str,
         actual_result: Any,
-        evidence: Optional[List[str]] = None,
+        evidence: list[str] | None = None,
     ) -> VerificationResult:
         """Verify whether a task achieved its expected outcome.
 
@@ -165,7 +167,7 @@ class VerificationBrain(BaseAgent):
         task_description: str,
         expected_outcome: str,
         actual_result: Any,
-        evidence: Optional[List[str]],
+        evidence: list[str] | None,
     ) -> str:
         parts = [
             VERIFICATION_SYSTEM_PROMPT,
@@ -175,9 +177,11 @@ class VerificationBrain(BaseAgent):
         ]
 
         if evidence:
-            parts.append(f"\nEvidence:\n" + "\n".join(f"- {e}" for e in evidence))
+            parts.append("\nEvidence:\n" + "\n".join(f"- {e}" for e in evidence))
 
-        parts.append('\nOutput format: {"status": "...", "confidence": 0.0-1.0, "evidence": [], "failures": [], "recommendation": "...", "reasoning": "..."}')
+        parts.append(
+            '\nOutput format: {"status": "...", "confidence": 0.0-1.0, "evidence": [], "failures": [], "recommendation": "...", "reasoning": "..."}'
+        )
 
         return "\n".join(parts)
 
@@ -224,26 +228,34 @@ class VerificationBrain(BaseAgent):
                 reasoning="Failed to parse model output as JSON",
             )
 
-    def run(self, user_text: str, context: Optional[Dict[str, Any]] = None) -> str:
+    def run(self, user_text: str, context: dict[str, Any] | None = None) -> str:
         """Execute verification - requires structured context.
 
         For simple use, prefer verify() method with structured parameters.
         """
         if context:
-            return json.dumps(self.verify(
-                task_description=context.get("task_description", user_text),
-                expected_outcome=context.get("expected_outcome", ""),
-                actual_result=context.get("actual_result", ""),
-                evidence=context.get("evidence", []),
-            ).to_dict(), ensure_ascii=False, default=str)
+            return json.dumps(
+                self.verify(
+                    task_description=context.get("task_description", user_text),
+                    expected_outcome=context.get("expected_outcome", ""),
+                    actual_result=context.get("actual_result", ""),
+                    evidence=context.get("evidence", []),
+                ).to_dict(),
+                ensure_ascii=False,
+                default=str,
+            )
 
-        return json.dumps(VerificationResult(
-            status=VerificationStatus.INCONCLUSIVE,
-            confidence=0.0,
-            failures=["Verification requires structured context"],
-            recommendation=VerificationRecommendation.ASK_USER,
-            reasoning="No context provided for verification",
-        ).to_dict(), ensure_ascii=False, default=str)
+        return json.dumps(
+            VerificationResult(
+                status=VerificationStatus.INCONCLUSIVE,
+                confidence=0.0,
+                failures=["Verification requires structured context"],
+                recommendation=VerificationRecommendation.ASK_USER,
+                reasoning="No context provided for verification",
+            ).to_dict(),
+            ensure_ascii=False,
+            default=str,
+        )
 
 
 __all__ = [

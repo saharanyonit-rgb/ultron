@@ -8,8 +8,10 @@ at a time runs per backend process.
 
 from __future__ import annotations
 
+from ultron.risk import RiskLevel
+
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -23,7 +25,7 @@ def _get_base_url() -> str:
     return os.environ.get("AGENTICSEEK_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
-def _get_token() -> Optional[str]:
+def _get_token() -> str | None:
     """Resolve the optional bearer token from env."""
     token = os.environ.get("AGENTICSEEK_API_TOKEN")
     return token.strip() if token else None
@@ -33,6 +35,7 @@ class AgenticSeekTaskTool(Tool):
     """Dispatch an autonomous multi-agent task to the local AgenticSeek backend."""
 
     name = "agenticseek_task"
+    risk = RiskLevel.HIGH
     description = (
         "Hand a complex, multi-step task to the local AgenticSeek agent backend (Manus-style). "
         "AgenticSeek selects a specialist agent (planner, coder, browser, file, casual) and "
@@ -92,7 +95,7 @@ class AgenticSeekTaskTool(Tool):
         base_url: str = "",
         token: str = "",
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         query = (query or "").strip()
         if not query:
             return {"success": False, "error": "Missing required parameter 'query'."}
@@ -118,12 +121,13 @@ class AgenticSeekTaskTool(Tool):
                         ),
                     }
                 except httpx.HTTPStatusError as exc:
-                    return {"success": False, "error": f"AgenticSeek at {base} returned HTTP {exc.response.status_code}."}
+                    return {
+                        "success": False,
+                        "error": f"AgenticSeek at {base} returned HTTP {exc.response.status_code}.",
+                    }
 
-                is_active = False
                 try:
-                    active_resp = client.get(f"{base}/is_active", timeout=10.0)
-                    is_active = bool((active_resp.json() or {}).get("is_active"))
+                    client.get(f"{base}/is_active", timeout=10.0)
                 except Exception:
                     pass
 
@@ -134,7 +138,11 @@ class AgenticSeekTaskTool(Tool):
                         "error": "AgenticSeek is busy running another task (429). Retry when it finishes.",
                     }
                 if resp.status_code >= 400:
-                    body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    body = (
+                        resp.json()
+                        if resp.headers.get("content-type", "").startswith("application/json")
+                        else {}
+                    )
                     return {
                         "success": False,
                         "error": f"AgenticSeek task failed (HTTP {resp.status_code}): {body.get('error') or body.get('message') or resp.text[:500]}",
@@ -148,7 +156,7 @@ class AgenticSeekTaskTool(Tool):
                 blocks = data.get("blocks") or {}
                 if not isinstance(blocks, dict):
                     blocks = {}
-                blocks_out: Dict[str, Dict[str, Any]] = {}
+                blocks_out: dict[str, dict[str, Any]] = {}
                 for k, block in blocks.items():
                     if isinstance(block, dict):
                         blocks_out[k] = {

@@ -32,7 +32,6 @@ body[data-ui="orb"]::after {
    between the glass columns. */
 body[data-ui="orb"] {
   --left-panel-width: 264px;
-  --right-panel-width: 264px;
 }
 
 /* ── Layering ──────────────────────────────────────────────────
@@ -85,16 +84,11 @@ body[data-ui="orb"] .status-strip {
 /* ── Side columns ───────────────────────────────────────────────
    The column itself becomes transparent so the orb shows through the
    gutter; each card inside it becomes a floating glass card. */
-body[data-ui="orb"] .left-panel,
-body[data-ui="orb"] .right-panel {
+body[data-ui="orb"] .left-panel {
   background: transparent;
   border: none;
   padding: var(--space-4) 0 var(--space-4) var(--space-4);
   pointer-events: none;
-}
-
-body[data-ui="orb"] .right-panel {
-  padding: var(--space-4) var(--space-4) var(--space-4) 0;
 }
 
 body[data-ui="orb"] .panel {
@@ -119,7 +113,6 @@ body[data-ui="orb"] .panel-header {
 body[data-ui="orb"] .panel *:not(.panel-header):not(.row-item):not(.data-cell):not(.metric-card),
 body[data-ui="orb"] .topbar *,
 body[data-ui="orb"] .left-panel *,
-body[data-ui="orb"] .right-panel *,
 body[data-ui="orb"] .bottom-dock *,
 body[data-ui="orb"] .status-strip * {
   pointer-events: auto;
@@ -233,13 +226,8 @@ body[data-ui="orb"] .core-mic {
   font-size: var(--text-xs);
 }
 
-/* The lower deck is pushed to the floor of the column so the flanks
-   sit just above it, leaving the middle of the orb clear. */
-body[data-ui="orb"] .core-flanks {
-  margin-top: auto;
-  max-width: 560px;
-}
-
+/* The lower deck is pushed to the floor of the column so the event strip
+   sits just above it, leaving the middle of the orb clear. */
 body[data-ui="orb"] .event-strip,
 body[data-ui="orb"] .scan-panel,
 body[data-ui="orb"] .uplink {
@@ -317,7 +305,7 @@ body[data-ui="orb"] .core-mic {
   -webkit-backdrop-filter: blur(8px);
 }
 
-body[data-ui="orb"] .core-mic:hover:not(:disabled) {
+body[data-ui="orb"] .core-mic:hover:not(:disabled):not([aria-disabled="true"]) {
   border-color: var(--amber-bright);
   color: var(--amber-bright);
   box-shadow: 0 0 18px var(--glow-amber);
@@ -409,19 +397,12 @@ body[data-ui="orb"] .orb-hud-controls {
 @media (max-width: 1600px) {
   body[data-ui="orb"] {
     --left-panel-width: 232px;
-    --right-panel-width: 232px;
   }
 }
 
 @media (max-width: 1280px) {
   body[data-ui="orb"] .orb-hud-hint {
     display: none;
-  }
-}
-
-@media (max-width: 900px) {
-  body[data-ui="orb"] .core-flanks {
-    max-width: 100%;
   }
 }
 

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from ultron.risk import RiskLevel, RiskClassifier, DEFAULT_RISK_MAP
-from ultron.policy import PolicyAction, PolicyDecision, PolicyEngine, DEFAULT_POLICY
+from ultron.policy import DEFAULT_POLICY, PolicyAction, PolicyEngine
+from ultron.risk import RiskClassifier, RiskLevel
+from ultron.tools.catalog import default_catalog
 
 
 def test_risk_classifier_read():
@@ -22,19 +23,19 @@ def test_risk_classifier_low():
 def test_risk_classifier_medium():
     classifier = RiskClassifier()
     assert classifier.classify("create_file") == RiskLevel.MEDIUM
-    assert classifier.classify("close_app") == RiskLevel.MEDIUM
 
 
 def test_risk_classifier_high():
     classifier = RiskClassifier()
-    assert classifier.classify("delete_file") == RiskLevel.HIGH
-    assert classifier.classify("rename_file") == RiskLevel.HIGH
+    assert classifier.classify("delete_file_full") == RiskLevel.HIGH
+    assert classifier.classify("close_app") == RiskLevel.HIGH
 
 
 def test_risk_classifier_critical():
     classifier = RiskClassifier()
     assert classifier.classify("execute_command") == RiskLevel.CRITICAL
-    assert classifier.classify("execute_shell") == RiskLevel.CRITICAL
+    assert classifier.classify("execute_powershell") == RiskLevel.CRITICAL
+    assert classifier.classify("system_shutdown") == RiskLevel.CRITICAL
 
 
 def test_risk_classifier_unknown_tool():
@@ -46,6 +47,15 @@ def test_risk_classifier_custom_registration():
     classifier = RiskClassifier()
     classifier.register("custom_tool", RiskLevel.LOW)
     assert classifier.classify("custom_tool") == RiskLevel.LOW
+
+
+def test_risk_classifier_override_does_not_mutate_catalog():
+    catalog = default_catalog()
+    classifier = RiskClassifier(catalog=catalog)
+    before = catalog.risk_of("open_app")
+    classifier.register("open_app", RiskLevel.CRITICAL)
+    assert classifier.classify("open_app") == RiskLevel.CRITICAL
+    assert catalog.risk_of("open_app") == before
 
 
 def test_policy_engine_allow():
@@ -98,11 +108,20 @@ def test_policy_engine_set_policy():
     assert policy[RiskLevel.CRITICAL] == PolicyAction.CONFIRM
 
 
-def test_default_risk_map_keys():
-    assert "get_system_info" in DEFAULT_RISK_MAP
-    assert "read_file" in DEFAULT_RISK_MAP
-    assert "delete_file" in DEFAULT_RISK_MAP
-    assert "execute_command" in DEFAULT_RISK_MAP
+def test_every_registered_tool_is_classified():
+    """Risk must come from tool metadata, so the catalog covers every tool."""
+    catalog = default_catalog()
+    classifications = RiskClassifier(catalog=catalog).get_all_classifications()
+    for name in catalog.names:
+        assert name in classifications, f"{name} has no risk classification"
+
+
+def test_no_tool_declares_read_while_mutating():
+    """A mutating tool rated READ would slip past a read-only gate."""
+    for name, meta in default_catalog().metadata.items():
+        assert not (meta.risk == RiskLevel.READ and meta.mutates), (
+            f"{name} is risk=READ but mutates=True"
+        )
 
 
 def test_default_policy_keys():

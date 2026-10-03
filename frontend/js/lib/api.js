@@ -63,7 +63,6 @@ export const systemMetrics = () => get('/api/system/metrics', { timeout: 12000 }
 export const networkStatus = () => get('/api/system/network', { timeout: 12000 });
 export const systemInfo = () => get('/api/system/info');
 export const securityStatus = () => get('/api/security');
-export const computerState = () => get('/api/computer', { timeout: 12000 });
 export const orchestrator = () => get('/api/orchestrator');
 export const voiceState = () => get('/api/voice');
 export const agents = () => get('/api/agents');
@@ -77,10 +76,7 @@ export const submitGoal = (description, mode = 'chat') =>
   post('/api/goals', { description, mode });
 export const getGoal = (id) => get(`/api/goals/${encodeURIComponent(id)}`);
 
-/* ── Execution control ───────────────────────────────────────────── */
-export const pauseExecution = () => post('/api/control/pause', {});
-export const resumeExecution = () => post('/api/control/resume', {});
-export const stopExecution = () => post('/api/control/stop', {});
+/* ── Execution ────────────────────────────────────────────────────── */
 export const executeCommand = (command, timeout = 60) =>
   post('/api/execute', { command, timeout }, { timeout: (timeout + 10) * 1000 });
 

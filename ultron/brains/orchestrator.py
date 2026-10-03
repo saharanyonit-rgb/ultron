@@ -14,22 +14,21 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any, cast
 
-from ultron.agents import AgentCapability
-from ultron.config import Config, BrainModelConfig
+from ultron.config import BrainConfig, BrainModelConfig, Config
 from ultron.context import ContextManager
 from ultron.llm.base import LLMProvider
 from ultron.recovery import RecoveryEngine
-from ultron.task import Task, TaskGraph, TaskStatus
 
 logger = logging.getLogger("ultron.brains.orchestrator")
 
 
-class BrainOrchestrationEvent(str, Enum):
+class BrainOrchestrationEvent(StrEnum):
     AGENT_SELECTED = "agent.selected"
     AGENT_STARTED = "agent.started"
     AGENT_PROGRESS = "agent.progress"
@@ -49,8 +48,8 @@ class BrainOrchestrationResult:
     brain_type: str
     output: Any
     verification: Any = None
-    error: Optional[str] = None
-    events: List[Dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    events: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -58,10 +57,10 @@ class BrainContext:
     """Context for brain execution."""
 
     goal: str
-    task: Optional[str] = None
-    expected_outcome: Optional[str] = None
-    evidence: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    task: str | None = None
+    expected_outcome: str | None = None
+    evidence: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BrainOrchestrator:
@@ -75,9 +74,9 @@ class BrainOrchestrator:
     def __init__(
         self,
         config: Config,
-        tools: List[Any],
-        tool_executor: Optional[Any] = None,
-        event_handler: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        tools: list[Any],
+        tool_executor: Any | None = None,
+        event_handler: Callable[[str, dict[str, Any]], None] | None = None,
         max_agent_transitions: int = 10,
         max_retries: int = 3,
     ) -> None:
@@ -89,36 +88,38 @@ class BrainOrchestrator:
         self._max_retries = max_retries
 
         from ultron.brains.provider import BrainProviderFactory
-        from ultron.brains.router import BrainRouter, BrainType
+        from ultron.brains.router import BrainRouter
 
         self._provider_factory = BrainProviderFactory(config.llm)
         self._router = BrainRouter()
         self._recovery_engine = RecoveryEngine(max_retries=max_retries)
         self._context_manager = ContextManager()
 
-        self._brains: Dict[str, Any] = {}
+        self._brains: dict[str, Any] = {}
         self._execution_id = str(uuid.uuid4())[:12]
 
     def _get_brain_type_enum(self, brain_type_str: str) -> Any:
         from ultron.brains.router import BrainType
+
         return BrainType
 
     def _get_brain_provider(self, brain_type_str: str) -> LLMProvider:
-        from ultron.brains.router import BrainType
         model_config = self._get_brain_config(brain_type_str)
         return self._provider_factory.create_provider(model_config)
 
     def _get_brain_config(self, brain_type_str: str) -> BrainModelConfig:
+        # Config.brain is always materialised as a BrainConfig by Config.__init__.
+        brain = cast(BrainConfig, self._config.brain)
         brain_map = {
-            "planning": self._config.brain.planning,
-            "research": self._config.brain.research,
-            "coding": self._config.brain.coding,
-            "computer": self._config.brain.computer,
-            "verification": self._config.brain.verification,
-            "fast": self._config.brain.fast,
-            "general": self._config.brain.fast,
+            "planning": brain.planning,
+            "research": brain.research,
+            "coding": brain.coding,
+            "computer": brain.computer,
+            "verification": brain.verification,
+            "fast": brain.fast,
+            "general": brain.fast,
         }
-        return brain_map.get(brain_type_str, self._config.brain.fast)
+        return brain_map.get(brain_type_str, brain.fast)
 
     def _get_or_create_brain(self, brain_type_str: str) -> Any:
         if brain_type_str not in self._brains:
@@ -126,29 +127,53 @@ class BrainOrchestrator:
 
             if brain_type_str == "planning":
                 from ultron.brains.planning import PlanningBrain
-                self._brains[brain_type_str] = PlanningBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                # PlanningBrain only produces a plan — it never executes tools,
+                # so it takes no tool_executor (unlike Research/Coding/Computer).
+                self._brains[brain_type_str] = PlanningBrain(
+                    provider,
+                    self._tools,
+                )
             elif brain_type_str == "research":
                 from ultron.brains.research import ResearchBrain
-                self._brains[brain_type_str] = ResearchBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                self._brains[brain_type_str] = ResearchBrain(
+                    provider, self._tools, tool_executor=self._tool_executor
+                )
             elif brain_type_str == "coding":
                 from ultron.brains.coding import CodingBrain
-                self._brains[brain_type_str] = CodingBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                self._brains[brain_type_str] = CodingBrain(
+                    provider, self._tools, tool_executor=self._tool_executor
+                )
             elif brain_type_str == "computer":
                 from ultron.brains.computer import ComputerBrain
-                self._brains[brain_type_str] = ComputerBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                self._brains[brain_type_str] = ComputerBrain(
+                    provider, self._tools, tool_executor=self._tool_executor
+                )
             elif brain_type_str == "verification":
                 from ultron.brains.verification import VerificationBrain
-                self._brains[brain_type_str] = VerificationBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                # VerificationBrain scores a result it is handed; it does not
+                # drive tool execution, so it takes no tool_executor either.
+                self._brains[brain_type_str] = VerificationBrain(
+                    provider,
+                    self._tools,
+                )
             else:
                 from ultron.brains.research import ResearchBrain
-                self._brains[brain_type_str] = ResearchBrain(provider, self._tools, tool_executor=self._tool_executor)
+
+                self._brains[brain_type_str] = ResearchBrain(
+                    provider, self._tools, tool_executor=self._tool_executor
+                )
 
         return self._brains[brain_type_str]
 
     def execute(
         self,
         goal: str,
-        context: Optional[BrainContext] = None,
+        context: BrainContext | None = None,
     ) -> BrainOrchestrationResult:
         """Execute a goal using the appropriate specialized brain.
 
@@ -159,19 +184,25 @@ class BrainOrchestrator:
         Returns:
             BrainOrchestrationResult with output and verification
         """
-        self._emit(BrainOrchestrationEvent.AGENT_STARTED, {
-            "goal": goal[:100],
-            "execution_id": self._execution_id,
-        })
+        self._emit(
+            BrainOrchestrationEvent.AGENT_STARTED,
+            {
+                "goal": goal[:100],
+                "execution_id": self._execution_id,
+            },
+        )
 
         route_decision = self._router.route(goal)
         brain_type = route_decision.brain_type.value
 
-        self._emit(BrainOrchestrationEvent.AGENT_SELECTED, {
-            "brain_type": brain_type,
-            "confidence": route_decision.confidence,
-            "reasoning": route_decision.reasoning,
-        })
+        self._emit(
+            BrainOrchestrationEvent.AGENT_SELECTED,
+            {
+                "brain_type": brain_type,
+                "confidence": route_decision.confidence,
+                "reasoning": route_decision.reasoning,
+            },
+        )
 
         try:
             result = self._execute_brain(brain_type, goal, context)
@@ -180,25 +211,34 @@ class BrainOrchestrator:
 
             if result.verification:
                 if result.verification.status == VerificationStatus.PASSED:
-                    self._emit(BrainOrchestrationEvent.AGENT_COMPLETED, {
-                        "brain_type": brain_type,
-                        "verification_status": result.verification.status.value,
-                    })
+                    self._emit(
+                        BrainOrchestrationEvent.AGENT_COMPLETED,
+                        {
+                            "brain_type": brain_type,
+                            "verification_status": result.verification.status.value,
+                        },
+                    )
                 else:
-                    self._emit(BrainOrchestrationEvent.AGENT_FAILED, {
-                        "brain_type": brain_type,
-                        "verification_status": result.verification.status.value,
-                        "recommendation": result.verification.recommendation.value,
-                    })
+                    self._emit(
+                        BrainOrchestrationEvent.AGENT_FAILED,
+                        {
+                            "brain_type": brain_type,
+                            "verification_status": result.verification.status.value,
+                            "recommendation": result.verification.recommendation.value,
+                        },
+                    )
 
             return result
 
         except Exception as exc:
             logger.error("Brain orchestration failed: %s", exc)
-            self._emit(BrainOrchestrationEvent.AGENT_FAILED, {
-                "brain_type": brain_type,
-                "error": str(exc),
-            })
+            self._emit(
+                BrainOrchestrationEvent.AGENT_FAILED,
+                {
+                    "brain_type": brain_type,
+                    "error": str(exc),
+                },
+            )
             return BrainOrchestrationResult(
                 success=False,
                 brain_type=brain_type,
@@ -210,7 +250,7 @@ class BrainOrchestrator:
         self,
         brain_type: str,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute the appropriate brain based on type."""
         brain = self._get_or_create_brain(brain_type)
@@ -232,7 +272,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute planning brain."""
         plan = brain.plan(goal)
@@ -246,7 +286,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute research brain."""
         report = brain.research(goal)
@@ -271,7 +311,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute coding brain."""
         result = brain.execute(goal)
@@ -296,7 +336,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute computer brain."""
         result = brain.execute(goal)
@@ -321,7 +361,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute verification brain."""
         if not context:
@@ -350,7 +390,7 @@ class BrainOrchestrator:
         self,
         brain: Any,
         goal: str,
-        context: Optional[BrainContext],
+        context: BrainContext | None,
     ) -> BrainOrchestrationResult:
         """Execute general purpose brain (uses research brain)."""
         report = brain.research(goal)
@@ -365,14 +405,16 @@ class BrainOrchestrator:
         task_description: str,
         expected_outcome: str,
         actual_result: Any,
-        evidence: List[str],
+        evidence: list[str],
     ) -> Any:
         """Verify a result using the verification brain."""
-        from ultron.brains.verification import VerificationStatus, VerificationRecommendation
 
-        self._emit(BrainOrchestrationEvent.VERIFICATION_STARTED, {
-            "task": task_description[:100],
-        })
+        self._emit(
+            BrainOrchestrationEvent.VERIFICATION_STARTED,
+            {
+                "task": task_description[:100],
+            },
+        )
 
         verification_brain = self._get_or_create_brain("verification")
         result = verification_brain.verify(
@@ -382,19 +424,24 @@ class BrainOrchestrator:
             evidence=evidence,
         )
 
-        self._emit(BrainOrchestrationEvent.VERIFICATION_COMPLETED, {
-            "status": result.status.value if hasattr(result.status, 'value') else result.status,
-            "confidence": result.confidence,
-            "recommendation": result.recommendation.value if hasattr(result.recommendation, 'value') else result.recommendation,
-        })
+        self._emit(
+            BrainOrchestrationEvent.VERIFICATION_COMPLETED,
+            {
+                "status": result.status.value if hasattr(result.status, "value") else result.status,
+                "confidence": result.confidence,
+                "recommendation": result.recommendation.value
+                if hasattr(result.recommendation, "value")
+                else result.recommendation,
+            },
+        )
 
         return result
 
     def execute_plan(
         self,
         plan: Any,
-        context: Optional[BrainContext] = None,
-    ) -> Dict[str, BrainOrchestrationResult]:
+        context: BrainContext | None = None,
+    ) -> dict[str, BrainOrchestrationResult]:
         """Execute a multi-task plan from the Planning Brain.
 
         Args:
@@ -406,7 +453,7 @@ class BrainOrchestrator:
         """
         from ultron.brains.verification import VerificationRecommendation
 
-        results: Dict[str, BrainOrchestrationResult] = {}
+        results: dict[str, BrainOrchestrationResult] = {}
         completed_tasks: set = set()
         agent_transitions = 0
 
@@ -416,11 +463,14 @@ class BrainOrchestrator:
                     logger.warning("Max agent transitions reached")
                     break
 
-                self._emit(BrainOrchestrationEvent.AGENT_STARTED, {
-                    "task_id": task.id,
-                    "agent": task.agent,
-                    "description": task.description,
-                })
+                self._emit(
+                    BrainOrchestrationEvent.AGENT_STARTED,
+                    {
+                        "task_id": task.id,
+                        "agent": task.agent,
+                        "description": task.description,
+                    },
+                )
 
                 task_context = BrainContext(
                     goal=task.description,
@@ -429,7 +479,6 @@ class BrainOrchestrator:
                 )
 
                 try:
-                    brain_type = task.agent if task.agent in ["planning", "research", "coding", "computer", "verification", "fast", "general"] else "fast"
                     result = self.execute(task.description, task_context)
 
                     results[task.id] = result
@@ -437,19 +486,25 @@ class BrainOrchestrator:
                     agent_transitions += 1
 
                     if result.success:
-                        self._emit(BrainOrchestrationEvent.AGENT_COMPLETED, {
-                            "task_id": task.id,
-                            "brain_type": result.brain_type,
-                        })
+                        self._emit(
+                            BrainOrchestrationEvent.AGENT_COMPLETED,
+                            {
+                                "task_id": task.id,
+                                "brain_type": result.brain_type,
+                            },
+                        )
                     else:
-                        self._emit(BrainOrchestrationEvent.AGENT_FAILED, {
-                            "task_id": task.id,
-                            "error": result.error,
-                        })
+                        self._emit(
+                            BrainOrchestrationEvent.AGENT_FAILED,
+                            {
+                                "task_id": task.id,
+                                "error": result.error,
+                            },
+                        )
 
                         if result.verification:
                             rec = result.verification.recommendation
-                            rec_val = rec.value if hasattr(rec, 'value') else rec
+                            rec_val = rec.value if hasattr(rec, "value") else rec
                             if rec_val == VerificationRecommendation.ABORT.value:
                                 break
 
@@ -461,18 +516,21 @@ class BrainOrchestrator:
                         output=None,
                         error=str(exc),
                     )
-                    self._emit(BrainOrchestrationEvent.AGENT_FAILED, {
-                        "task_id": task.id,
-                        "error": str(exc),
-                    })
+                    self._emit(
+                        BrainOrchestrationEvent.AGENT_FAILED,
+                        {
+                            "task_id": task.id,
+                            "error": str(exc),
+                        },
+                    )
 
         return results
 
-    def _emit(self, event: BrainOrchestrationEvent, data: Dict[str, Any]) -> None:
+    def _emit(self, event: BrainOrchestrationEvent, data: dict[str, Any]) -> None:
         """Emit an orchestration event."""
         event_data = {
             "event_type": event.value,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "execution_id": self._execution_id,
             **data,
         }

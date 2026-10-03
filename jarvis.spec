@@ -2,7 +2,7 @@
 """PyInstaller spec file for JARVIS Desktop Application.
 
 This spec builds two executables:
-1. JARVIS.exe - The desktop application (tray + browser launcher + process manager)
+1. JARVIS.exe - The desktop application (tray + WebView2 window + backend)
 2. ultron_backend.exe - The ULTRON backend server (optional, can also use Python directly)
 """
 
@@ -14,6 +14,35 @@ block_cipher = None
 
 # Project root
 ROOT = os.path.dirname(os.path.abspath(SPEC))
+
+
+def discovered_tool_modules():
+    """Every `ultron.tools.*` module, derived from the filesystem.
+
+    Tools are discovered at runtime by `ultron.tools.catalog.discover_tools()`,
+    which walks the package with pkgutil + importlib. Neither is visible to
+    PyInstaller's static analysis, so a frozen build ships *zero* tools unless
+    each module is listed as a hidden import. That list used to be maintained
+    by hand, which is how `ultron.tools.catalog` itself came to be missing and
+    silently broke discovery in packaged builds.
+
+    Scanning the directory (rather than importing the package) keeps this
+    working in the build environment, where the app's dependencies may not be
+    installed yet.
+    """
+    tools_dir = os.path.join(ROOT, "ultron", "tools")
+    if not os.path.isdir(tools_dir):
+        return ["ultron.tools", "ultron.tools.catalog", "ultron.tools.execution"]
+
+    modules = ["ultron.tools", "ultron.tools.catalog", "ultron.tools.execution"]
+    for entry in sorted(os.listdir(tools_dir)):
+        if not entry.endswith(".py") or entry == "__init__.py":
+            continue
+        modules.append("ultron.tools." + entry[:-3])
+    return modules
+
+
+TOOL_HIDDENIMPORTS = discovered_tool_modules()
 
 # ============================================================
 # JARVIS Desktop Application
@@ -39,6 +68,7 @@ jarvis_a = Analysis(
         "desktop.server",
         "desktop.tray",
         "desktop.notifications",
+        "desktop.window",
         "desktop.main",
         # ULTRON core
         "ultron",
@@ -105,45 +135,10 @@ jarvis_a = Analysis(
         "ultron.memory",
         "ultron.memory.persistent",
         "ultron.memory.semantic",
-        # Tools
-        "ultron.tools",
-        "ultron.tools.execution",
-        "ultron.tools.filesystem",
-        "ultron.tools.command",
-        "ultron.tools.base",
-        "ultron.tools.file_ops",
-        "ultron.tools.file_ops_unrestricted",
-        "ultron.tools.apps",
-        "ultron.tools.urls",
-        "ultron.tools.clipboard",
-        "ultron.tools.screenshot",
-        "ultron.tools.sysinfo",
-        "ultron.tools.voice",
-        "ultron.tools.vision",
-        "ultron.tools.time_tool",
-        "ultron.tools.shutdown",
-        "ultron.tools.automation",
-        "ultron.tools.browser_tools",
-        "ultron.tools.calendar_tool",
-        "ultron.tools.notes_tool",
-        "ultron.tools.reminder_tool",
-        "ultron.tools.memory_tool",
-        "ultron.tools.database",
-        "ultron.tools.git_tool",
-        "ultron.tools.github_tool",
-        "ultron.tools.web_api",
-        "ultron.tools.ui_tool",
-        "ultron.tools.uiux_pro_max_tool",
-        "ultron.tools.notification_tools",
-        "ultron.tools.device_info",
-        "ultron.tools.media_tools",
-        "ultron.tools.battery_tools",
-        "ultron.tools.contacts_tools",
-        "ultron.tools.sms_tools",
-        "ultron.tools.alarm_tools",
-        "ultron.tools.execute",
-        "ultron.tools.touch",
-        "ultron.tools.screen_reader",
+        # Tools: auto-generated from ultron/tools/*.py. Do not hand-edit; add
+        # the module to that directory and it is picked up automatically.
+        *TOOL_HIDDENIMPORTS,
+        "ultron.tool_selection",
         # Services
         "ultron.services",
         "ultron.services.base",
@@ -176,6 +171,14 @@ jarvis_a = Analysis(
         "PIL",
         "PIL.Image",
         "PIL.ImageDraw",
+        # Native UI host (WebView2 on Windows)
+        "webview",
+        "webview.guilib",
+        "webview.util",
+        "webview.http",
+        "webview.platforms.winforms",
+        "webview.platforms.edgechromium",
+        "clr_loader",
         # Python stdlib modules used by ULTRON
         "http.server",
         "socketserver",

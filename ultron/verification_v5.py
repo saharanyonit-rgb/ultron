@@ -12,17 +12,18 @@ success/failure. Supports multiple verification strategies:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
-from ultron.models import ExecutionResult, ExecutionStatus, VerificationResult, VerificationStatus
+from ultron.models import ExecutionResult, ExecutionStatus
 
 logger = logging.getLogger("ultron.verification_v5")
 
 
-class VerificationCheckType(str, Enum):
+class VerificationCheckType(StrEnum):
     STATUS = "status"
     OUTPUT_KEYS = "output_keys"
     FILE_EXISTS = "file_exists"
@@ -38,9 +39,9 @@ class VerificationCheck:
     check_type: VerificationCheckType
     description: str = ""
     expected_value: Any = None
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "check_type": self.check_type.value,
             "description": self.description,
@@ -56,7 +57,7 @@ class VerificationCheckResult:
     check: VerificationCheck
     passed: bool = False
     message: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -66,7 +67,7 @@ class TaskVerificationResult:
     task_id: str = ""
     overall_passed: bool = False
     confidence: float = 0.0
-    check_results: List[VerificationCheckResult] = field(default_factory=list)
+    check_results: list[VerificationCheckResult] = field(default_factory=list)
     message: str = ""
 
     @property
@@ -77,7 +78,7 @@ class TaskVerificationResult:
     def failed_count(self) -> int:
         return sum(1 for r in self.check_results if not r.passed)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "overall_passed": self.overall_passed,
@@ -105,7 +106,7 @@ class VerificationEngine:
     """
 
     def __init__(self) -> None:
-        self._custom_checkers: Dict[str, Callable[..., bool]] = {}
+        self._custom_checkers: dict[str, Callable[..., bool]] = {}
 
     def register_checker(self, name: str, checker: Callable[..., bool]) -> None:
         """Register a custom verification checker."""
@@ -115,7 +116,7 @@ class VerificationEngine:
         self,
         task_id: str,
         execution_result: ExecutionResult,
-        checks: List[VerificationCheck],
+        checks: list[VerificationCheck],
     ) -> TaskVerificationResult:
         """Run all verification checks against a task's execution result."""
         result = TaskVerificationResult(task_id=task_id)
@@ -123,7 +124,9 @@ class VerificationEngine:
         if not checks:
             result.overall_passed = execution_result.status == ExecutionStatus.SUCCESS
             result.confidence = 1.0 if result.overall_passed else 0.0
-            result.message = "No verification checks specified" if not checks else "Execution status check only"
+            result.message = (
+                "No verification checks specified" if not checks else "Execution status check only"
+            )
             return result
 
         for check in checks:
@@ -139,7 +142,11 @@ class VerificationEngine:
         if result.overall_passed:
             result.message = f"All {total} verification checks passed"
         else:
-            failed = [r.check.description or r.check.check_type.value for r in result.check_results if not r.passed]
+            failed = [
+                r.check.description or r.check.check_type.value
+                for r in result.check_results
+                if not r.passed
+            ]
             result.message = f"Failed checks: {', '.join(failed)}"
 
         logger.info(
@@ -161,7 +168,11 @@ class VerificationEngine:
         result = TaskVerificationResult(task_id=task_id)
         result.overall_passed = execution_result.status == ExecutionStatus.SUCCESS
         result.confidence = 1.0 if result.overall_passed else 0.0
-        result.message = "Execution succeeded" if result.overall_passed else f"Execution failed: {execution_result.error}"
+        result.message = (
+            "Execution succeeded"
+            if result.overall_passed
+            else f"Execution failed: {execution_result.error}"
+        )
         return result
 
     def _run_check(
@@ -192,7 +203,9 @@ class VerificationEngine:
                 if file_path:
                     path = Path(file_path)
                     result.passed = path.exists()
-                    result.message = f"File {'exists' if result.passed else 'not found'}: {file_path}"
+                    result.message = (
+                        f"File {'exists' if result.passed else 'not found'}: {file_path}"
+                    )
                 else:
                     result.passed = False
                     result.message = "No file path specified"
@@ -206,7 +219,8 @@ class VerificationEngine:
                         actual = path.read_text(encoding="utf-8")
                         result.passed = expected_content in actual
                         result.message = (
-                            "Content matches" if result.passed
+                            "Content matches"
+                            if result.passed
                             else f"Expected '{expected_content}' not found in file"
                         )
                     else:
@@ -230,7 +244,9 @@ class VerificationEngine:
                 checker = self._custom_checkers.get(checker_name)
                 if checker:
                     result.passed = checker(execution_result, check)
-                    result.message = f"Custom check '{checker_name}' {'passed' if result.passed else 'failed'}"
+                    result.message = (
+                        f"Custom check '{checker_name}' {'passed' if result.passed else 'failed'}"
+                    )
                 else:
                     result.passed = False
                     result.message = f"Custom checker '{checker_name}' not found"
@@ -246,7 +262,9 @@ class VerificationEngine:
 
         return result
 
-    def build_checks_from_criteria(self, criteria_descriptions: List[str]) -> List[VerificationCheck]:
+    def build_checks_from_criteria(
+        self, criteria_descriptions: list[str]
+    ) -> list[VerificationCheck]:
         """Convert goal success criteria descriptions into verification checks."""
         checks = []
 
@@ -255,28 +273,36 @@ class VerificationEngine:
 
             if "file" in lower and ("exist" in lower or "created" in lower):
                 path = desc.split(":")[-1].strip() if ":" in desc else ""
-                checks.append(VerificationCheck(
-                    check_type=VerificationCheckType.FILE_EXISTS,
-                    description=desc,
-                    expected_value=path,
-                ))
+                checks.append(
+                    VerificationCheck(
+                        check_type=VerificationCheckType.FILE_EXISTS,
+                        description=desc,
+                        expected_value=path,
+                    )
+                )
             elif "file" in lower and ("content" in lower or "contain" in lower):
-                checks.append(VerificationCheck(
-                    check_type=VerificationCheckType.CUSTOM,
-                    description=desc,
-                    parameters={"checker_name": "file_content"},
-                ))
+                checks.append(
+                    VerificationCheck(
+                        check_type=VerificationCheckType.CUSTOM,
+                        description=desc,
+                        parameters={"checker_name": "file_content"},
+                    )
+                )
             elif "verify" in lower or "check" in lower or "confirm" in lower:
-                checks.append(VerificationCheck(
-                    check_type=VerificationCheckType.STATUS,
-                    description=desc,
-                ))
+                checks.append(
+                    VerificationCheck(
+                        check_type=VerificationCheckType.STATUS,
+                        description=desc,
+                    )
+                )
             else:
-                checks.append(VerificationCheck(
-                    check_type=VerificationCheckType.OUTPUT_KEYS,
-                    description=desc,
-                    expected_value=[],
-                ))
+                checks.append(
+                    VerificationCheck(
+                        check_type=VerificationCheckType.OUTPUT_KEYS,
+                        description=desc,
+                        expected_value=[],
+                    )
+                )
 
         return checks
 

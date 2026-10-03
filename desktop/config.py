@@ -7,9 +7,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 
 def get_app_data_dir() -> Path:
@@ -39,8 +38,8 @@ class DesktopConfig:
     # Window
     window_width: int = 1200
     window_height: int = 800
-    window_x: Optional[int] = None
-    window_y: Optional[int] = None
+    window_x: int | None = None
+    window_y: int | None = None
     window_maximized: bool = False
 
     # Backend
@@ -54,6 +53,11 @@ class DesktopConfig:
     start_minimized: bool = False
     start_with_windows: bool = False
     show_notifications: bool = True
+
+    # UI host: "window" hosts the frontend in a WebView2 window, "browser"
+    # falls back to opening the system default browser.
+    ui_mode: str = "window"
+    webview_backend: str = "auto"
 
     # Appearance
     theme: str = "dark"

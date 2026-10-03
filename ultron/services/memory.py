@@ -7,25 +7,25 @@ searchable JSONL store alongside past conversations.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ultron.memory.semantic import SemanticMemory
 from ultron.models import MemoryRecord, MemoryType
 
-_memory_service: Optional["MemoryService"] = None
+_memory_service: MemoryService | None = None
 
 
 class MemoryService:
     """Thin wrapper exposing keep/recall semantics on top of SemanticMemory."""
 
-    def __init__(self, engine: Optional[SemanticMemory] = None) -> None:
+    def __init__(self, engine: SemanticMemory | None = None) -> None:
         self._engine = engine
 
     @property
-    def engine(self) -> Optional[SemanticMemory]:
+    def engine(self) -> SemanticMemory | None:
         return self._engine
 
-    def set_engine(self, engine: Optional[SemanticMemory]) -> None:
+    def set_engine(self, engine: SemanticMemory | None) -> None:
         """Attach the runtime memory engine (called at startup)."""
         self._engine = engine
 
@@ -33,7 +33,7 @@ class MemoryService:
     def configured(self) -> bool:
         return self._engine is not None
 
-    def remember(self, fact: str, topic: str = "") -> Dict[str, Any]:
+    def remember(self, fact: str, topic: str = "") -> dict[str, Any]:
         """Store a fact/preference so it can be recalled later."""
         engine = self._require_engine()
         content = f"[{topic.strip()}] {fact.strip()}" if topic and topic.strip() else fact.strip()
@@ -51,18 +51,18 @@ class MemoryService:
             "topic": topic.strip() if topic and topic.strip() else "",
         }
 
-    def recall(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def recall(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Search memory for records relevant to `query`."""
         engine = self._require_engine()
         records = engine.search(query, limit=limit, min_relevance=0.05)
         return [self._record_to_dict(r) for r in records]
 
-    def recent(self, limit: int = 20) -> List[Dict[str, Any]]:
+    def recent(self, limit: int = 20) -> list[dict[str, Any]]:
         """Return the most recent memory records."""
         engine = self._require_engine()
         return [self._record_to_dict(r) for r in engine.recent(limit=limit)]
 
-    def forget(self, query: str = "", record_id: str = "") -> Dict[str, Any]:
+    def forget(self, query: str = "", record_id: str = "") -> dict[str, Any]:
         """Delete memories by ID or by keyword query."""
         engine = self._require_engine()
         removed = 0
@@ -74,17 +74,21 @@ class MemoryService:
         return {"forgotten": removed > 0, "removed": removed}
 
     @staticmethod
-    def _record_to_dict(record: MemoryRecord) -> Dict[str, Any]:
+    def _record_to_dict(record: MemoryRecord) -> dict[str, Any]:
         return {
             "record_id": record.record_id,
             "role": record.role,
             "content": record.content,
-            "type": getattr(record.record_type, "value", str(record.record_type)) if record.record_type else "unknown",
+            "type": getattr(record.record_type, "value", str(record.record_type))
+            if record.record_type
+            else "unknown",
         }
 
     def _require_engine(self) -> SemanticMemory:
         if self._engine is None:
-            raise RuntimeError("Memory is not configured. Start JARVIS to enable persistent memory.")
+            raise RuntimeError(
+                "Memory is not configured. Start JARVIS to enable persistent memory."
+            )
         return self._engine
 
 

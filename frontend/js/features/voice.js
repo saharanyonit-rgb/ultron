@@ -88,8 +88,11 @@ async function startListening() {
   setTranscript('');
   log.push('system', 'Voice capture started');
 
-  // Opportunistically light up the acoustic radar with the same permission.
-  if (!Radar.running) Radar.start().catch(() => {});
+  // Light up the acoustic radar. This is also the only thing in the app that
+  // makes the browser ask for microphone permission, so its outcome is awaited
+  // and reported rather than swallowed — the radar panel is not always mounted
+  // to show the reason, and voice itself runs server-side.
+  await startWaveform();
 
   let result = null;
   try {
@@ -122,6 +125,47 @@ async function startListening() {
   setTranscript(transcribed);
   log.push('info', `Heard: "${transcribed}"`);
   await deliver(transcribed);
+}
+
+/* ── Microphone permission ─────────────────────────────────────────── */
+/**
+ * The radar owns the browser's microphone stream, so it owns the permission
+ * prompt. Voice transcription runs on the JARVIS core instead, which means a
+ * refused prompt must not look like a dead mic button — say what happened and
+ * what still works.
+ */
+async function startWaveform() {
+  if (Radar.running) return;
+
+  let granted = false;
+  try {
+    granted = await Radar.start();
+  } catch {
+    granted = false;
+  }
+  if (granted) return;
+
+  const blocked = await isMicBlockedByBrowser();
+  const reason = Radar.lastFailure || 'No capture device could be opened';
+  toast.warning(
+    blocked ? 'MICROPHONE BLOCKED' : 'NO MICROPHONE',
+    blocked
+      ? 'This site is not allowed to use the microphone. Enable it from the address bar, then press the mic again.'
+      : `${reason}. Voice input still runs on the JARVIS core.`,
+  );
+  log.push('warning', `Microphone unavailable: ${reason}`);
+}
+
+/** True when the browser has this origin blocked, rather than merely failing. */
+async function isMicBlockedByBrowser() {
+  try {
+    const status = await navigator.permissions?.query({ name: 'microphone' });
+    return status?.state === 'denied';
+  } catch {
+    // The Permissions API is not available for every origin; treat that as
+    // "not blocked" and let the generic message stand.
+    return false;
+  }
 }
 
 /* ── Browser SpeechRecognition fallback ────────────────────────────── */

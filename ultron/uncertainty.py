@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger("ultron.uncertainty")
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -31,14 +31,15 @@ class ConfidenceLevel(str, Enum):
 @dataclass
 class UncertaintyEvent:
     """Record of an uncertainty detection."""
+
     event_type: str = ""
     description: str = ""
     confidence_level: str = ConfidenceLevel.MEDIUM.value
     confidence_score: float = 0.5
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     requires_action: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "event_type": self.event_type,
             "description": self.description,
@@ -59,17 +60,37 @@ class UncertaintyHandler:
     """
 
     HEDGING_PHRASES = {
-        "might be", "could be", "possibly", "maybe", "perhaps",
-        "not sure", "uncertain", "unclear", "hard to say",
-        "it seems", "appears to", "likely", "probably",
-        "i think", "i believe", "in my opinion",
-        "not confident", "low confidence",
-        "may", "might", "could",
+        "might be",
+        "could be",
+        "possibly",
+        "maybe",
+        "perhaps",
+        "not sure",
+        "uncertain",
+        "unclear",
+        "hard to say",
+        "it seems",
+        "appears to",
+        "likely",
+        "probably",
+        "i think",
+        "i believe",
+        "in my opinion",
+        "not confident",
+        "low confidence",
+        "may",
+        "might",
+        "could",
     }
 
     CONTRADICTION_MARKERS = {
-        "however", "but", "although", "on the other hand",
-        "contradicts", "conflicts", "inconsistent",
+        "however",
+        "but",
+        "although",
+        "on the other hand",
+        "contradicts",
+        "conflicts",
+        "inconsistent",
     }
 
     def __init__(
@@ -79,16 +100,16 @@ class UncertaintyHandler:
     ) -> None:
         self._require_action = require_action_on_low_confidence
         self._min_threshold = min_confidence_threshold
-        self._events: List[UncertaintyEvent] = []
+        self._events: list[UncertaintyEvent] = []
 
     @property
-    def events(self) -> List[UncertaintyEvent]:
+    def events(self) -> list[UncertaintyEvent]:
         return list(self._events)
 
     def check_confidence(
         self,
         text: str,
-        confidence_score: Optional[float] = None,
+        confidence_score: float | None = None,
     ) -> UncertaintyEvent:
         """Check text for uncertainty signals."""
         text_lower = text.lower()
@@ -151,8 +172,10 @@ class UncertaintyHandler:
 
         score = min(1.0, relevance)
         level = (
-            ConfidenceLevel.HIGH if score >= 0.7
-            else ConfidenceLevel.MEDIUM if score >= 0.4
+            ConfidenceLevel.HIGH
+            if score >= 0.7
+            else ConfidenceLevel.MEDIUM
+            if score >= 0.4
             else ConfidenceLevel.LOW
         )
 
@@ -169,7 +192,7 @@ class UncertaintyHandler:
 
     def check_conflicting_results(
         self,
-        results: List[Dict[str, Any]],
+        results: list[dict[str, Any]],
     ) -> UncertaintyEvent:
         """Check if multiple results conflict with each other."""
         if len(results) <= 1:
@@ -212,7 +235,7 @@ class UncertaintyHandler:
         """Determine if an uncertainty event requires user escalation."""
         return event.requires_action
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get a summary of all uncertainty events."""
         if not self._events:
             return {"total_events": 0, "requires_action": 0}
@@ -222,15 +245,16 @@ class UncertaintyHandler:
             "requires_action": sum(1 for e in self._events if e.requires_action),
             "average_confidence": sum(e.confidence_score for e in self._events) / len(self._events),
             "low_confidence_count": sum(
-                1 for e in self._events
+                1
+                for e in self._events
                 if e.confidence_level in (ConfidenceLevel.LOW.value, ConfidenceLevel.UNKNOWN.value)
             ),
         }
 
     def _build_description(
         self,
-        hedging: List[str],
-        contradictions: List[str],
+        hedging: list[str],
+        contradictions: list[str],
         score: float,
     ) -> str:
         parts = [f"Confidence: {score:.0%}"]
@@ -243,7 +267,9 @@ class UncertaintyHandler:
     def _should_escalate(self, level: ConfidenceLevel, score: float) -> bool:
         if not self._require_action:
             return False
-        return level in (ConfidenceLevel.LOW, ConfidenceLevel.UNKNOWN) or score < self._min_threshold
+        return (
+            level in (ConfidenceLevel.LOW, ConfidenceLevel.UNKNOWN) or score < self._min_threshold
+        )
 
 
 __all__ = [
